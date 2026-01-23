@@ -15,7 +15,7 @@ class renameHandler implements FormatHandler {
       internal: "zip"
     },
     {
-      name: "Microsoft Word Document",
+      name: "Microsoft Office 365 Word Document",
       format: "docx",
       extension: "docx",
       mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -24,7 +24,7 @@ class renameHandler implements FormatHandler {
       internal: "docx"
     },
     {
-      name: "Microsoft Excel Spreadsheet",
+      name: "Microsoft Office 365 Workbook",
       format: "xlsx",
       extension: "xlsx",
       mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -33,7 +33,7 @@ class renameHandler implements FormatHandler {
       internal: "xlsx"
     },
     {
-      name: "Microsoft PowerPoint Presentation",
+      name: "Microsoft Office 365 Presentation",
       format: "pptx",
       extension: "pptx",
       mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation",

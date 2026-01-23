@@ -4,6 +4,13 @@ import { FFmpeg } from "@ffmpeg/ffmpeg";
 import type { LogEvent } from "@ffmpeg/ffmpeg";
 import mime from "mime";
 
+console.log(mime.getType("docx"));
+console.log(mime.getType("pptx"));
+console.log(mime.getType("xlsx"));
+console.log(mime.getType("odt"));
+console.log(mime.getType("odp"));
+console.log(mime.getType("ods"));
+
 class FFmpegHandler implements FormatHandler {
 
   public name: string = "FFmpeg";

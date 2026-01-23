@@ -1,0 +1,3 @@
+[submodule "src/handlers/envelope"]
+	path = src/handlers/envelope
+	url = https://github.com/p2r3/envelope
