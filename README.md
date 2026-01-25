@@ -47,7 +47,7 @@ import type { FileData, FileFormat, FormatHandler } from "../FormatHandler.ts";
 class dummyHandler implements FormatHandler {
 
   public name: string = "dummy";
-  public supportedFormats: FileFormat[];
+  public supportedFormats?: FileFormat[];
   public ready: boolean = false;
 
   async init () {
