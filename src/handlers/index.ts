@@ -10,6 +10,7 @@ import envelopeHandler from "./envelope.ts";
 import svgForeignObjectHandler from "./svgForeignObject.ts";
 import qoiFuHandler from "./qoi-fu.ts";
 import sppdHandler from "./sppd.ts";
+import threejsHandler from "./threejs.ts";
 
 const handlers: FormatHandler[] = [
   new canvasToBlobHandler(),
@@ -22,5 +23,6 @@ const handlers: FormatHandler[] = [
   new svgForeignObjectHandler(),
   new qoiFuHandler(),
   new sppdHandler(),
+  new threejsHandler(),
 ];
 export default handlers;
