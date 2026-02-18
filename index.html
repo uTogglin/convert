@@ -17,8 +17,10 @@
     <h2>Click to add your file</h2>
     <p id="drop-hint-text">or drag and drop it here</p>
   </div>
+  
   <div id="side-panel">
     <button id="mode-button">Advanced mode</button>
+    <button id="theme-toggle" class="theme-toggle" aria-label="Toggle Dark Mode">☀️</button>
   </div>
 
   <div id="format-containers">
@@ -47,6 +49,41 @@
   <div id="popup">
     <h2>Loading tools...</h2>
   </div>
+
+  <script>
+    (function() {
+      const toggleBtn = document.getElementById('theme-toggle');
+      // We target the html tag to set the data-theme attribute
+      const root = document.documentElement;
+      const sunIcon = '☀️';
+      const moonIcon = '🌙';
+
+      // 1. Check System Preference & LocalStorage on Load
+      const userPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const savedTheme = localStorage.getItem('theme');
+
+      // Apply the correct theme immediately
+      if (savedTheme === 'dark' || (!savedTheme && userPrefersDark)) {
+        root.setAttribute('data-theme', 'dark');
+        toggleBtn.innerHTML = moonIcon;
+      } else {
+        root.setAttribute('data-theme', 'light');
+        toggleBtn.innerHTML = sunIcon;
+      }
+
+      // 2. Handle Click Event
+      toggleBtn.addEventListener('click', () => {
+        const currentTheme = root.getAttribute('data-theme');
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        
+        root.setAttribute('data-theme', newTheme);
+        localStorage.setItem('theme', newTheme);
+        
+        // Update Icon
+        toggleBtn.innerHTML = newTheme === 'dark' ? moonIcon : sunIcon;
+      });
+    })();
+  </script>
 
   <script type="module" src="src/main.ts"></script>
 
