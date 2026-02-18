@@ -1,57 +1,244 @@
+/* =========================================
+   1. SETUP & VARIABLES (Updated for Dark Mode)
+   ========================================= */
+:root {
+  /* --- Core Palette --- */
+  --primary-color: #6200ea;       /* Deep Violet */
+  --primary-light: #9d46ff;       /* Lighter Violet */
+  --primary-gradient: linear-gradient(135deg, #6200ea 0%, #9d46ff 100%);
+  --accent-color: #00e5ff;        /* Cyan for highlights */
+  
+  /* --- Light Theme Defaults --- */
+  --bg-color: #f3f4f8;            /* Very light gray-purple */
+  --surface-color: #ffffff;       /* Pure white for lists */
+  --text-main: #2d2d2d;
+  --text-muted: #666666;
+  
+  /* --- UI Specifics (Dynamic) --- */
+  --card-bg: rgba(255, 255, 255, 0.95);
+  --card-border: rgba(255, 255, 255, 0.5);
+  --dashed-border: #e0e7ff;
+  --input-bg: #ffffff;
+  --input-border: #e0e0e0;
+  --list-hover: #f5f0ff;
+  --badge-bg: #ffffff;
+  --upload-icon-bg: #f3f0ff;
+  
+  /* --- Shadows --- */
+  --shadow-sm: 0 2px 8px rgba(98, 0, 234, 0.05);
+  --shadow-md: 0 8px 24px rgba(98, 0, 234, 0.12);
+  --shadow-float: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  
+  --radius-lg: 16px;
+  --radius-md: 12px;
+  --radius-xl: 24px;
+}
+
+/* --- DARK MODE OVERRIDES --- */
+[data-theme="dark"] {
+  /* Re-map main colors for dark mode */
+  --bg-color: #121212;            /* Deep dark background */
+  --surface-color: #1e1e1e;       /* Dark surface for lists */
+  --text-main: #e0e0e0;           /* Light text */
+  --text-muted: #a0a0a0;          /* Gray text */
+  
+  /* Dark UI Specifics */
+  --card-bg: rgba(30, 30, 35, 0.85); /* Dark Glass */
+  --card-border: rgba(255, 255, 255, 0.1);
+  --dashed-border: #333333;
+  --input-bg: #2d2d2d;
+  --input-border: #444444;
+  --list-hover: rgba(157, 70, 255, 0.15); /* Subtle purple tint */
+  --badge-bg: #2d2d2d;
+  --upload-icon-bg: rgba(98, 0, 234, 0.2);
+  
+  /* Adjust shadows to be more subtle or disappear in dark mode */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.3);
+  --shadow-float: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+}
+
 body {
   margin: 0;
-  font-family: sans-serif;
-  --highlight-color: #1C77FF;
+  padding-top: 60px; 
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-main);
+  min-height: 100vh;
+  box-sizing: border-box;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 #file-input {
   display: none;
 }
 
+/* =========================================
+   2. HERO BACKGROUND
+   ========================================= */
+body::before {
+  content: '';
+  position: fixed; 
+  top: 0; left: 0; right: 0;
+  height: 50vh; 
+  background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
+  border-bottom-left-radius: 50% 40px;
+  border-bottom-right-radius: 50% 40px;
+  z-index: -1;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+}
+
+/* =========================================
+   3. UPLOAD CARD
+   ========================================= */
 #file-area {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  width: 100%;
-  height: 30vh;
-  background-color: var(--highlight-color);
-  color: white;
-  text-align: center;
+  align-items: center;
+  
+  width: 90%;
+  max-width: 800px;
+  height: 320px;
+  margin: 0 auto 40px auto; 
+  
+  /* Use variable for Glass Style */
+  background-color: var(--card-bg);
+  backdrop-filter: blur(12px); 
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-float);
   cursor: pointer;
+  position: relative;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.3s ease;
+  border: 1px solid var(--card-border);
+  overflow: hidden; 
+  padding: 20px;
+  box-sizing: border-box;
 }
 
-#file-area h2,
+#file-area::after {
+  content: '';
+  position: absolute;
+  top: 15px; bottom: 15px; left: 15px; right: 15px;
+  border: 2px dashed var(--dashed-border); 
+  border-radius: 16px;
+  pointer-events: none;
+  transition: border-color 0.3s ease;
+}
+
+#file-area:hover {
+  transform: translateY(-5px);
+}
+
+#file-area:hover::after {
+  border-color: var(--primary-color);
+}
+
+/* --- Content Inside Card --- */
+#file-area .upload-icon {
+  color: var(--primary-color);
+  background: var(--upload-icon-bg); 
+  padding: 16px;
+  border-radius: 50%;
+  margin-bottom: 16px;
+  display: flex;
+}
+
+#file-area h2 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin: 0 0 10px 0;
+  color: var(--text-main);
+  z-index: 2;
+  letter-spacing: -0.5px;
+}
+
 #file-area p {
-  margin: 5px;
+  font-size: 1.1rem;
+  color: var(--text-muted);
+  opacity: 0.9;
+  margin: 0;
+  z-index: 2;
 }
 
+/* --- Browse Button --- */
+.browse-btn {
+  margin-top: 20px;
+  background-color: var(--primary-color);
+  color: white;
+  border: 0;
+  padding: 10px 24px;
+  border-radius: 50px;
+  font-weight: 600;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+  cursor: pointer;
+  z-index: 2;
+}
+
+/* --- LOGIC FOR "UPLOADED" STATE --- */
+#file-area.has-file .upload-icon {
+  background: #e6fffa; 
+  color: #00c853;      
+}
+
+/* In Dark mode, dim the success bg slightly */
+[data-theme="dark"] #file-area.has-file .upload-icon {
+  background: rgba(0, 200, 83, 0.2);
+}
+
+#file-area.has-file h2 {
+  color: #00c853; 
+}
+
+#file-area.has-file p {
+  font-family: 'Courier New', monospace;
+  background-color: var(--bg-color); /* Matches page background */
+  color: var(--text-main);
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--dashed-border);
+  font-weight: 600;
+  white-space: nowrap;      
+  overflow: hidden;          
+  text-overflow: ellipsis;  
+  max-width: 70%;            
+  display: block;
+}
+
+/* =========================================
+   4. SIDE PANEL & THEME TOGGLE
+   ========================================= */
 #side-panel {
   position: absolute;
   top: 0;
   right: 0;
-  width: 20em;
-  height: 30vh;
+  width: auto;
   padding: 2em;
   box-sizing: border-box;
   pointer-events: none;
+  z-index: 10;
+  display: flex;
+  gap: 10px; /* Space between login and toggle */
+  justify-content: flex-end;
 }
 
-#side-panel button {
-  font-size: 1rem;
-  width: 100%;
-  padding: 10px 20px;
-  border: 0;
-  border-radius: 10px;
-  background-color: white;
-  color: var(--highlight-color);
-  font-weight: bold;
+/* Styles for both the login button and the new theme toggle */
+#side-panel button, .theme-toggle {
+  font-size: 0.9rem;
+  padding: 10px 24px;
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 50px;
+  background-color: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  color: white;
+  font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 5px 0 0 rgba(169, 169, 169, 0.4);
   pointer-events: all;
-}
-#side-panel button:active {
-  transform: translateY(5px);
-  box-shadow: 0 0 0 0;
+  transition: all 0.2s ease;
+  box-shadow: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 #commit-id {
@@ -67,144 +254,239 @@ body {
   text-decoration: underline;
 }
 
+#side-panel button:hover, .theme-toggle:hover {
+  background-color: white;
+  color: var(--primary-color);
+  transform: translateY(-2px);
+}
+
+/* Specific style for the icon-only toggle */
+.theme-toggle {
+  padding: 10px 14px; /* More square for the icon */
+  font-size: 1.2rem;
+}
+
+/* =========================================
+   5. MAIN LAYOUT
+   ========================================= */
 #format-containers {
   display: flex;
+  justify-content: center;
+  gap: 20px;
+  max-width: 1200px;
+  margin: 0 auto 100px auto; 
+  padding: 0 20px;
+  position: relative;
+  z-index: 2;
 }
 
 .format-container {
   display: flex;
   flex-flow: column nowrap;
   align-items: center;
-  width: 50vw;
-  min-height: 70vh;
-  padding: 0.8em 7em;
+  flex: 1;
+  padding: 0;
 }
+
 .format-container h2 {
   text-align: center;
   margin-bottom: 20px;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  font-weight: 800;
+  color: var(--text-muted);
+  background: var(--badge-bg);
+  padding: 8px 24px;
+  border-radius: 50px;
+  box-shadow: var(--shadow-sm);
 }
 
-#from-container {
-  background-color: lightgray;
-}
-#to-container {
-  background-color: rgb(184, 184, 184);
+#from-container, #to-container {
+  background-color: transparent;
 }
 
+/* =========================================
+   6. SEARCH BARS
+   ========================================= */
 .search {
-  text-align: center;
-  margin-bottom: 30px;
-  padding: 10px 20px;
-  border: 0;
-  border-radius: 5px;
+  width: 80%;
+  text-align: left;
+  margin-bottom: 20px;
+  padding: 12px 20px;
+  border: 1px solid var(--input-border);
+  border-radius: 50px;
   outline: none;
-  box-shadow: 0 5px 0 0 darkgrey;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s;
+  font-size: 1rem;
+  background-color: var(--input-bg);
+  color: var(--text-main);
 }
 
+.search:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 4px rgba(98, 0, 234, 0.1);
+}
+
+/* =========================================
+   7. LIST CARDS
+   ========================================= */
 .format-list {
   display: flex;
   flex-flow: column nowrap;
   width: 100%;
+  box-sizing: border-box;
   align-items: center;
-  background-color: white;
-  border-radius: 10px;
-  padding: 30px;
-  margin-bottom: 5vw;
+  background-color: var(--surface-color);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow-md);
+  min-height: 400px;
+  max-height: 60vh;
+  overflow-y: auto;
+  border: 1px solid var(--input-border); /* Subtle border for dark mode contrast */
 }
 
+.format-list::-webkit-scrollbar { width: 6px; }
+.format-list::-webkit-scrollbar-thumb { background: #ddd; border-radius: 4px; }
+/* Dark mode scrollbar */
+[data-theme="dark"] .format-list::-webkit-scrollbar-thumb { background: #444; }
+
 .format-list button {
-  width: 80%;
-  margin: 5px 0;
-  padding: 10px;
-  color: black;
-  background-color: lightgray;
-  border: 0;
-  border-radius: 10px;
-  font-family: monospace;
-  word-break: break-word;
+  width: 100%;
+  margin: 4px 0;
+  padding: 12px 16px;
+  color: var(--text-muted);
+  background-color: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-weight: 500;
+  text-align: left;
   cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  justify-content: space-between;
+}
+
+.format-list button:hover {
+  background-color: var(--list-hover);
+  color: var(--primary-color);
+  transform: translateX(4px);
 }
 
 button.selected {
-  background-color: var(--highlight-color);
-  color: white;
-  font-weight: bold;
+  background-color: var(--primary-color) !important;
+  color: white !important;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(98, 0, 234, 0.3);
 }
 
+/* =========================================
+   8. CONVERT BUTTON
+   ========================================= */
 #convert-button {
   position: fixed;
   left: 50%;
-  bottom: 5%;
+  bottom: 30px;
   transform: translateX(-50%);
-  font-size: 1.5rem;
-  padding: 10px 20px;
+  font-size: 1.2rem;
+  font-weight: 700;
+  padding: 16px 48px;
   border: 0;
-  border-radius: 10px;
-  background-color: var(--highlight-color);
+  border-radius: 50px;
+  background: linear-gradient(90deg, var(--primary-color), var(--primary-light));
   color: white;
   cursor: pointer;
+  box-shadow: 0 10px 25px rgba(98, 0, 234, 0.4);
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  z-index: 100;
+  letter-spacing: 1px;
+  text-transform: uppercase;
 }
 
+#convert-button:hover {
+  transform: translateX(-50%) scale(1.05);
+  box-shadow: 0 15px 35px rgba(98, 0, 234, 0.5);
+}
+
+#convert-button:active {
+  transform: translateX(-50%) scale(0.95);
+}
+
+/* =========================================
+   9. POPUPS & UTILITIES
+   ========================================= */
 .disabled {
+  opacity: 0.5;
   filter: grayscale(1);
   pointer-events: none;
 }
 
 #popup-bg {
   position: fixed;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
+  left: 0; top: 0; width: 100%; height: 100%;
+  background-color: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 200;
 }
+
 #popup {
   position: fixed;
-  left: 50%;
-  top: 50%;
-  width: 20vw;
+  left: 50%; top: 50%; width: 300px;
   transform: translate(-50%, -50%);
-  background-color: white;
-  padding: 15px;
-  border-radius: 10px;
+  background-color: var(--surface-color); /* Updated */
+  padding: 30px;
+  border-radius: var(--radius-lg);
   text-align: center;
+  box-shadow: var(--shadow-md);
+  z-index: 201;
+  color: var(--text-main);
 }
 
 #popup button {
+  margin-top: 15px;
   font-size: 1rem;
-  padding: 7px 20px;
+  padding: 10px 24px;
   border: 0;
-  border-radius: 10px;
-  background-color: lightgray;
-  color: black;
+  border-radius: 8px;
+  background-color: var(--primary-color);
+  color: white;
   cursor: pointer;
+  transition: opacity 0.2s;
 }
 
+#popup button:hover {
+  opacity: 0.9;
+}
+
+/* =========================================
+   10. RESPONSIVE
+   ========================================= */
 @media only screen and (max-width: 800px) {
-  #drop-hint-text {
-    display: none;
-  }
-  .format-container {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 0.8em 4em;
-  }
-  .format-list button {
-    width: 100%;
-  }
+  #drop-hint-text { display: none; }
+  
   #format-containers {
     flex-flow: column nowrap;
+    margin-top: 20px;
+    gap: 40px;
   }
-  #popup {
-    width: 80vw;
-  }
+  
+  .format-container { width: 100%; padding: 0; }
+  .format-list { min-height: auto; }
+  
   #side-panel {
-    width: 50%;
-    padding: 0.8em;
+    width: 100%;
     text-align: right;
+    padding: 1em;
   }
-  #side-panel button {
-    font-size: 0.8rem;
-    padding: 10px;
+
+  #convert-button {
+    width: 90%;
+    bottom: 20px;
   }
+  
+  body::before { height: 40vh; }
+  #file-area { height: 250px; }
 }
