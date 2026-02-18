@@ -96,7 +96,7 @@ async function decodeWithFFmpeg(
   bytes: Uint8Array,
 ): Promise<{ samples: Float32Array; sampleRate: number; channels: number }> {
   const ffmpeg = new FFmpeg();
-  await ffmpeg.load({ coreURL: "/convert/wasm/ffmpeg-core.js" });
+  await ffmpeg.load({ coreURL: "/wasm/ffmpeg-core.js" });
   await ffmpeg.writeFile("infile", bytes);
   // produce f32le raw samples with WAV header so we can parse sampleRate/channels
   try {
