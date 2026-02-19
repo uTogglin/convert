@@ -1,5 +1,6 @@
 import type { FormatHandler } from "../FormatHandler.ts";
 
+import aniHandler from "./ani.ts";
 import canvasToBlobHandler from "./canvasToBlob.ts";
 import meydaHandler from "./meyda.ts";
 import htmlEmbedHandler from "./htmlEmbed.ts";
@@ -33,6 +34,7 @@ import lzhHandler from "./lzh.ts";
 
 const handlers: FormatHandler[] = [];
 try { handlers.push(new svgTraceHandler()) } catch (_) { };
+try { handlers.push(new aniHandler()) } catch (_) { };
 try { handlers.push(new canvasToBlobHandler()) } catch (_) { };
 try { handlers.push(new meydaHandler()) } catch (_) { };
 try { handlers.push(new htmlEmbedHandler()) } catch (_) { };

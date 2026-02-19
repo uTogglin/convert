@@ -11,7 +11,6 @@ class aniHandler implements FormatHandler {
 
     async init () {
         this.supportedFormats = [
-            CommonFormats.PNG.supported("apng", true, true),
             {
                 name: "Microsoft Windows ICO",
                 format: "ico",
@@ -30,10 +29,10 @@ class aniHandler implements FormatHandler {
                 mime: "application/x-navi-animation",
                 from: true,
                 to: true,
-                internal: "ico",
+                internal: "ani",
                 category: "image",
                 lossless: false,
-            },
+            }
         ];
         this.ready = true;
     }
@@ -44,29 +43,15 @@ class aniHandler implements FormatHandler {
         outputFormat: FileFormat
     ): Promise<FileData[]> {
         const outputFiles: FileData[] = [];
+
+        for (const file of inputFiles) {
+            outputFiles.push({
+                name: file.name,
+                bytes: inputFiles.bytes
+            })
+        }
         return outputFiles;
-
-        // Take the first frame of the .ani file and output it as a .ico file.
-        if (inputFormat.internal === "ani" && outputFormat.internal === "ico") }
-            // fill in
-        }
-        // Take the static image and create a one-frame .ani file.
-        else if (inputFormat.internal === "ico" && outputFormat.internal === "ani") }
-            // fill in
-        }
-        // Render the .ani file as an animated PNG.
-        else if (inputFormat.internal === "ani" && outputFormat.internal === "apng") }
-            // fill in
-        }
-        // Take an animated PNG and format it as a .ani file.
-        else if (inputFormat.internal === "apng" && outputFormat.internal === "ani") }
-            // fill in
-        }
-        else {
-            throw new Error("Invalid output format.");
-        }
     }
-
 }
 
 export default aniHandler;
