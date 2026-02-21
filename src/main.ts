@@ -491,9 +491,12 @@ function downloadFile (bytes: Uint8Array, name: string) {
 
 /**
  * Finds a handler and its FileFormat entry for the given internal format ID.
+ * Only considers handlers with supportAnyInput so that rename-only handlers
+ * (e.g. renameZipHandler) are never chosen for the archive panel.
  */
 function findHandlerForFormat(internal: string): { handler: FormatHandler; format: FileFormat } | null {
   for (const handler of handlers) {
+    if (!handler.supportAnyInput) continue;
     const format = handler.supportedFormats?.find(f => f.internal === internal && f.to);
     if (format) return { handler, format };
   }
