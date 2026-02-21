@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
@@ -13,11 +13,79 @@
 
   <a id="commit-id" href="https://github.com/p2r3/convert"></a>
 
+  <!-- Top bar -->
+  <header id="top-bar">
+    <div id="top-bar-left">
+      <h1 id="logo">Convert<span class="accent">.</span>it</h1>
+    </div>
+    <div id="top-bar-right">
+      <button id="theme-toggle" title="Toggle dark/light mode">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+          <line x1="1" y1="12" x2="3" y2="12"></line>
+          <line x1="21" y1="12" x2="23" y2="12"></line>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+      </button>
+      <button id="settings-toggle" title="Settings">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Settings drawer -->
+  <div id="settings-drawer" class="hidden">
+    <div class="settings-section">
+      <h3>Accent Color</h3>
+      <div id="accent-colors">
+        <button class="color-dot active" data-color="#6C5CE7" style="background:#6C5CE7" title="Purple"></button>
+        <button class="color-dot" data-color="#0984E3" style="background:#0984E3" title="Blue"></button>
+        <button class="color-dot" data-color="#00B894" style="background:#00B894" title="Green"></button>
+        <button class="color-dot" data-color="#E17055" style="background:#E17055" title="Coral"></button>
+        <button class="color-dot" data-color="#FDCB6E" style="background:#FDCB6E" title="Yellow"></button>
+        <button class="color-dot" data-color="#E84393" style="background:#E84393" title="Pink"></button>
+        <button class="color-dot" data-color="#FF6B6B" style="background:#FF6B6B" title="Red"></button>
+        <button class="color-dot" data-color="#1C77FF" style="background:#1C77FF" title="Classic Blue"></button>
+      </div>
+      <div class="custom-slots-row">
+        <span class="custom-slots-label">Custom</span>
+        <button class="color-dot custom-slot" id="custom-slot-1" data-slot="1" title="Custom slot 1"></button>
+        <button class="color-dot custom-slot" id="custom-slot-2" data-slot="2" title="Custom slot 2"></button>
+        <button class="color-dot custom-slot" id="custom-slot-3" data-slot="3" title="Custom slot 3"></button>
+      </div>
+      <div id="custom-color-row">
+        <input type="color" id="custom-accent" value="#6C5CE7">
+        <button id="save-custom-color" title="Save current color to a slot">Save</button>
+      </div>
+    </div>
+    <div class="settings-section">
+      <h3>Mode</h3>
+      <button id="mode-button">Advanced mode</button>
+    </div>
+    <div class="settings-section">
+      <h3>Error Log <span id="log-badge" class="log-badge hidden">0</span></h3>
+      <p class="settings-hint">Captured <code>console.error</code> and <code>console.warn</code> messages.</p>
+      <div id="app-log-list" class="app-log-list"><p class="app-log-empty">No errors or warnings captured yet.</p></div>
+      <div class="app-log-actions">
+        <button id="copy-log-btn">Copy log</button>
+        <button id="clear-log-btn">Clear log</button>
+      </div>
+    </div>
+  </div>
+
   <div id="file-area">
     <h2>Click to add your file</h2>
     <p id="drop-hint-text">or drag and drop it here</p>
   </div>
-  
+
   <div id="archive-panel">
     <span class="archive-panel-title">Archive uploaded files</span>
     <div class="archive-fmt-grid">
@@ -28,11 +96,6 @@
       <button class="archive-fmt-btn" data-format="gz">.gz <span class="archive-fmt-note">per file</span></button>
     </div>
     <button id="create-archive-btn" class="disabled">Create Archives</button>
-  </div>
-
-  <div id="side-panel">
-    <button id="mode-button">Advanced mode</button>
-    <button id="theme-toggle" class="theme-toggle" aria-label="Toggle Dark Mode">☀️</button>
   </div>
 
   <div id="format-containers">
@@ -61,41 +124,6 @@
   <div id="popup">
     <h2>Loading tools...</h2>
   </div>
-
-  <script>
-    (function() {
-      const toggleBtn = document.getElementById('theme-toggle');
-      // We target the html tag to set the data-theme attribute
-      const root = document.documentElement;
-      const sunIcon = '☀️';
-      const moonIcon = '🌙';
-
-      // 1. Check System Preference & LocalStorage on Load
-      const userPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const savedTheme = localStorage.getItem('theme');
-
-      // Apply the correct theme immediately
-      if (savedTheme === 'dark' || (!savedTheme && userPrefersDark)) {
-        root.setAttribute('data-theme', 'dark');
-        toggleBtn.innerHTML = moonIcon;
-      } else {
-        root.setAttribute('data-theme', 'light');
-        toggleBtn.innerHTML = sunIcon;
-      }
-
-      // 2. Handle Click Event
-      toggleBtn.addEventListener('click', () => {
-        const currentTheme = root.getAttribute('data-theme');
-        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-        
-        root.setAttribute('data-theme', newTheme);
-        localStorage.setItem('theme', newTheme);
-        
-        // Update Icon
-        toggleBtn.innerHTML = newTheme === 'dark' ? moonIcon : sunIcon;
-      });
-    })();
-  </script>
 
   <script type="module" src="src/main.ts"></script>
 

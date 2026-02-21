@@ -6,6 +6,58 @@ import JSZip from "jszip";
 import { gzip as pakoGzip } from "pako";
 import { createTar } from "./handlers/archive.js";
 
+// ── In-app console log capture ─────────────────────────────────────────────
+interface AppLogEntry { level: "error" | "warn" | "info"; msg: string; time: string; }
+const appLogBuffer: AppLogEntry[] = [];
+
+function _fmtArg(a: unknown): string {
+  if (a instanceof Error) return `${a.message}${a.stack ? "\n" + a.stack : ""}`;
+  if (typeof a === "object" && a !== null) { try { return JSON.stringify(a, null, 2); } catch { return String(a); } }
+  return String(a);
+}
+
+function _appendAppLog(level: AppLogEntry["level"], args: unknown[]) {
+  const msg = args.map(_fmtArg).join(" ");
+  const now = new Date();
+  const time = [now.getHours(), now.getMinutes(), now.getSeconds()]
+    .map(n => n.toString().padStart(2, "0")).join(":");
+  appLogBuffer.push({ level, msg, time });
+  const badge = document.getElementById("log-badge");
+  if (badge) {
+    const count = appLogBuffer.filter(e => e.level === "error").length;
+    badge.textContent = String(count);
+    badge.classList.toggle("hidden", count === 0);
+  }
+  const list = document.getElementById("app-log-list");
+  if (list) _renderAppLogInto(list);
+}
+
+function _renderAppLogInto(list: HTMLElement) {
+  list.innerHTML = "";
+  if (appLogBuffer.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "app-log-empty";
+    empty.textContent = "No activity logged yet.";
+    list.appendChild(empty);
+    return;
+  }
+  for (const entry of [...appLogBuffer].reverse()) {
+    const row = document.createElement("div");
+    row.className = `app-log-row app-log-${entry.level}`;
+    const time = document.createElement("span"); time.className = "app-log-time"; time.textContent = entry.time;
+    const lbl  = document.createElement("span"); lbl.className  = "app-log-level"; lbl.textContent = entry.level.toUpperCase();
+    const msgEl = document.createElement("span"); msgEl.className = "app-log-msg"; msgEl.textContent = entry.msg;
+    row.append(time, lbl, msgEl);
+    list.appendChild(row);
+  }
+}
+
+const _origConsoleError = console.error.bind(console);
+const _origConsoleWarn  = console.warn.bind(console);
+console.error = (...args: unknown[]) => { _origConsoleError(...args); _appendAppLog("error", args); };
+console.warn  = (...args: unknown[]) => { _origConsoleWarn(...args);  _appendAppLog("warn",  args); };
+// ──────────────────────────────────────────────────────────────────────────────
+
 /** Files currently selected for conversion */
 let selectedFiles: File[] = [];
 /**
@@ -37,6 +89,11 @@ const ui = {
   archivePanel: document.querySelector("#archive-panel") as HTMLDivElement,
   archiveFmtBtns: document.querySelectorAll(".archive-fmt-btn") as NodeListOf<HTMLButtonElement>,
   createArchiveBtn: document.querySelector("#create-archive-btn") as HTMLButtonElement,
+  themeToggle: document.querySelector("#theme-toggle") as HTMLButtonElement,
+  settingsToggle: document.querySelector("#settings-toggle") as HTMLButtonElement,
+  settingsDrawer: document.querySelector("#settings-drawer") as HTMLDivElement,
+  accentColors: document.querySelectorAll(".color-dot") as NodeListOf<HTMLButtonElement>,
+  customAccent: document.querySelector("#custom-accent") as HTMLInputElement,
 };
 
 /**
@@ -392,6 +449,143 @@ ui.modeToggleButton.addEventListener("click", () => {
   }
   buildOptionList();
 });
+
+// ──── Theme Toggle ────
+function applyTheme(theme: string) {
+  document.documentElement.classList.add("theme-transitioning");
+  document.documentElement.setAttribute("data-theme", theme);
+  try { localStorage.setItem("convert-theme", theme); } catch {}
+  setTimeout(() => document.documentElement.classList.remove("theme-transitioning"), 350);
+}
+try {
+  const savedTheme = localStorage.getItem("convert-theme") || "dark";
+  applyTheme(savedTheme);
+} catch { applyTheme("dark"); }
+
+if (ui.themeToggle) {
+  ui.themeToggle.addEventListener("click", () => {
+    const current = document.documentElement.getAttribute("data-theme");
+    applyTheme(current === "dark" ? "light" : "dark");
+  });
+}
+
+// ──── Settings Drawer Toggle ────
+if (ui.settingsToggle && ui.settingsDrawer) {
+  ui.settingsToggle.addEventListener("click", () => {
+    ui.settingsDrawer.classList.toggle("hidden");
+    if (!ui.settingsDrawer.classList.contains("hidden")) {
+      const list = document.getElementById("app-log-list");
+      if (list) _renderAppLogInto(list);
+    }
+  });
+}
+
+// ──── Accent Color Picker ────
+const customSlot1 = document.getElementById("custom-slot-1") as HTMLButtonElement;
+const customSlot2 = document.getElementById("custom-slot-2") as HTMLButtonElement;
+const customSlot3 = document.getElementById("custom-slot-3") as HTMLButtonElement;
+const saveCustomBtn = document.getElementById("save-custom-color") as HTMLButtonElement;
+let nextCustomSlot = 1;
+
+function updateNextSlotIndicator() {
+  [customSlot1, customSlot2, customSlot3].forEach((el, i) => {
+    el?.classList.toggle("custom-slot-next", i + 1 === nextCustomSlot);
+  });
+}
+
+function applyAccent(color: string) {
+  document.documentElement.style.setProperty("--accent", color);
+  document.documentElement.style.setProperty("--highlight-color", color);
+  try { localStorage.setItem("convert-accent", color); } catch {}
+  ui.accentColors.forEach(dot => {
+    dot.classList.toggle("active", dot.getAttribute("data-color") === color);
+  });
+  if (ui.customAccent) ui.customAccent.value = color;
+}
+
+function restoreCustomSlots() {
+  try {
+    const slots = [
+      { key: "convert-custom-color-1", el: customSlot1 },
+      { key: "convert-custom-color-2", el: customSlot2 },
+      { key: "convert-custom-color-3", el: customSlot3 },
+    ];
+    for (const { key, el } of slots) {
+      const c = localStorage.getItem(key);
+      if (c && el) {
+        el.style.setProperty("background", c, "important");
+        el.setAttribute("data-color", c);
+        el.classList.add("has-color");
+      }
+    }
+  } catch {}
+}
+restoreCustomSlots();
+updateNextSlotIndicator();
+
+try {
+  const savedAccent = localStorage.getItem("convert-accent") || "#6C5CE7";
+  applyAccent(savedAccent);
+} catch { applyAccent("#6C5CE7"); }
+
+ui.accentColors.forEach(dot => {
+  dot.addEventListener("click", () => {
+    const color = dot.getAttribute("data-color");
+    if (color) applyAccent(color);
+    const slot = (dot as HTMLButtonElement).dataset["slot"];
+    if (slot) {
+      nextCustomSlot = parseInt(slot, 10);
+      updateNextSlotIndicator();
+    }
+  });
+});
+if (ui.customAccent) {
+  ui.customAccent.addEventListener("input", () => {
+    applyAccent(ui.customAccent.value);
+  });
+}
+if (saveCustomBtn) {
+  saveCustomBtn.addEventListener("click", () => {
+    const color = ui.customAccent?.value;
+    if (!color) return;
+    const slot = nextCustomSlot === 1 ? customSlot1 : nextCustomSlot === 2 ? customSlot2 : customSlot3;
+    const key = `convert-custom-color-${nextCustomSlot}`;
+    if (slot) {
+      slot.style.setProperty("background", color, "important");
+      slot.setAttribute("data-color", color);
+      slot.classList.add("has-color");
+    }
+    try { localStorage.setItem(key, color); } catch {}
+    applyAccent(color);
+    nextCustomSlot = nextCustomSlot >= 3 ? 1 : nextCustomSlot + 1;
+    updateNextSlotIndicator();
+  });
+}
+
+// ──── Error Log Buttons ────
+const copyLogBtn = document.getElementById("copy-log-btn");
+if (copyLogBtn) {
+  copyLogBtn.addEventListener("click", () => {
+    const text = appLogBuffer
+      .map(e => `[${e.time}] ${e.level.toUpperCase()} ${e.msg}`)
+      .join("\n");
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+      (copyLogBtn as HTMLButtonElement).textContent = "Copied!";
+      setTimeout(() => { (copyLogBtn as HTMLButtonElement).textContent = "Copy log"; }, 2000);
+    }).catch(() => {});
+  });
+}
+const clearLogBtn = document.getElementById("clear-log-btn");
+if (clearLogBtn) {
+  clearLogBtn.addEventListener("click", () => {
+    appLogBuffer.length = 0;
+    const list = document.getElementById("app-log-list");
+    if (list) _renderAppLogInto(list);
+    const badge = document.getElementById("log-badge");
+    if (badge) { badge.textContent = "0"; badge.classList.add("hidden"); }
+  });
+}
 
 let deadEndAttempts: ConvertPathNode[][];
 
