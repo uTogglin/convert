@@ -7,6 +7,7 @@ export default defineConfig({
     exclude: [
       "@ffmpeg/ffmpeg",
       "@sqlite.org/sqlite-wasm",
+      "7z-wasm",
     ]
   },
   base: "/",
@@ -56,6 +57,10 @@ export default defineConfig({
         {
           src: "src/handlers/espeakng.js/js/espeakng.worker.data",
           dest: "js"
+        },
+        {
+          src: "node_modules/7z-wasm/7zz.wasm",
+          dest: "wasm"
         }
       ]
     }),

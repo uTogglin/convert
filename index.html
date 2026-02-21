@@ -18,6 +18,18 @@
     <p id="drop-hint-text">or drag and drop it here</p>
   </div>
   
+  <div id="archive-panel">
+    <span class="archive-panel-title">Archive uploaded files</span>
+    <div class="archive-fmt-grid">
+      <button class="archive-fmt-btn" data-format="zip">.zip</button>
+      <button class="archive-fmt-btn" data-format="7z">.7z</button>
+      <button class="archive-fmt-btn" data-format="tar">.tar</button>
+      <button class="archive-fmt-btn" data-format="tgz">.tar.gz</button>
+      <button class="archive-fmt-btn" data-format="gz">.gz <span class="archive-fmt-note">per file</span></button>
+    </div>
+    <button id="create-archive-btn" class="disabled">Create Archives</button>
+  </div>
+
   <div id="side-panel">
     <button id="mode-button">Advanced mode</button>
     <button id="theme-toggle" class="theme-toggle" aria-label="Toggle Dark Mode">☀️</button>

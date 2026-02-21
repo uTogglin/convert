@@ -163,6 +163,34 @@ const CommonFormats = {
         "application/zip",
         Category.ARCHIVE
     ),
+    TAR: new FormatDefinition(
+        "TAR Archive",
+        "tar",
+        "tar",
+        "application/x-tar",
+        Category.ARCHIVE
+    ),
+    TGZ: new FormatDefinition(
+        "Gzip Compressed TAR Archive",
+        "tgz",
+        "tar.gz",
+        "application/x-compressed-tar",
+        Category.ARCHIVE
+    ),
+    GZ: new FormatDefinition(
+        "GZIP Compressed File",
+        "gz",
+        "gz",
+        "application/gzip",
+        Category.ARCHIVE
+    ),
+    SEVEN_Z: new FormatDefinition(
+        "7-Zip Archive",
+        "7z",
+        "7z",
+        "application/x-7z-compressed",
+        Category.ARCHIVE
+    ),
     // documents
     PDF: new FormatDefinition(
         "Portable Document Format",

@@ -274,7 +274,94 @@ body::before {
 }
 
 /* =========================================
-   4. SIDE PANEL & THEME TOGGLE
+   4. ARCHIVE PANEL
+   ========================================= */
+#archive-panel {
+  display: none;
+  width: 90%;
+  max-width: 800px;
+  margin: -20px auto 30px auto;
+  background: var(--card-bg);
+  backdrop-filter: blur(12px);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--card-border);
+  padding: 20px 24px;
+  box-sizing: border-box;
+}
+
+#archive-panel.visible {
+  display: block;
+}
+
+.archive-panel-title {
+  display: block;
+  font-weight: 700;
+  font-size: 1rem;
+  margin-bottom: 14px;
+  color: var(--text-main);
+}
+
+.archive-fmt-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.archive-fmt-btn {
+  padding: 8px 18px;
+  border: 2px solid var(--input-border);
+  border-radius: 50px;
+  background: var(--input-bg);
+  color: var(--text-muted);
+  font-family: 'Courier New', monospace;
+  font-weight: 700;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.archive-fmt-btn:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.archive-fmt-btn.selected {
+  border-color: var(--primary-color);
+  background: var(--primary-color);
+  color: white;
+  box-shadow: 0 4px 12px rgba(98, 0, 234, 0.3);
+}
+
+.archive-fmt-note {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 0.7rem;
+  font-weight: 400;
+  opacity: 0.75;
+}
+
+#create-archive-btn {
+  padding: 10px 28px;
+  border: 0;
+  border-radius: 50px;
+  background: linear-gradient(90deg, var(--primary-color), var(--primary-light));
+  color: white;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  box-shadow: 0 6px 16px rgba(98, 0, 234, 0.3);
+  transition: all 0.3s ease;
+}
+
+#create-archive-btn:hover {
+  box-shadow: 0 10px 24px rgba(98, 0, 234, 0.4);
+  transform: translateY(-2px);
+}
+
+/* =========================================
+   5. SIDE PANEL & THEME TOGGLE
    ========================================= */
 #side-panel {
   position: absolute;
