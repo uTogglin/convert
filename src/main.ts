@@ -529,20 +529,20 @@ ui.createArchiveBtn.addEventListener("click", async () => {
           const zip = new JSZip();
           for (const f of inputFileData) zip.file(f.name, f.bytes);
           const out = await zip.generateAsync({ type: "uint8array" });
-          downloadFile(out, "archive.zip", "application/zip");
+          downloadFile(out, "archive.zip");
           break;
         }
         case "tar": {
-          downloadFile(createTar(inputFileData), "archive.tar", "application/x-tar");
+          downloadFile(createTar(inputFileData), "archive.tar");
           break;
         }
         case "tgz": {
-          downloadFile(pakoGzip(createTar(inputFileData)), "archive.tar.gz", "application/x-compressed-tar");
+          downloadFile(pakoGzip(createTar(inputFileData)), "archive.tar.gz");
           break;
         }
         case "gz": {
           for (const f of inputFileData) {
-            downloadFile(pakoGzip(f.bytes), f.name + ".gz", "application/gzip");
+            downloadFile(pakoGzip(f.bytes), f.name + ".gz");
           }
           break;
         }
@@ -553,7 +553,7 @@ ui.createArchiveBtn.addEventListener("click", async () => {
           const sz = await SevenZip({ locateFile: (p: string) => `/wasm/${p}` });
           for (const f of inputFileData) sz.FS.writeFile(f.name, f.bytes);
           sz.callMain(["a", "-t7z", "archive.7z", ...inputFileData.map(f => f.name)]);
-          downloadFile(sz.FS.readFile("archive.7z"), "archive.7z", "application/x-7z-compressed");
+          downloadFile(sz.FS.readFile("archive.7z"), "archive.7z");
           break;
         }
       }
