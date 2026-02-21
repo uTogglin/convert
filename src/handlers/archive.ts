@@ -5,7 +5,7 @@ import type { FileData, FileFormat, FormatHandler } from "../FormatHandler.ts";
 /**
  * Builds a POSIX ustar TAR archive from an array of FileData entries.
  */
-function createTar(files: FileData[]): Uint8Array {
+export function createTar(files: FileData[]): Uint8Array {
   const BLOCK = 512;
   const blocks: Uint8Array[] = [];
   const enc = new TextEncoder();

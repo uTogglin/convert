@@ -2,6 +2,9 @@ import type { FileFormat, FileData, FormatHandler, ConvertPathNode } from "./For
 import normalizeMimeType from "./normalizeMimeType.js";
 import handlers from "./handlers";
 import { TraversionGraph } from "./TraversionGraph.js";
+import JSZip from "jszip";
+import { gzip as pakoGzip } from "pako";
+import { createTar } from "./handlers/archive.js";
 
 /** Files currently selected for conversion */
 let selectedFiles: File[] = [];
@@ -489,24 +492,10 @@ function downloadFile (bytes: Uint8Array, name: string) {
   link.click();
 }
 
-/**
- * Finds a handler and its FileFormat entry for the given internal format ID.
- * Only considers handlers with supportAnyInput so that rename-only handlers
- * (e.g. renameZipHandler) are never chosen for the archive panel.
- */
-function findHandlerForFormat(internal: string): { handler: FormatHandler; format: FileFormat } | null {
-  for (const handler of handlers) {
-    if (!handler.supportAnyInput) continue;
-    const format = handler.supportedFormats?.find(f => f.internal === internal && f.to);
-    if (format) return { handler, format };
-  }
-  return null;
-}
-
 // Archive format toggle buttons
 ui.archiveFmtBtns.forEach(btn => {
   btn.addEventListener("click", (e) => {
-    e.stopPropagation(); // don't bubble up to #file-area's click handler
+    e.stopPropagation();
     btn.classList.toggle("selected");
     const anySelected = Array.from(ui.archiveFmtBtns).some(b => b.classList.contains("selected"));
     ui.createArchiveBtn.className = anySelected ? "" : "disabled";
@@ -521,7 +510,6 @@ ui.createArchiveBtn.addEventListener("click", async () => {
   if (!selectedFormats.length) return;
   if (!selectedFiles.length) return alert("No files uploaded.");
 
-  // Read all input files once up front
   const inputFileData: FileData[] = [];
   for (const file of selectedFiles) {
     const buffer = await file.arrayBuffer();
@@ -532,24 +520,42 @@ ui.createArchiveBtn.addEventListener("click", async () => {
   await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
   try {
-    for (const internal of selectedFormats) {
-      const match = findHandlerForFormat(internal);
-      if (!match) { console.warn(`No handler found for format: ${internal}`); continue; }
-      const { handler, format } = match;
-
-      if (!handler.ready) {
-        window.showPopup(`<h2>Loading ${format.format.toUpperCase()} tools...</h2>`);
-        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-        await handler.init();
-      }
-
-      window.showPopup(`<h2>Creating ${format.format.toUpperCase()} archive...</h2>`);
+    for (const fmt of selectedFormats) {
+      window.showPopup(`<h2>Creating ${fmt.toUpperCase()} archive...</h2>`);
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-      // Pass format as both input and output — archive handlers ignore the input format
-      const result = await handler.doConvert(inputFileData, format, format);
-      for (const file of result) {
-        downloadFile(file.bytes, file.name, format.mime);
+      switch (fmt) {
+        case "zip": {
+          const zip = new JSZip();
+          for (const f of inputFileData) zip.file(f.name, f.bytes);
+          const out = await zip.generateAsync({ type: "uint8array" });
+          downloadFile(out, "archive.zip", "application/zip");
+          break;
+        }
+        case "tar": {
+          downloadFile(createTar(inputFileData), "archive.tar", "application/x-tar");
+          break;
+        }
+        case "tgz": {
+          downloadFile(pakoGzip(createTar(inputFileData)), "archive.tar.gz", "application/x-compressed-tar");
+          break;
+        }
+        case "gz": {
+          for (const f of inputFileData) {
+            downloadFile(pakoGzip(f.bytes), f.name + ".gz", "application/gzip");
+          }
+          break;
+        }
+        case "7z": {
+          window.showPopup("<h2>Loading 7-Zip tools...</h2>");
+          await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          const SevenZip = (await import("7z-wasm")).default;
+          const sz = await SevenZip({ locateFile: (p: string) => `/wasm/${p}` });
+          for (const f of inputFileData) sz.FS.writeFile(f.name, f.bytes);
+          sz.callMain(["a", "-t7z", "archive.7z", ...inputFileData.map(f => f.name)]);
+          downloadFile(sz.FS.readFile("archive.7z"), "archive.7z", "application/x-7z-compressed");
+          break;
+        }
       }
     }
 
