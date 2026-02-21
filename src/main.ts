@@ -81,6 +81,71 @@ ui.fileSelectArea.onclick = () => {
 };
 
 /**
+ * Renders thumbnail previews for all selected files inside the upload card.
+ * Images show a real thumbnail; other file types show an extension badge.
+ */
+const renderFilePreviews = (files: File[]) => {
+  ui.fileSelectArea.classList.add("has-file");
+  ui.fileSelectArea.innerHTML = "";
+
+  const header = document.createElement("div");
+  header.className = "file-preview-header";
+
+  const countLabel = document.createElement("span");
+  countLabel.textContent = files.length === 1
+    ? "1 file selected"
+    : `${files.length} files selected`;
+
+  const addMoreBtn = document.createElement("button");
+  addMoreBtn.className = "browse-btn";
+  addMoreBtn.textContent = "+ Add more";
+  addMoreBtn.onclick = (e) => {
+    e.stopPropagation();
+    ui.fileInput.click();
+  };
+
+  header.appendChild(countLabel);
+  header.appendChild(addMoreBtn);
+  ui.fileSelectArea.appendChild(header);
+
+  const grid = document.createElement("div");
+  grid.className = "file-preview-grid";
+
+  for (const file of files) {
+    const item = document.createElement("div");
+    item.className = "file-preview-item";
+
+    const thumb = document.createElement("div");
+    thumb.className = "file-preview-thumb";
+
+    if (file.type.startsWith("image/")) {
+      const img = document.createElement("img");
+      const url = URL.createObjectURL(file);
+      img.onload = () => URL.revokeObjectURL(url);
+      img.src = url;
+      img.alt = file.name;
+      thumb.appendChild(img);
+    } else {
+      const badge = document.createElement("div");
+      badge.className = "file-ext-badge";
+      badge.textContent = file.name.split(".").pop()?.toUpperCase() ?? "?";
+      thumb.appendChild(badge);
+    }
+
+    const nameEl = document.createElement("div");
+    nameEl.className = "file-preview-name";
+    nameEl.textContent = file.name;
+    nameEl.title = file.name;
+
+    item.appendChild(thumb);
+    item.appendChild(nameEl);
+    grid.appendChild(item);
+  }
+
+  ui.fileSelectArea.appendChild(grid);
+};
+
+/**
  * Validates and stores user selected files. Works for both manual
  * selection and file drag-and-drop.
  * @param event Either a file input element's "change" event,
@@ -111,10 +176,7 @@ const fileSelectHandler = (event: Event) => {
   files.sort((a, b) => a.name === b.name ? 0 : (a.name < b.name ? -1 : 1));
   selectedFiles = files;
 
-  ui.fileSelectArea.innerHTML = `<h2>
-    ${files[0].name}
-    ${files.length > 1 ? `<br>... and ${files.length - 1} more` : ""}
-  </h2>`;
+  renderFilePreviews(files);
 
   // Common MIME type adjustments (to match "mime" library)
   let mimeType = normalizeMimeType(files[0].type);
