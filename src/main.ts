@@ -930,26 +930,32 @@ let archiveSuspendedQueue = false;
 
 /** Temporarily exit queue mode so archive sees all files */
 function suspendQueueForArchive() {
-  if (conversionQueue.length > 1 && !archiveSuspendedQueue) {
+  if (!archiveSuspendedQueue && allUploadedFiles.length > 0) {
     archiveSuspendedQueue = true;
-    selectedFiles = allUploadedFiles;
-    renderFilePreviews(allUploadedFiles);
+    selectedFiles = [...allUploadedFiles];
+    renderFilePreviews(selectedFiles);
     // Clear format selections since all-files view doesn't map to one input format
     const prevInput = ui.inputList.querySelector(".selected");
     if (prevInput) prevInput.className = "";
     const prevOutput = ui.outputList.querySelector(".selected");
     if (prevOutput) prevOutput.className = "";
     ui.convertButton.className = "disabled";
+    ui.inputSearch.value = "";
+    filterButtonList(ui.inputList, "");
   }
 }
 
 /** Restore queue grouping after archive mode is exited */
 function restoreQueueFromArchive() {
-  if (archiveSuspendedQueue && conversionQueue.length > 1) {
-    archiveSuspendedQueue = false;
-    presentQueueGroup(currentQueueIndex);
-  }
+  if (!archiveSuspendedQueue) return;
   archiveSuspendedQueue = false;
+  if (conversionQueue.length > 1) {
+    presentQueueGroup(currentQueueIndex);
+  } else if (allUploadedFiles.length > 0) {
+    selectedFiles = [...allUploadedFiles];
+    renderFilePreviews(selectedFiles);
+    autoSelectInputFormat(selectedFiles[0]);
+  }
 }
 
 // Archive format toggle buttons
