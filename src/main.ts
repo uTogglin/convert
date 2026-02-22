@@ -5,7 +5,7 @@ import { TraversionGraph } from "./TraversionGraph.js";
 import JSZip from "jszip";
 import { gzip as pakoGzip } from "pako";
 import { createTar } from "./handlers/archive.js";
-import { MagickImage, MagickFormat } from "@imagemagick/magick-wasm";
+import { ImageMagick, MagickFormat, MagickImage } from "@imagemagick/magick-wasm";
 
 // ── In-app console log capture ─────────────────────────────────────────────
 interface AppLogEntry { level: "error" | "warn" | "info"; msg: string; time: string; }
@@ -1359,22 +1359,18 @@ const extToMagickFormat: Record<string, MagickFormat> = {
 
 /** Get dimensions of an image from its bytes via ImageMagick */
 function getImageDimensions(bytes: Uint8Array, _ext: string): Promise<{ w: number; h: number }> {
-  return new Promise((res) => {
-    MagickImage.read(bytes, (img) => {
-      res({ w: img.width, h: img.height });
-    });
+  return ImageMagick.read(bytes, (img: MagickImage) => {
+    return { w: img.width, h: img.height };
   });
 }
 
-/** Resize image bytes to target dimensions via ImageMagick (Lanczos) */
-async function resizeImageBytes(bytes: Uint8Array, ext: string, w: number, h: number): Promise<Uint8Array> {
+/** Resize image bytes to target dimensions via ImageMagick (lossless) */
+function resizeImageBytes(bytes: Uint8Array, ext: string, w: number, h: number): Promise<Uint8Array> {
   const fmt = extToMagickFormat[ext] ?? MagickFormat.Png;
-  return new Promise((res) => {
-    MagickImage.read(bytes, (img) => {
-      img.resize(w, h);
-      img.quality = 100;
-      img.write(fmt, (out) => res(new Uint8Array(out)));
-    });
+  return ImageMagick.read(bytes, (img: MagickImage) => {
+    img.resize(w, h);
+    img.quality = 100;
+    return img.write(fmt, (out: Uint8Array) => new Uint8Array(out));
   });
 }
 
