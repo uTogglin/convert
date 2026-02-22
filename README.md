@@ -1,17 +1,32 @@
-# [Convert to it!](https://convert.to.it/)
+# [Convert to it!](https://convert.utoggl.in/)
 **Truly universal online file converter.**
 
 Many online file conversion tools are **boring** and **insecure**. They only allow conversion between two formats in the same medium (images to images, videos to videos, etc.), and they require that you _upload your files to some server_.
 
 This is not just terrible for privacy, it's also incredibly lame. What if you _really_ need to convert an AVI video to a PDF document? Try to find an online tool for that, I dare you.
 
-[Convert.to.it](https://convert.to.it/) aims to be a tool that "just works". You're almost _guaranteed_ to get an output - perhaps not always the one you expected, but it'll try its best to not leave you hanging.
+[Convert.utoggl.in](https://convert.utoggl.in/) aims to be a tool that "just works". You're almost _guaranteed_ to get an output - perhaps not always the one you expected, but it'll try its best to not leave you hanging.
 
 For a semi-technical overview of this tool, check out the video: https://youtu.be/btUbcsTbVA8
 
+## Features
+
+- **Universal conversion** — Convert between hundreds of formats across images, videos, audio, documents, 3D models, fonts, archives, and more
+- **Runs entirely in the browser** — No files are uploaded to any server (unless you opt in to API features)
+- **Background removal** — Remove backgrounds from images using local AI (RMBG-1.4 via WebGPU/WASM) or the remove.bg API
+  - **Correction mode** — Preserves text and fine details during local background removal
+- **Image rescaling** — Resize images to custom dimensions with aspect ratio lock
+- **Privacy mode** — Strips EXIF/GPS metadata from images, randomizes filenames before sending to external APIs, and hides the referrer header
+- **Output tray** — View converted files with size info, drag them out, or download individually/all at once
+- **Auto-download toggle** — Choose whether converted files download automatically or collect in the output tray
+- **Multi-file archive toggle** — Download multiple converted files as a zip archive or as separate files
+- **Archive creation** — Bundle uploaded files into .zip, .7z, .tar, .tar.gz, or .gz archives
+- **Dark/light theme** — Toggle between themes with customizable accent colors
+- **Advanced mode** — Reveals additional format options for power users
+
 ## Usage
 
-1. Go to [convert.to.it](https://convert.to.it/)
+1. Go to [convert.utoggl.in](https://convert.utoggl.in/)
 2. Click the big blue box to add your file (or just drag it on to the window).
 3. An input format should have been automatically selected. If it wasn't, yikes! Try searching for it, or if it's really not there, see the "Issues" section below.
 4. Select an output format from the second list. If you're on desktop, that's the one on the right side. If you're on mobile, it'll be somewhere lower down.
