@@ -931,6 +931,7 @@ if (ui.bgApiKeyInput) {
     try { localStorage.setItem("convert-bg-api-key", bgApiKey); } catch {}
   });
 }
+updateBgUI();
 
 // ──── Output Tray: Download All / Clear ────
 if (ui.downloadAllBtn) {
