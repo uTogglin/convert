@@ -73,6 +73,11 @@ let autoDownload: boolean = (() => {
   try { return localStorage.getItem("convert-auto-download") !== "false"; } catch { return true; }
 })();
 
+/** Archive multi-file output: when true, multiple converted files are zipped; when false, downloaded separately */
+let archiveMultiOutput: boolean = (() => {
+  try { return localStorage.getItem("convert-archive-multi") !== "false"; } catch { return true; }
+})();
+
 /** Queue for mixed-category batch conversion */
 let conversionQueue: File[][] = [];
 let currentQueueIndex = 0;
@@ -129,6 +134,7 @@ const ui = {
   accentColors: document.querySelectorAll(".color-dot") as NodeListOf<HTMLButtonElement>,
   customAccent: document.querySelector("#custom-accent") as HTMLInputElement,
   autoDownloadToggle: document.querySelector("#auto-download-toggle") as HTMLButtonElement,
+  archiveMultiToggle: document.querySelector("#archive-multi-toggle") as HTMLButtonElement,
   outputTray: document.querySelector("#output-tray") as HTMLDivElement,
   outputTrayGrid: document.querySelector("#output-tray-grid") as HTMLDivElement,
   downloadAllBtn: document.querySelector("#download-all-btn") as HTMLButtonElement,
@@ -846,6 +852,16 @@ if (ui.autoDownloadToggle) {
   });
 }
 
+// ──── Archive Multi-file Output Toggle ────
+if (ui.archiveMultiToggle) {
+  ui.archiveMultiToggle.textContent = archiveMultiOutput ? "Multi-file output: Archive" : "Multi-file output: Separate";
+  ui.archiveMultiToggle.addEventListener("click", () => {
+    archiveMultiOutput = !archiveMultiOutput;
+    ui.archiveMultiToggle.textContent = archiveMultiOutput ? "Multi-file output: Archive" : "Multi-file output: Separate";
+    try { localStorage.setItem("convert-archive-multi", String(archiveMultiOutput)); } catch {}
+  });
+}
+
 // ──── Output Tray: Download All / Clear ────
 if (ui.downloadAllBtn) {
   ui.downloadAllBtn.addEventListener("click", () => {
@@ -1221,16 +1237,18 @@ ui.convertButton.onclick = async function () {
 
       if (allOutputFiles.length === 1) {
         downloadFile(allOutputFiles[0].bytes, allOutputFiles[0].name);
-      } else {
+      } else if (archiveMultiOutput) {
         const zip = new JSZip();
         for (const f of allOutputFiles) zip.file(f.name, f.bytes);
         const zipBytes = await zip.generateAsync({ type: "uint8array" });
         downloadFile(zipBytes, "converted.zip");
+      } else {
+        for (const f of allOutputFiles) downloadFile(f.bytes, f.name);
       }
 
       window.showPopup(
         `<h2>Converted ${allOutputFiles.length} file${allOutputFiles.length !== 1 ? "s" : ""} to ${outputFormat.format}!</h2>` +
-        (allOutputFiles.length > 1 ? `<p>Results delivered as a ZIP archive.</p>` : ``) +
+        (allOutputFiles.length > 1 && archiveMultiOutput ? `<p>Results delivered as a ZIP archive.</p>` : ``) +
         `<button onclick="window.hidePopup()">OK</button>`
       );
 
