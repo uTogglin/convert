@@ -1348,17 +1348,34 @@ async function resizeToMatch(imgBytes: Uint8Array, refBytes: Uint8Array, ext: st
   return resizeImageBytes(imgBytes, ext, refDims.w, refDims.h);
 }
 
+/** Lazy-init ImageMagick WASM (called once, cached) */
+let magickReady: Promise<void> | null = null;
+async function ensureMagick() {
+  if (!magickReady) {
+    magickReady = (async () => {
+      const { initializeImageMagick } = await import("@imagemagick/magick-wasm");
+      const wasmResponse = await fetch("/wasm/magick.wasm");
+      const wasmBytes = new Uint8Array(await wasmResponse.arrayBuffer());
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await initializeImageMagick(wasmBytes as any);
+    })();
+  }
+  await magickReady;
+}
+
 /** Get dimensions of an image from its bytes via ImageMagick */
 async function getImageDimensions(bytes: Uint8Array, _ext: string): Promise<{ w: number; h: number }> {
+  await ensureMagick();
   const { ImageMagick } = await import("@imagemagick/magick-wasm");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return Promise.resolve(ImageMagick.read(bytes as any, (img: any) => {
+  return ImageMagick.read(bytes as any, (img: any) => {
     return { w: img.width as number, h: img.height as number };
-  }));
+  });
 }
 
 /** Resize image bytes to target dimensions via ImageMagick (lossless) */
 async function resizeImageBytes(bytes: Uint8Array, ext: string, w: number, h: number): Promise<Uint8Array> {
+  await ensureMagick();
   const { ImageMagick, MagickFormat } = await import("@imagemagick/magick-wasm");
   const extToMagickFormat: Record<string, typeof MagickFormat[keyof typeof MagickFormat]> = {
     png: MagickFormat.Png, webp: MagickFormat.WebP, avif: MagickFormat.Avif,
@@ -1368,11 +1385,11 @@ async function resizeImageBytes(bytes: Uint8Array, ext: string, w: number, h: nu
   };
   const fmt = extToMagickFormat[ext] ?? MagickFormat.Png;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return Promise.resolve(ImageMagick.read(bytes as any, (img: any) => {
+  return ImageMagick.read(bytes as any, (img: any) => {
     img.resize(w, h);
     img.quality = 100;
     return img.write(fmt, (out: any) => new Uint8Array(out));
-  }));
+  });
 }
 
 /** Image extensions eligible for rescaling */
@@ -1423,8 +1440,6 @@ function updateProcessButton() {
   const rescaleReady = rescaleEnabled && (rescaleWidth > 0 || rescaleHeight > 0);
   const hasProcessing = rescaleReady || removeBg;
   const outputSelected = document.querySelector("#to-list .selected");
-
-  console.info("[updateProcessButton]", { hasFiles, hasImageFiles, rescaleReady, removeBg, hasProcessing, outputSelected: !!outputSelected });
 
   if (hasImageFiles && hasProcessing && !outputSelected) {
     let label: string;
