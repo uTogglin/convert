@@ -137,10 +137,9 @@ body {
   background: var(--surface-color);
   border-bottom: 1px solid var(--input-border);
   padding: 16px 24px;
-  display: flex;
-  gap: 32px;
-  flex-wrap: wrap;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
   animation: slideDown 0.2s ease;
 }
 #settings-drawer.hidden { display: none; }
@@ -148,6 +147,18 @@ body {
 @keyframes slideDown {
   from { opacity: 0; transform: translateY(-10px); }
   to { opacity: 1; transform: translateY(0); }
+}
+.settings-section {
+  background: var(--card-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.settings-section:has(.app-log-list) {
+  grid-column: 1 / -1;
 }
 .settings-section h3 {
   font-size: 0.75rem;
@@ -162,6 +173,8 @@ body {
   margin: 0 0 8px;
 }
 .settings-section button {
+  width: 100%;
+  text-align: left;
   padding: 6px 14px;
   border: 1px solid var(--input-border);
   border-radius: var(--radius-sm);
@@ -174,6 +187,11 @@ body {
 .settings-section button:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+.settings-section button.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
 }
 #bg-api-key-row {
   margin-top: 6px;
@@ -958,7 +976,7 @@ button.selected {
   #format-containers { flex-direction: column; padding: 0 12px 120px; }
   .format-container { padding: 0; }
   .format-list { max-height: 45vh; }
-  #settings-drawer { flex-direction: column; gap: 16px; }
+  #settings-drawer { grid-template-columns: 1fr; }
   #file-area { margin: 12px; padding: 32px 16px; }
   #output-tray { margin: 0 12px 12px; }
   #convert-button { width: 90%; bottom: 20px; }

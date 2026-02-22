@@ -895,9 +895,11 @@ if (clearLogBtn) {
 // ──── Auto-download Toggle ────
 if (ui.autoDownloadToggle) {
   ui.autoDownloadToggle.textContent = autoDownload ? "Auto-download: On" : "Auto-download: Off";
+  ui.autoDownloadToggle.classList.toggle("active", autoDownload);
   ui.autoDownloadToggle.addEventListener("click", () => {
     autoDownload = !autoDownload;
     ui.autoDownloadToggle.textContent = autoDownload ? "Auto-download: On" : "Auto-download: Off";
+    ui.autoDownloadToggle.classList.toggle("active", autoDownload);
     try { localStorage.setItem("convert-auto-download", String(autoDownload)); } catch {}
   });
 }
@@ -905,9 +907,11 @@ if (ui.autoDownloadToggle) {
 // ──── Archive Multi-file Output Toggle ────
 if (ui.archiveMultiToggle) {
   ui.archiveMultiToggle.textContent = archiveMultiOutput ? "Multi-file output: Archive" : "Multi-file output: Separate";
+  ui.archiveMultiToggle.classList.toggle("active", archiveMultiOutput);
   ui.archiveMultiToggle.addEventListener("click", () => {
     archiveMultiOutput = !archiveMultiOutput;
     ui.archiveMultiToggle.textContent = archiveMultiOutput ? "Multi-file output: Archive" : "Multi-file output: Separate";
+    ui.archiveMultiToggle.classList.toggle("active", archiveMultiOutput);
     try { localStorage.setItem("convert-archive-multi", String(archiveMultiOutput)); } catch {}
   });
 }
@@ -921,10 +925,12 @@ function updateBgUI() {
 
 if (ui.removeBgToggle) {
   ui.removeBgToggle.textContent = removeBg ? "Remove background: On" : "Remove background: Off";
+  ui.removeBgToggle.classList.toggle("active", removeBg);
   updateBgUI();
   ui.removeBgToggle.addEventListener("click", () => {
     removeBg = !removeBg;
     ui.removeBgToggle.textContent = removeBg ? "Remove background: On" : "Remove background: Off";
+    ui.removeBgToggle.classList.toggle("active", removeBg);
     updateBgUI();
     try { localStorage.setItem("convert-remove-bg", String(removeBg)); } catch {}
   });
@@ -942,9 +948,11 @@ if (ui.bgModeToggle) {
 
 if (ui.bgCorrectionToggle) {
   ui.bgCorrectionToggle.textContent = bgCorrection ? "Correction: On" : "Correction: Off";
+  ui.bgCorrectionToggle.classList.toggle("active", bgCorrection);
   ui.bgCorrectionToggle.addEventListener("click", () => {
     bgCorrection = !bgCorrection;
     ui.bgCorrectionToggle.textContent = bgCorrection ? "Correction: On" : "Correction: Off";
+    ui.bgCorrectionToggle.classList.toggle("active", bgCorrection);
     try { localStorage.setItem("convert-bg-correction", String(bgCorrection)); } catch {}
   });
 }
@@ -961,18 +969,36 @@ updateBgUI();
 // ──── Image Rescale Toggle ────
 if (ui.rescaleToggle) {
   ui.rescaleToggle.textContent = rescaleEnabled ? "Rescale images: On" : "Rescale images: Off";
+  ui.rescaleToggle.classList.toggle("active", rescaleEnabled);
   if (ui.rescaleOptions) ui.rescaleOptions.classList.toggle("hidden", !rescaleEnabled);
   ui.rescaleToggle.addEventListener("click", () => {
     rescaleEnabled = !rescaleEnabled;
     ui.rescaleToggle.textContent = rescaleEnabled ? "Rescale images: On" : "Rescale images: Off";
+    ui.rescaleToggle.classList.toggle("active", rescaleEnabled);
     if (ui.rescaleOptions) ui.rescaleOptions.classList.toggle("hidden", !rescaleEnabled);
     try { localStorage.setItem("convert-rescale", String(rescaleEnabled)); } catch {}
   });
+}
+function updateRescalePlaceholders() {
+  if (!ui.rescaleWidthInput || !ui.rescaleHeightInput) return;
+  if (rescaleLockRatio) {
+    ui.rescaleWidthInput.placeholder = rescaleWidth > 0 ? "" : "auto";
+    ui.rescaleHeightInput.placeholder = rescaleHeight > 0 ? "" : "auto";
+  } else {
+    ui.rescaleWidthInput.placeholder = "";
+    ui.rescaleHeightInput.placeholder = "";
+  }
 }
 if (ui.rescaleWidthInput) {
   if (rescaleWidth > 0) ui.rescaleWidthInput.value = String(rescaleWidth);
   ui.rescaleWidthInput.addEventListener("input", () => {
     rescaleWidth = parseInt(ui.rescaleWidthInput.value) || 0;
+    if (rescaleLockRatio && rescaleWidth > 0 && ui.rescaleHeightInput) {
+      rescaleHeight = 0;
+      ui.rescaleHeightInput.value = "";
+      try { localStorage.setItem("convert-rescale-height", "0"); } catch {}
+    }
+    updateRescalePlaceholders();
     try { localStorage.setItem("convert-rescale-width", String(rescaleWidth)); } catch {}
   });
 }
@@ -980,6 +1006,12 @@ if (ui.rescaleHeightInput) {
   if (rescaleHeight > 0) ui.rescaleHeightInput.value = String(rescaleHeight);
   ui.rescaleHeightInput.addEventListener("input", () => {
     rescaleHeight = parseInt(ui.rescaleHeightInput.value) || 0;
+    if (rescaleLockRatio && rescaleHeight > 0 && ui.rescaleWidthInput) {
+      rescaleWidth = 0;
+      ui.rescaleWidthInput.value = "";
+      try { localStorage.setItem("convert-rescale-width", "0"); } catch {}
+    }
+    updateRescalePlaceholders();
     try { localStorage.setItem("convert-rescale-height", String(rescaleHeight)); } catch {}
   });
 }
@@ -987,16 +1019,26 @@ if (ui.rescaleLockInput) {
   ui.rescaleLockInput.checked = rescaleLockRatio;
   ui.rescaleLockInput.addEventListener("change", () => {
     rescaleLockRatio = ui.rescaleLockInput.checked;
+    if (rescaleLockRatio && rescaleWidth > 0 && rescaleHeight > 0) {
+      // When locking with both set, keep width and clear height
+      rescaleHeight = 0;
+      if (ui.rescaleHeightInput) ui.rescaleHeightInput.value = "";
+      try { localStorage.setItem("convert-rescale-height", "0"); } catch {}
+    }
+    updateRescalePlaceholders();
     try { localStorage.setItem("convert-rescale-lock", String(rescaleLockRatio)); } catch {}
   });
 }
+updateRescalePlaceholders();
 
 // ──── Privacy Mode Toggle ────
 if (ui.privacyToggle) {
   ui.privacyToggle.textContent = privacyMode ? "Privacy mode: On" : "Privacy mode: Off";
+  ui.privacyToggle.classList.toggle("active", privacyMode);
   ui.privacyToggle.addEventListener("click", () => {
     privacyMode = !privacyMode;
     ui.privacyToggle.textContent = privacyMode ? "Privacy mode: On" : "Privacy mode: Off";
+    ui.privacyToggle.classList.toggle("active", privacyMode);
     try { localStorage.setItem("convert-privacy", String(privacyMode)); } catch {}
   });
 }
