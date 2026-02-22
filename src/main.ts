@@ -125,27 +125,63 @@ const ui = {
   customAccent: document.querySelector("#custom-accent") as HTMLInputElement,
 };
 
+/** Active category filter for input and output lists */
+let inputCategoryFilter = "all";
+let outputCategoryFilter = "all";
+
+/** Maps a format's category field to a filter group */
+function getCategoryGroup(cat: string | string[] | undefined): string {
+  const cats = Array.isArray(cat) ? cat : cat ? [cat] : [];
+  for (const c of cats) {
+    const lc = c.toLowerCase();
+    if (lc === "image" || lc === "vector") return "image";
+    if (lc === "video") return "video";
+    if (lc === "data" || lc === "text") return "code";
+  }
+  if (cats.length === 0) return "other";
+  return "other";
+}
+
+/** Applies both text search and category filter to a format list */
+function applyCombinedFilter(list: HTMLDivElement, isInput: boolean) {
+  const searchStr = (isInput ? ui.inputSearch : ui.outputSearch).value.toLowerCase();
+  const activeCat = isInput ? inputCategoryFilter : outputCategoryFilter;
+
+  for (const button of Array.from(list.children)) {
+    if (!(button instanceof HTMLButtonElement)) continue;
+    const formatIndex = button.getAttribute("format-index");
+
+    // Text match
+    let textMatch = true;
+    if (searchStr) {
+      let hasExtension = false;
+      if (formatIndex) {
+        const format = allOptions[parseInt(formatIndex)];
+        hasExtension = format?.format.extension.toLowerCase().includes(searchStr);
+      }
+      const hasText = button.textContent!.toLowerCase().includes(searchStr);
+      textMatch = hasExtension || hasText;
+    }
+
+    // Category match
+    let catMatch = true;
+    if (activeCat !== "all" && formatIndex) {
+      const opt = allOptions[parseInt(formatIndex)];
+      catMatch = getCategoryGroup(opt?.format.category) === activeCat;
+    }
+
+    button.style.display = (textMatch && catMatch) ? "" : "none";
+  }
+}
+
 /**
  * Filters a list of butttons to exclude those not matching a substring.
  * @param list Button list (div) to filter.
  * @param string Substring for which to search.
  */
-const filterButtonList = (list: HTMLDivElement, string: string) => {
-  for (const button of Array.from(list.children)) {
-    if (!(button instanceof HTMLButtonElement)) continue;
-    const formatIndex = button.getAttribute("format-index");
-    let hasExtension = false;
-    if (formatIndex) {
-      const format = allOptions[parseInt(formatIndex)];
-      hasExtension = format?.format.extension.toLowerCase().includes(string);
-    }
-    const hasText = button.textContent.toLowerCase().includes(string);
-    if (!hasExtension && !hasText) {
-      button.style.display = "none";
-    } else {
-      button.style.display = "";
-    }
-  }
+const filterButtonList = (list: HTMLDivElement, _string: string) => {
+  const isInput = list === ui.inputList;
+  applyCombinedFilter(list, isInput);
 }
 
 /**
@@ -159,8 +195,8 @@ const searchHandler = (event: Event) => {
   const targetParentList = target.parentElement?.querySelector(".format-list");
   if (!(targetParentList instanceof HTMLDivElement)) return;
 
-  const string = target.value.toLowerCase();
-  filterButtonList(targetParentList, string);
+  const isInput = targetParentList === ui.inputList;
+  applyCombinedFilter(targetParentList, isInput);
 };
 
 // Assign search handler to both search boxes
@@ -171,6 +207,37 @@ ui.outputSearch.oninput = searchHandler;
 ui.fileSelectArea.onclick = () => {
   ui.fileInput.click();
 };
+
+/** Reset UI back to the initial upload prompt state */
+function resetToUploadPrompt() {
+  selectedFiles = [];
+  allUploadedFiles = [];
+  conversionQueue = [];
+  currentQueueIndex = 0;
+  ui.fileSelectArea.classList.remove("has-file");
+  ui.fileSelectArea.innerHTML = `
+    <h2>Drop files here</h2>
+    <p><span id="drop-hint-text">or </span>click to browse</p>
+    <button class="browse-btn" onclick="document.getElementById('file-input').click(); event.stopPropagation();">Browse files</button>
+  `;
+  ui.archivePanel.classList.remove("visible");
+  // Clear format selections
+  const prevInput = ui.inputList.querySelector(".selected");
+  if (prevInput) prevInput.className = "";
+  const prevOutput = ui.outputList.querySelector(".selected");
+  if (prevOutput) prevOutput.className = "";
+  ui.convertButton.className = "disabled";
+  ui.inputSearch.value = "";
+  ui.outputSearch.value = "";
+  inputCategoryFilter = "all";
+  outputCategoryFilter = "all";
+  // Reset active states on category pills
+  for (const btn of Array.from(document.querySelectorAll(".category-filter-btn"))) {
+    btn.classList.toggle("active", btn.textContent === "All");
+  }
+  filterButtonList(ui.inputList, "");
+  filterButtonList(ui.outputList, "");
+}
 
 /**
  * Renders thumbnail previews for all selected files inside the upload card.
@@ -233,6 +300,42 @@ const renderFilePreviews = (files: File[]) => {
     nameEl.textContent = file.name;
     nameEl.title = file.name;
 
+    // Remove button
+    const removeBtn = document.createElement("button");
+    removeBtn.className = "file-remove-btn";
+    removeBtn.textContent = "\u00D7";
+    removeBtn.title = "Remove file";
+    removeBtn.onclick = (e) => {
+      e.stopPropagation();
+      const idx = selectedFiles.indexOf(file);
+      if (idx !== -1) selectedFiles.splice(idx, 1);
+      const allIdx = allUploadedFiles.indexOf(file);
+      if (allIdx !== -1) allUploadedFiles.splice(allIdx, 1);
+
+      // Also update conversionQueue if active
+      if (conversionQueue.length > 1) {
+        conversionQueue[currentQueueIndex] = selectedFiles;
+        if (selectedFiles.length === 0) {
+          conversionQueue.splice(currentQueueIndex, 1);
+          if (conversionQueue.length === 0) {
+            resetToUploadPrompt();
+            return;
+          }
+          if (currentQueueIndex >= conversionQueue.length) currentQueueIndex = conversionQueue.length - 1;
+          presentQueueGroup(currentQueueIndex);
+          return;
+        }
+      }
+
+      if (selectedFiles.length === 0) {
+        resetToUploadPrompt();
+      } else {
+        renderFilePreviews(selectedFiles);
+        autoSelectInputFormat(selectedFiles[0]);
+      }
+    };
+
+    item.appendChild(removeBtn);
     item.appendChild(thumb);
     item.appendChild(nameEl);
     grid.appendChild(item);
@@ -391,6 +494,49 @@ window.printSupportedFormatCache = () => {
 }
 
 
+/** Renders category filter pill buttons above a format list */
+function renderCategoryFilters(container: HTMLDivElement, listEl: HTMLDivElement, isInput: boolean) {
+  // Remove existing filter row if any
+  container.querySelector(".category-filters")?.remove();
+
+  const row = document.createElement("div");
+  row.className = "category-filters";
+
+  const categories = [
+    { label: "All", value: "all" },
+    { label: "Image", value: "image" },
+    { label: "Video", value: "video" },
+    { label: "Code", value: "code" },
+    { label: "Other", value: "other" },
+  ];
+
+  for (const cat of categories) {
+    const btn = document.createElement("button");
+    btn.className = "category-filter-btn" + ((isInput ? inputCategoryFilter : outputCategoryFilter) === cat.value ? " active" : "");
+    btn.textContent = cat.label;
+    btn.type = "button";
+    btn.onclick = () => {
+      if (isInput) inputCategoryFilter = cat.value;
+      else outputCategoryFilter = cat.value;
+      // Update active states
+      for (const b of Array.from(row.children) as HTMLButtonElement[]) {
+        b.classList.remove("active");
+      }
+      btn.classList.add("active");
+      applyCombinedFilter(listEl, isInput);
+    };
+    row.appendChild(btn);
+  }
+
+  // Insert between search input and the format-list div
+  const formatList = container.querySelector(".format-list");
+  if (formatList) {
+    container.insertBefore(row, formatList);
+  } else {
+    container.appendChild(row);
+  }
+}
+
 async function buildOptionList () {
 
   allOptions.length = 0;
@@ -482,6 +628,17 @@ async function buildOptionList () {
     }
   }
   window.traversionGraph.init(window.supportedFormatCache, handlers);
+
+  // Render category filters above each format list
+  const inputContainer = ui.inputList.parentElement as HTMLDivElement;
+  const outputContainer = ui.outputList.parentElement as HTMLDivElement;
+  if (inputContainer) renderCategoryFilters(inputContainer, ui.inputList, true);
+  if (outputContainer) renderCategoryFilters(outputContainer, ui.outputList, false);
+
+  // Reset category filters on rebuild
+  inputCategoryFilter = "all";
+  outputCategoryFilter = "all";
+
   filterButtonList(ui.inputList, ui.inputSearch.value);
   filterButtonList(ui.outputList, ui.outputSearch.value);
 

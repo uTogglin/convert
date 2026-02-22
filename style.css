@@ -388,6 +388,32 @@ body {
   width: 80px;
   gap: 6px;
   flex-shrink: 0;
+  position: relative;
+}
+
+/* Remove button on file previews */
+.file-remove-btn {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #e53935;
+  color: white;
+  border: none;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition);
+}
+.file-remove-btn:hover {
+  background: #c62828;
 }
 
 /* Thumbnail box */
@@ -576,6 +602,40 @@ body {
   box-shadow: 0 0 0 3px var(--accent-dim);
 }
 .search::placeholder { color: var(--text-muted); }
+
+/* =========================================
+   6b. CATEGORY FILTER PILLS
+   ========================================= */
+.category-filters {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.category-filter-btn {
+  padding: 4px 12px;
+  border-radius: 50px;
+  border: 1px solid var(--input-border);
+  background: var(--card-bg);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+  font-family: inherit;
+}
+
+.category-filter-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.category-filter-btn.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
 
 /* =========================================
    7. LIST CARDS
