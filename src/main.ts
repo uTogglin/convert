@@ -605,6 +605,15 @@ async function buildOptionList () {
 
       const clickHandler = (event: Event) => {
         if (!(event.target instanceof HTMLButtonElement)) return;
+
+        // Restore queue grouping if archive mode had suspended it
+        if (archiveSuspendedQueue) {
+          // Deselect archive buttons
+          ui.archiveFmtBtns.forEach(b => b.classList.remove("selected"));
+          ui.createArchiveBtn.className = "disabled";
+          restoreQueueFromArchive();
+        }
+
         const targetParent = event.target.parentElement;
         const previous = targetParent?.getElementsByClassName("selected")?.[0];
         if (previous) previous.className = "";
@@ -916,6 +925,33 @@ function downloadFile (bytes: Uint8Array, name: string) {
   link.click();
 }
 
+/** Whether archive mode temporarily suspended queue grouping */
+let archiveSuspendedQueue = false;
+
+/** Temporarily exit queue mode so archive sees all files */
+function suspendQueueForArchive() {
+  if (conversionQueue.length > 1 && !archiveSuspendedQueue) {
+    archiveSuspendedQueue = true;
+    selectedFiles = allUploadedFiles;
+    renderFilePreviews(allUploadedFiles);
+    // Clear format selections since all-files view doesn't map to one input format
+    const prevInput = ui.inputList.querySelector(".selected");
+    if (prevInput) prevInput.className = "";
+    const prevOutput = ui.outputList.querySelector(".selected");
+    if (prevOutput) prevOutput.className = "";
+    ui.convertButton.className = "disabled";
+  }
+}
+
+/** Restore queue grouping after archive mode is exited */
+function restoreQueueFromArchive() {
+  if (archiveSuspendedQueue && conversionQueue.length > 1) {
+    archiveSuspendedQueue = false;
+    presentQueueGroup(currentQueueIndex);
+  }
+  archiveSuspendedQueue = false;
+}
+
 // Archive format toggle buttons
 ui.archiveFmtBtns.forEach(btn => {
   btn.addEventListener("click", (e) => {
@@ -923,6 +959,12 @@ ui.archiveFmtBtns.forEach(btn => {
     btn.classList.toggle("selected");
     const anySelected = Array.from(ui.archiveFmtBtns).some(b => b.classList.contains("selected"));
     ui.createArchiveBtn.className = anySelected ? "" : "disabled";
+
+    if (anySelected) {
+      suspendQueueForArchive();
+    } else {
+      restoreQueueFromArchive();
+    }
   });
 });
 
@@ -932,10 +974,11 @@ ui.createArchiveBtn.addEventListener("click", async () => {
     .map(b => b.getAttribute("data-format")!);
 
   if (!selectedFormats.length) return;
-  if (!selectedFiles.length) return alert("No files uploaded.");
+  const archiveFiles = allUploadedFiles.length ? allUploadedFiles : selectedFiles;
+  if (!archiveFiles.length) return alert("No files uploaded.");
 
   const inputFileData: FileData[] = [];
-  for (const file of selectedFiles) {
+  for (const file of archiveFiles) {
     const buffer = await file.arrayBuffer();
     inputFileData.push({ name: file.name, bytes: new Uint8Array(buffer) });
   }
