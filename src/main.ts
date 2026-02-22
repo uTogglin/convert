@@ -1019,7 +1019,7 @@ async function applyBgRemoval(files: FileData[]): Promise<FileData[]> {
       continue;
     }
     const blob = await removeBackground(f.bytes, {
-      output: { format: "image/png", quality: 1, type: "foreground" }
+      output: { format: "image/png", quality: 1 }
     });
     const buf = await blob.arrayBuffer();
     const baseName = f.name.replace(/\.[^.]+$/, "");
