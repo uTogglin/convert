@@ -1025,7 +1025,7 @@ async function applyBgRemoval(files: FileData[]): Promise<FileData[]> {
       continue;
     }
     const outMime = bgRemovalMime[ext] ?? "image/png";
-    const inputBlob = new Blob([f.bytes], { type: "image/" + ext });
+    const inputBlob = new Blob([f.bytes as BlobPart], { type: "image/" + ext });
     const blob = await removeBackground(inputBlob, {
       output: { format: outMime, quality: 1 }
     });
