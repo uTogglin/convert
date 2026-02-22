@@ -174,6 +174,25 @@ body {
   border-color: var(--accent);
   color: var(--accent);
 }
+#bg-api-key-row {
+  margin-top: 6px;
+}
+#bg-api-key {
+  padding: 6px 10px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  background: var(--card-bg);
+  color: var(--text-main);
+  font-size: 0.85rem;
+  width: 200px;
+}
+#bg-api-key-row .settings-hint {
+  font-size: 0.7rem;
+  margin: 4px 0 0;
+}
+#bg-api-key-row .settings-hint a {
+  color: var(--accent);
+}
 #custom-color-row input[type="color"] {
   width: 28px; height: 28px;
   border: none; border-radius: 50%;

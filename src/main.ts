@@ -83,6 +83,16 @@ let removeBg: boolean = (() => {
   try { return localStorage.getItem("convert-remove-bg") === "true"; } catch { return false; }
 })();
 
+/** Background removal mode: "local" uses RMBG-1.4, "api" uses remove.bg */
+let bgMode: "local" | "api" = (() => {
+  try { return localStorage.getItem("convert-bg-mode") === "api" ? "api" : "local"; } catch { return "local" as const; }
+})();
+
+/** remove.bg API key */
+let bgApiKey: string = (() => {
+  try { return localStorage.getItem("convert-bg-api-key") ?? ""; } catch { return ""; }
+})();
+
 /** Correction: when true, preserves text/graphics during background removal */
 let bgCorrection: boolean = (() => {
   try { return localStorage.getItem("convert-bg-correction") === "true"; } catch { return false; }
@@ -146,7 +156,10 @@ const ui = {
   autoDownloadToggle: document.querySelector("#auto-download-toggle") as HTMLButtonElement,
   archiveMultiToggle: document.querySelector("#archive-multi-toggle") as HTMLButtonElement,
   removeBgToggle: document.querySelector("#remove-bg-toggle") as HTMLButtonElement,
+  bgModeToggle: document.querySelector("#bg-mode-toggle") as HTMLButtonElement,
   bgCorrectionToggle: document.querySelector("#bg-correction-toggle") as HTMLButtonElement,
+  bgApiKeyRow: document.querySelector("#bg-api-key-row") as HTMLDivElement,
+  bgApiKeyInput: document.querySelector("#bg-api-key") as HTMLInputElement,
   outputTray: document.querySelector("#output-tray") as HTMLDivElement,
   outputTrayGrid: document.querySelector("#output-tray-grid") as HTMLDivElement,
   downloadAllBtn: document.querySelector("#download-all-btn") as HTMLButtonElement,
@@ -874,25 +887,48 @@ if (ui.archiveMultiToggle) {
   });
 }
 
-// ──── Remove Background Toggle ────
+// ──── Remove Background Toggles ────
+function updateBgUI() {
+  if (ui.bgModeToggle) ui.bgModeToggle.classList.toggle("hidden", !removeBg);
+  if (ui.bgCorrectionToggle) ui.bgCorrectionToggle.classList.toggle("hidden", !removeBg || bgMode === "api");
+  if (ui.bgApiKeyRow) ui.bgApiKeyRow.classList.toggle("hidden", !removeBg || bgMode !== "api");
+}
+
 if (ui.removeBgToggle) {
   ui.removeBgToggle.textContent = removeBg ? "Remove background: On" : "Remove background: Off";
-  if (ui.bgCorrectionToggle) ui.bgCorrectionToggle.classList.toggle("hidden", !removeBg);
+  updateBgUI();
   ui.removeBgToggle.addEventListener("click", () => {
     removeBg = !removeBg;
     ui.removeBgToggle.textContent = removeBg ? "Remove background: On" : "Remove background: Off";
-    if (ui.bgCorrectionToggle) ui.bgCorrectionToggle.classList.toggle("hidden", !removeBg);
+    updateBgUI();
     try { localStorage.setItem("convert-remove-bg", String(removeBg)); } catch {}
   });
 }
 
-// ──── Background Correction Toggle ────
+if (ui.bgModeToggle) {
+  ui.bgModeToggle.textContent = bgMode === "local" ? "Mode: Local" : "Mode: remove.bg API";
+  ui.bgModeToggle.addEventListener("click", () => {
+    bgMode = bgMode === "local" ? "api" : "local";
+    ui.bgModeToggle.textContent = bgMode === "local" ? "Mode: Local" : "Mode: remove.bg API";
+    updateBgUI();
+    try { localStorage.setItem("convert-bg-mode", bgMode); } catch {}
+  });
+}
+
 if (ui.bgCorrectionToggle) {
   ui.bgCorrectionToggle.textContent = bgCorrection ? "Correction: On" : "Correction: Off";
   ui.bgCorrectionToggle.addEventListener("click", () => {
     bgCorrection = !bgCorrection;
     ui.bgCorrectionToggle.textContent = bgCorrection ? "Correction: On" : "Correction: Off";
     try { localStorage.setItem("convert-bg-correction", String(bgCorrection)); } catch {}
+  });
+}
+
+if (ui.bgApiKeyInput) {
+  ui.bgApiKeyInput.value = bgApiKey;
+  ui.bgApiKeyInput.addEventListener("input", () => {
+    bgApiKey = ui.bgApiKeyInput.value.trim();
+    try { localStorage.setItem("convert-bg-api-key", bgApiKey); } catch {}
   });
 }
 
@@ -1016,7 +1052,90 @@ const bgRemovalExts = new Set(["png", "webp", "avif", "tiff", "tif", "gif", "jpg
 /** Extensions that support transparency — others get forced to PNG */
 const alphaExts = new Set(["png", "webp", "avif", "tiff", "tif", "gif"]);
 
-/** Apply background removal to image files if the toggle is on (uses RMBG-1.4 via transformers.js) */
+/** Remove background via remove.bg API */
+async function removeBgViaApi(fileBytes: Uint8Array, ext: string): Promise<Uint8Array> {
+  if (!bgApiKey) throw new Error("No remove.bg API key provided. Add your key in Settings → Processing.");
+  const formData = new FormData();
+  formData.append("image_file", new Blob([fileBytes as BlobPart], { type: "image/" + ext }), "image." + ext);
+  formData.append("size", "auto");
+  const resp = await fetch("https://api.remove.bg/v1.0/removebg", {
+    method: "POST",
+    headers: { "X-Api-Key": bgApiKey },
+    body: formData,
+  });
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error(`remove.bg API error (${resp.status}): ${errText}`);
+  }
+  return new Uint8Array(await resp.arrayBuffer());
+}
+
+/** Remove background locally via RMBG-1.4 */
+async function removeBgLocal(f: FileData, ext: string): Promise<Uint8Array> {
+  const { pipeline, RawImage } = await import("@huggingface/transformers");
+  const segmenter = await pipeline("image-segmentation", "briaai/RMBG-1.4", {
+    device: navigator.gpu ? "webgpu" : "wasm",
+  });
+
+  const inputBlob = new Blob([f.bytes as BlobPart], { type: "image/" + ext });
+  const blobUrl = URL.createObjectURL(inputBlob);
+  const img = new Image();
+  await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = blobUrl; });
+
+  const canvas = document.createElement("canvas");
+  canvas.width = img.width;
+  canvas.height = img.height;
+  const ctx = canvas.getContext("2d")!;
+  ctx.drawImage(img, 0, 0);
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+  const rawImg = await RawImage.fromURL(blobUrl);
+  URL.revokeObjectURL(blobUrl);
+  const output = await segmenter(rawImg);
+  const maskResult = (output as { mask: InstanceType<typeof RawImage> }[])[0];
+  const mask = maskResult.mask;
+
+  const resizedMask = mask.width !== img.width || mask.height !== img.height
+    ? await mask.resize(img.width, img.height)
+    : mask;
+
+  const pixels = imageData.data;
+  if (bgCorrection) {
+    let bgR = 0, bgG = 0, bgB = 0, bgCount = 0;
+    for (let i = 0; i < resizedMask.data.length; i++) {
+      if (resizedMask.data[i] < 30) {
+        bgR += pixels[i * 4];
+        bgG += pixels[i * 4 + 1];
+        bgB += pixels[i * 4 + 2];
+        bgCount++;
+      }
+    }
+    if (bgCount > 0) { bgR /= bgCount; bgG /= bgCount; bgB /= bgCount; }
+
+    const colorThreshold = 40;
+    for (let i = 0; i < resizedMask.data.length; i++) {
+      if (resizedMask.data[i] >= 128) {
+        pixels[i * 4 + 3] = 255;
+      } else {
+        const dr = pixels[i * 4] - bgR;
+        const dg = pixels[i * 4 + 1] - bgG;
+        const db = pixels[i * 4 + 2] - bgB;
+        const dist = Math.sqrt(dr * dr + dg * dg + db * db);
+        pixels[i * 4 + 3] = dist > colorThreshold ? 255 : 0;
+      }
+    }
+  } else {
+    for (let i = 0; i < resizedMask.data.length; i++) {
+      pixels[i * 4 + 3] = resizedMask.data[i];
+    }
+  }
+  ctx.putImageData(imageData, 0, 0);
+
+  const outBlob = await new Promise<Blob>((res) => canvas.toBlob(b => res(b!), "image/png", 1));
+  return new Uint8Array(await outBlob.arrayBuffer());
+}
+
+/** Apply background removal to image files if the toggle is on */
 async function applyBgRemoval(files: FileData[]): Promise<FileData[]> {
   if (!removeBg) return files;
   const eligible = files.filter(f => {
@@ -1025,16 +1144,12 @@ async function applyBgRemoval(files: FileData[]): Promise<FileData[]> {
   });
   if (eligible.length === 0) return files;
 
+  const isApi = bgMode === "api";
   window.showPopup(
     `<h2>Removing background...</h2>` +
-    `<p>Loading model and processing ${eligible.length} image${eligible.length !== 1 ? "s" : ""}. This may take a moment on first run.</p>`
+    `<p>${isApi ? "Sending" : "Processing"} ${eligible.length} image${eligible.length !== 1 ? "s" : ""}${isApi ? " to remove.bg" : ". This may take a moment on first run"}.</p>`
   );
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-
-  const { pipeline, RawImage } = await import("@huggingface/transformers");
-  const segmenter = await pipeline("image-segmentation", "briaai/RMBG-2.0", {
-    device: navigator.gpu ? "webgpu" : "wasm",
-  });
 
   const result: FileData[] = [];
   for (const f of files) {
@@ -1044,74 +1159,14 @@ async function applyBgRemoval(files: FileData[]): Promise<FileData[]> {
       continue;
     }
 
-    // Load image onto a canvas
-    const inputBlob = new Blob([f.bytes as BlobPart], { type: "image/" + ext });
-    const blobUrl = URL.createObjectURL(inputBlob);
-    const img = new Image();
-    await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = blobUrl; });
+    const outBytes = isApi
+      ? await removeBgViaApi(f.bytes, ext)
+      : await removeBgLocal(f, ext);
 
-    const canvas = document.createElement("canvas");
-    canvas.width = img.width;
-    canvas.height = img.height;
-    const ctx = canvas.getContext("2d")!;
-    ctx.drawImage(img, 0, 0);
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-    // Run segmentation to get mask
-    const rawImg = await RawImage.fromURL(blobUrl);
-    URL.revokeObjectURL(blobUrl);
-    const output = await segmenter(rawImg);
-    const maskResult = (output as { mask: InstanceType<typeof RawImage> }[])[0];
-    const mask = maskResult.mask;
-
-    // Resize mask to match original image if needed
-    const resizedMask = mask.width !== img.width || mask.height !== img.height
-      ? await mask.resize(img.width, img.height)
-      : mask;
-
-    const pixels = imageData.data;
-    if (bgCorrection) {
-      // Correction mode: preserve text/graphics that differ from the dominant background color
-      let bgR = 0, bgG = 0, bgB = 0, bgCount = 0;
-      for (let i = 0; i < resizedMask.data.length; i++) {
-        if (resizedMask.data[i] < 30) {
-          bgR += pixels[i * 4];
-          bgG += pixels[i * 4 + 1];
-          bgB += pixels[i * 4 + 2];
-          bgCount++;
-        }
-      }
-      if (bgCount > 0) { bgR /= bgCount; bgG /= bgCount; bgB /= bgCount; }
-
-      const colorThreshold = 40;
-      for (let i = 0; i < resizedMask.data.length; i++) {
-        if (resizedMask.data[i] >= 128) {
-          pixels[i * 4 + 3] = 255;
-        } else {
-          const dr = pixels[i * 4] - bgR;
-          const dg = pixels[i * 4 + 1] - bgG;
-          const db = pixels[i * 4 + 2] - bgB;
-          const dist = Math.sqrt(dr * dr + dg * dg + db * db);
-          pixels[i * 4 + 3] = dist > colorThreshold ? 255 : 0;
-        }
-      }
-    } else {
-      // Standard mode: apply mask directly as alpha
-      for (let i = 0; i < resizedMask.data.length; i++) {
-        pixels[i * 4 + 3] = resizedMask.data[i];
-      }
-    }
-    ctx.putImageData(imageData, 0, 0);
-
-    // Export — use PNG for transparency
-    const supportsAlpha = alphaExts.has(ext);
-    const outMime = (ext === "webp") ? "image/webp" : "image/png";
-    const outExt = (ext === "webp") ? "webp" : "png";
-    const outBlob = await new Promise<Blob>((res) => canvas.toBlob(b => res(b!), outMime, 1));
-    const buf = await outBlob.arrayBuffer();
     const baseName = f.name.replace(/\.[^.]+$/, "");
-    const outName = supportsAlpha ? f.name : baseName + "." + outExt;
-    result.push({ name: outName, bytes: new Uint8Array(buf) });
+    const supportsAlpha = alphaExts.has(ext);
+    const outName = supportsAlpha ? f.name : baseName + ".png";
+    result.push({ name: outName, bytes: outBytes });
   }
   return result;
 }
