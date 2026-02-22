@@ -12,7 +12,7 @@ async function getFFmpeg(): Promise<FFmpeg> {
     compressFFmpeg = new FFmpeg();
   }
   if (!ffmpegReady) {
-    ffmpegReady = compressFFmpeg.load({ coreURL: "/wasm/ffmpeg-core.js" });
+    ffmpegReady = compressFFmpeg.load({ coreURL: "/wasm/ffmpeg-core.js" }).then(() => {});
   }
   await ffmpegReady;
   return compressFFmpeg;
@@ -21,7 +21,7 @@ async function getFFmpeg(): Promise<FFmpeg> {
 async function reloadFFmpeg(): Promise<FFmpeg> {
   if (compressFFmpeg) compressFFmpeg.terminate();
   compressFFmpeg = new FFmpeg();
-  ffmpegReady = compressFFmpeg.load({ coreURL: "/wasm/ffmpeg-core.js" });
+  ffmpegReady = compressFFmpeg.load({ coreURL: "/wasm/ffmpeg-core.js" }).then(() => {});
   await ffmpegReady;
   return compressFFmpeg;
 }
