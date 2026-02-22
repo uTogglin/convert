@@ -5,6 +5,7 @@ import { TraversionGraph } from "./TraversionGraph.js";
 import JSZip from "jszip";
 import { gzip as pakoGzip } from "pako";
 import { createTar } from "./handlers/archive.js";
+import { MagickImage, MagickFormat } from "@imagemagick/magick-wasm";
 
 // ── In-app console log capture ─────────────────────────────────────────────
 interface AppLogEntry { level: "error" | "warn" | "info"; msg: string; time: string; }
@@ -293,6 +294,8 @@ function resetToUploadPrompt() {
   const prevOutput = ui.outputList.querySelector(".selected");
   if (prevOutput) prevOutput.className = "";
   ui.convertButton.className = "disabled";
+  ui.convertButton.textContent = "Convert";
+  ui.convertButton.removeAttribute("data-process-mode");
   ui.inputSearch.value = "";
   ui.outputSearch.value = "";
   inputCategoryFilter = "all";
@@ -466,6 +469,7 @@ const fileSelectHandler = (event: Event) => {
     currentQueueIndex = 0;
     presentQueueGroup(currentQueueIndex);
   }
+  updateProcessButton();
 
   // Reset file input so re-selecting the same file triggers change
   ui.fileInput.value = "";
@@ -527,6 +531,7 @@ function presentQueueGroup(index: number) {
   const prevOutput = ui.outputList.querySelector(".selected");
   if (prevOutput) prevOutput.className = "";
   ui.convertButton.className = "disabled";
+  updateProcessButton();
 }
 
 // Add the file selection handler to both the file input element and to
@@ -689,11 +694,16 @@ async function buildOptionList () {
         const outputSelected = ui.outputList.querySelector(".selected");
         if (isSameCategoryBatch && allUploadedFiles.length > 1 && outputSelected) {
           ui.convertButton.className = "";
+          ui.convertButton.textContent = "Convert";
+          ui.convertButton.removeAttribute("data-process-mode");
         } else if (allSelected.length === 2) {
           ui.convertButton.className = "";
+          ui.convertButton.textContent = "Convert";
+          ui.convertButton.removeAttribute("data-process-mode");
         } else {
           ui.convertButton.className = "disabled";
         }
+        updateProcessButton();
       };
 
       if (format.from && addToInputs) {
@@ -933,6 +943,7 @@ if (ui.removeBgToggle) {
     ui.removeBgToggle.classList.toggle("active", removeBg);
     updateBgUI();
     try { localStorage.setItem("convert-remove-bg", String(removeBg)); } catch {}
+    updateProcessButton();
   });
 }
 
@@ -977,6 +988,7 @@ if (ui.rescaleToggle) {
     ui.rescaleToggle.classList.toggle("active", rescaleEnabled);
     if (ui.rescaleOptions) ui.rescaleOptions.classList.toggle("hidden", !rescaleEnabled);
     try { localStorage.setItem("convert-rescale", String(rescaleEnabled)); } catch {}
+    updateProcessButton();
   });
 }
 function updateRescalePlaceholders() {
@@ -1000,6 +1012,7 @@ if (ui.rescaleWidthInput) {
     }
     updateRescalePlaceholders();
     try { localStorage.setItem("convert-rescale-width", String(rescaleWidth)); } catch {}
+    updateProcessButton();
   });
 }
 if (ui.rescaleHeightInput) {
@@ -1013,6 +1026,7 @@ if (ui.rescaleHeightInput) {
     }
     updateRescalePlaceholders();
     try { localStorage.setItem("convert-rescale-height", String(rescaleHeight)); } catch {}
+    updateProcessButton();
   });
 }
 if (ui.rescaleLockInput) {
@@ -1335,37 +1349,33 @@ async function resizeToMatch(imgBytes: Uint8Array, refBytes: Uint8Array, ext: st
   return resizeImageBytes(imgBytes, ext, refDims.w, refDims.h);
 }
 
-/** Get dimensions of an image from its bytes */
-function getImageDimensions(bytes: Uint8Array, ext: string): Promise<{ w: number; h: number }> {
-  return new Promise((res, rej) => {
-    const blob = new Blob([bytes as BlobPart], { type: "image/" + ext });
-    const url = URL.createObjectURL(blob);
-    const img = new Image();
-    img.onload = () => { URL.revokeObjectURL(url); res({ w: img.width, h: img.height }); };
-    img.onerror = rej;
-    img.src = url;
+/** Map file extension to MagickFormat for format-preserving I/O */
+const extToMagickFormat: Record<string, MagickFormat> = {
+  png: MagickFormat.Png, webp: MagickFormat.WebP, avif: MagickFormat.Avif,
+  tiff: MagickFormat.Tiff, tif: MagickFormat.Tiff, gif: MagickFormat.Gif,
+  jpg: MagickFormat.Jpeg, jpeg: MagickFormat.Jpeg, bmp: MagickFormat.Bmp,
+  ico: MagickFormat.Ico, svg: MagickFormat.Svg,
+};
+
+/** Get dimensions of an image from its bytes via ImageMagick */
+function getImageDimensions(bytes: Uint8Array, _ext: string): Promise<{ w: number; h: number }> {
+  return new Promise((res) => {
+    MagickImage.read(bytes, (img) => {
+      res({ w: img.width, h: img.height });
+    });
   });
 }
 
-/** Resize image bytes to target dimensions via canvas */
+/** Resize image bytes to target dimensions via ImageMagick (Lanczos) */
 async function resizeImageBytes(bytes: Uint8Array, ext: string, w: number, h: number): Promise<Uint8Array> {
-  const blob = new Blob([bytes as BlobPart], { type: "image/" + ext });
-  const url = URL.createObjectURL(blob);
-  const img = new Image();
-  await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = url; });
-  URL.revokeObjectURL(url);
-
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d")!;
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(img, 0, 0, w, h);
-
-  const outMime = (ext === "webp") ? "image/webp" : (ext === "jpg" || ext === "jpeg") ? "image/jpeg" : "image/png";
-  const outBlob = await new Promise<Blob>((res) => canvas.toBlob(b => res(b!), outMime, 1));
-  return new Uint8Array(await outBlob.arrayBuffer());
+  const fmt = extToMagickFormat[ext] ?? MagickFormat.Png;
+  return new Promise((res) => {
+    MagickImage.read(bytes, (img) => {
+      img.resize(w, h);
+      img.quality = 100;
+      img.write(fmt, (out) => res(new Uint8Array(out)));
+    });
+  });
 }
 
 /** Image extensions eligible for rescaling */
@@ -1404,6 +1414,35 @@ async function applyRescale(files: FileData[]): Promise<FileData[]> {
     result.push({ name: f.name, bytes: resized });
   }
   return result;
+}
+
+/** Update the convert button to show "Process" mode when processing settings are active but no output format is selected */
+function updateProcessButton() {
+  const hasFiles = selectedFiles.length > 0;
+  const hasImageFiles = hasFiles && selectedFiles.some(f => {
+    const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
+    return rescaleExts.has(ext) || bgRemovalExts.has(ext);
+  });
+  const rescaleReady = rescaleEnabled && (rescaleWidth > 0 || rescaleHeight > 0);
+  const hasProcessing = rescaleReady || removeBg;
+  const outputSelected = document.querySelector("#to-list .selected");
+
+  if (hasImageFiles && hasProcessing && !outputSelected) {
+    let label: string;
+    if (rescaleReady && removeBg) label = "Resize & remove background";
+    else if (rescaleReady) label = "Resize";
+    else label = "Remove background";
+    ui.convertButton.textContent = label;
+    ui.convertButton.className = "";
+    ui.convertButton.setAttribute("data-process-mode", "true");
+  } else {
+    ui.convertButton.textContent = "Convert";
+    ui.convertButton.removeAttribute("data-process-mode");
+    // Don't override enabled state if an output format is selected
+    if (!outputSelected) {
+      ui.convertButton.className = "disabled";
+    }
+  }
 }
 
 /** Trigger a browser download from a blob URL */
@@ -1508,6 +1547,7 @@ function suspendQueueForArchive() {
     const prevOutput = ui.outputList.querySelector(".selected");
     if (prevOutput) prevOutput.className = "";
     ui.convertButton.className = "disabled";
+    updateProcessButton();
     ui.inputSearch.value = "";
     filterButtonList(ui.inputList, "");
   }
@@ -1618,6 +1658,40 @@ ui.convertButton.onclick = async function () {
 
   if (inputFiles.length === 0) {
     return alert("Select an input file.");
+  }
+
+  // ── Process mode: resize / remove background without conversion ──
+  if (ui.convertButton.hasAttribute("data-process-mode")) {
+    try {
+      window.showPopup("<h2>Processing...</h2>");
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+      let fileData: FileData[] = [];
+      for (const file of inputFiles) {
+        const buf = await file.arrayBuffer();
+        fileData.push({ name: file.name, bytes: new Uint8Array(buf) });
+      }
+
+      fileData = await applyBgRemoval(fileData);
+      fileData = await applyMetadataStrip(fileData);
+      fileData = await applyRescale(fileData);
+
+      for (const f of fileData) {
+        downloadFile(f.bytes, f.name);
+      }
+
+      const totalSize = fileData.reduce((s, f) => s + f.bytes.length, 0);
+      window.showPopup(
+        `<h2>Processed ${fileData.length} file${fileData.length !== 1 ? "s" : ""}!</h2>` +
+        `<p>Total size: ${formatFileSize(totalSize)}</p>` +
+        `<button onclick="window.hidePopup()">OK</button>`
+      );
+    } catch (e) {
+      window.hidePopup();
+      alert("Error during processing:\n" + e);
+      console.error(e);
+    }
+    return;
   }
 
   const outputButton = document.querySelector("#to-list .selected");
