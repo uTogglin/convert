@@ -998,7 +998,7 @@ const bgRemovalExts = new Set(["png", "webp", "avif", "tiff", "tif", "gif", "jpg
 /** Extensions that support transparency — others get forced to PNG */
 const alphaExts = new Set(["png", "webp", "avif", "tiff", "tif", "gif"]);
 
-/** Apply background removal to image files if the toggle is on */
+/** Apply background removal to image files if the toggle is on (uses RMBG-1.4 via transformers.js) */
 async function applyBgRemoval(files: FileData[]): Promise<FileData[]> {
   if (!removeBg) return files;
   const eligible = files.filter(f => {
@@ -1009,11 +1009,13 @@ async function applyBgRemoval(files: FileData[]): Promise<FileData[]> {
 
   window.showPopup(
     `<h2>Removing background...</h2>` +
-    `<p>Processing ${eligible.length} image${eligible.length !== 1 ? "s" : ""}. This may take a moment on first run.</p>`
+    `<p>Loading model and processing ${eligible.length} image${eligible.length !== 1 ? "s" : ""}. This may take a moment on first run.</p>`
   );
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-  const { removeBackground } = await import("@imgly/background-removal");
+  const { pipeline, RawImage } = await import("@huggingface/transformers");
+  const segmenter = await pipeline("image-segmentation", "briaai/RMBG-1.4", { device: "wasm" });
+
   const result: FileData[] = [];
   for (const f of files) {
     const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
@@ -1021,16 +1023,42 @@ async function applyBgRemoval(files: FileData[]): Promise<FileData[]> {
       result.push(f);
       continue;
     }
-    // Use webp if the format supports alpha, otherwise force png for transparency
-    const supportsAlpha = alphaExts.has(ext);
-    const outMime: "image/png" | "image/webp" = (ext === "webp") ? "image/webp" : "image/png";
-    const outExt = (ext === "webp") ? "webp" : "png";
+
+    // Load image onto a canvas
     const inputBlob = new Blob([f.bytes as BlobPart], { type: "image/" + ext });
-    const blob = await removeBackground(inputBlob, {
-      model: "isnet",
-      output: { format: outMime, quality: 1 }
-    });
-    const buf = await blob.arrayBuffer();
+    const blobUrl = URL.createObjectURL(inputBlob);
+    const img = new Image();
+    await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = blobUrl; });
+
+    const canvas = document.createElement("canvas");
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext("2d")!;
+    ctx.drawImage(img, 0, 0);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+    // Run segmentation to get mask
+    const rawImg = await RawImage.fromURL(blobUrl);
+    URL.revokeObjectURL(blobUrl);
+    const output = await segmenter(rawImg);
+    const maskResult = (output as { mask: InstanceType<typeof RawImage> }[])[0];
+    const mask = maskResult.mask;
+
+    // Resize mask to match original image if needed, then apply as alpha
+    const resizedMask = mask.width !== img.width || mask.height !== img.height
+      ? mask.resize(img.width, img.height)
+      : mask;
+    for (let i = 0; i < imageData.data.length / 4; i++) {
+      imageData.data[i * 4 + 3] = resizedMask.data[i];
+    }
+    ctx.putImageData(imageData, 0, 0);
+
+    // Export — use PNG for transparency
+    const supportsAlpha = alphaExts.has(ext);
+    const outMime = (ext === "webp") ? "image/webp" : "image/png";
+    const outExt = (ext === "webp") ? "webp" : "png";
+    const outBlob = await new Promise<Blob>((res) => canvas.toBlob(b => res(b!), outMime, 1));
+    const buf = await outBlob.arrayBuffer();
     const baseName = f.name.replace(/\.[^.]+$/, "");
     const outName = supportsAlpha ? f.name : baseName + "." + outExt;
     result.push({ name: outName, bytes: new Uint8Array(buf) });
