@@ -1032,7 +1032,9 @@ async function applyBgRemoval(files: FileData[]): Promise<FileData[]> {
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
   const { pipeline, RawImage } = await import("@huggingface/transformers");
-  const segmenter = await pipeline("image-segmentation", "briaai/RMBG-1.4", { device: "wasm" });
+  const segmenter = await pipeline("image-segmentation", "briaai/RMBG-2.0", {
+    device: navigator.gpu ? "webgpu" : "wasm",
+  });
 
   const result: FileData[] = [];
   for (const f of files) {
