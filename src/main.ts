@@ -367,10 +367,14 @@ const fileSelectHandler = (event: Event) => {
   }
 
   if (!inputFiles) return;
-  const files = Array.from(inputFiles);
-  if (files.length === 0) return;
+  const newFiles = Array.from(inputFiles);
+  if (newFiles.length === 0) return;
 
-  files.sort((a, b) => a.name === b.name ? 0 : (a.name < b.name ? -1 : 1));
+  // Append to existing files if any, deduplicating by name+size
+  const existing = new Set(allUploadedFiles.map(f => `${f.name}|${f.size}`));
+  const merged = [...allUploadedFiles, ...newFiles.filter(f => !existing.has(`${f.name}|${f.size}`))];
+  merged.sort((a, b) => a.name === b.name ? 0 : (a.name < b.name ? -1 : 1));
+  const files = merged;
   allUploadedFiles = files;
 
   // Determine if all files share the same media category
@@ -396,6 +400,9 @@ const fileSelectHandler = (event: Event) => {
     currentQueueIndex = 0;
     presentQueueGroup(currentQueueIndex);
   }
+
+  // Reset file input so re-selecting the same file triggers change
+  ui.fileInput.value = "";
 };
 
 /** Auto-select the input format button for a given file */
