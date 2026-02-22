@@ -992,8 +992,14 @@ window.tryConvertByTraversing = async function (
 /** Track blob URLs for cleanup */
 const outputTrayUrls: string[] = [];
 
-/** Extensions that support transparency (background removal makes sense) */
-const bgRemovalExts = new Set(["png", "webp", "avif", "tiff", "tif", "gif"]);
+/** Image extensions eligible for background removal */
+const bgRemovalExts = new Set(["png", "webp", "avif", "tiff", "tif", "gif", "jpg", "jpeg", "bmp"]);
+
+/** Map extension to a library-supported output MIME; fallback to image/png for unsupported ones */
+const bgRemovalMime: Record<string, "image/png" | "image/jpeg" | "image/webp"> = {
+  png: "image/png", webp: "image/webp",
+  jpg: "image/jpeg", jpeg: "image/jpeg",
+};
 
 /** Apply background removal to image files if the toggle is on */
 async function applyBgRemoval(files: FileData[]): Promise<FileData[]> {
@@ -1018,13 +1024,13 @@ async function applyBgRemoval(files: FileData[]): Promise<FileData[]> {
       result.push(f);
       continue;
     }
+    const outMime = bgRemovalMime[ext] ?? "image/png";
     const inputBlob = new Blob([f.bytes], { type: "image/" + ext });
     const blob = await removeBackground(inputBlob, {
-      output: { format: "image/png", quality: 1 }
+      output: { format: outMime, quality: 1 }
     });
     const buf = await blob.arrayBuffer();
-    const baseName = f.name.replace(/\.[^.]+$/, "");
-    result.push({ name: baseName + ".png", bytes: new Uint8Array(buf) });
+    result.push({ name: f.name, bytes: new Uint8Array(buf) });
   }
   return result;
 }
