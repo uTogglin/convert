@@ -62,25 +62,40 @@ async function ffExecWithLog(args: string[]): Promise<string> {
   return log;
 }
 
-/** Run FFmpeg with progress bar updates (parses time= from log, compares to total duration) */
-async function ffExecWithProgress(args: string[], totalDuration: number, _label: string): Promise<void> {
+/** Run FFmpeg with progress bar updates via the "progress" event */
+async function ffExecWithProgress(args: string[], _totalDuration: number, _label: string): Promise<void> {
   const ff = await getFFmpeg();
-  const handler = (e: LogEvent) => {
+
+  // Use the "progress" event which provides { progress: 0..1, time: microseconds }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const onProgress = (e: any) => {
+    const pct = Math.min(Math.round((e.progress ?? 0) * 100), 99);
+    const bar = document.getElementById("compress-progress-bar");
+    const pctEl = document.getElementById("compress-progress-pct");
+    if (bar) bar.style.width = pct + "%";
+    if (pctEl) pctEl.textContent = pct + "%";
+  };
+
+  // Also parse time= from log as fallback (some ffmpeg.wasm versions)
+  const onLog = (e: LogEvent) => {
     const match = e.message.match(/time=\s*(\d+):(\d+):(\d+)\.(\d+)/);
-    if (match && totalDuration > 0) {
+    if (match && _totalDuration > 0) {
       const current = parseInt(match[1]) * 3600 + parseInt(match[2]) * 60 + parseInt(match[3]) + parseInt(match[4]) / 100;
-      const pct = Math.min(Math.round((current / totalDuration) * 100), 99);
+      const pct = Math.min(Math.round((current / _totalDuration) * 100), 99);
       const bar = document.getElementById("compress-progress-bar");
       const pctEl = document.getElementById("compress-progress-pct");
       if (bar) bar.style.width = pct + "%";
       if (pctEl) pctEl.textContent = pct + "%";
     }
   };
-  ff.on("log", handler);
+
+  ff.on("progress", onProgress);
+  ff.on("log", onLog);
   try {
     await ffExec(args);
   } finally {
-    ff.off("log", handler);
+    ff.off("progress", onProgress);
+    ff.off("log", onLog);
   }
 }
 
