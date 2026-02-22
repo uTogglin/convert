@@ -242,6 +242,74 @@ body {
   color: var(--text-muted);
   cursor: pointer;
 }
+
+/* ── Compression settings ── */
+#compress-options {
+  margin-top: 6px;
+}
+.compress-size-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.compress-size-row input[type="number"] {
+  width: 100px;
+  padding: 6px 8px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  background: var(--card-bg);
+  color: var(--text-main);
+  font-size: 0.85rem;
+}
+.compress-unit {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+.compress-presets {
+  margin-top: 8px;
+}
+.compress-presets-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  display: block;
+  margin-bottom: 6px;
+}
+.compress-preset-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.compress-preset-btn {
+  padding: 6px 14px;
+  border: 2px solid var(--input-border);
+  border-radius: 50px;
+  background: var(--card-bg);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.compress-preset-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.compress-preset-btn.selected {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: white;
+}
+.compress-preset-note {
+  font-size: 0.7rem;
+  font-weight: 400;
+  opacity: 0.7;
+}
 #custom-color-row input[type="color"] {
   width: 28px; height: 28px;
   border: none; border-radius: 50%;

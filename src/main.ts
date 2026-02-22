@@ -5,6 +5,7 @@ import { TraversionGraph } from "./TraversionGraph.js";
 import JSZip from "jszip";
 import { gzip as pakoGzip } from "pako";
 import { createTar } from "./handlers/archive.js";
+import { applyFileCompression } from "./compress.js";
 
 // ── In-app console log capture ─────────────────────────────────────────────
 interface AppLogEntry { level: "error" | "warn" | "info"; msg: string; time: string; }
@@ -117,6 +118,17 @@ let privacyMode: boolean = (() => {
   try { return localStorage.getItem("convert-privacy") === "true"; } catch { return false; }
 })();
 
+/** Compression: compress output files to fit a target size */
+let compressEnabled: boolean = (() => {
+  try { return localStorage.getItem("convert-compress") === "true"; } catch { return false; }
+})();
+let compressTargetMB: number = (() => {
+  try { return parseFloat(localStorage.getItem("convert-compress-target") ?? "0") || 0; } catch { return 0; }
+})();
+let compressMode: "auto" | "lossy" = (() => {
+  try { return localStorage.getItem("convert-compress-mode") === "lossy" ? "lossy" : "auto"; } catch { return "auto" as const; }
+})();
+
 /** Queue for mixed-category batch conversion */
 let conversionQueue: File[][] = [];
 let currentQueueIndex = 0;
@@ -185,6 +197,11 @@ const ui = {
   rescaleHeightInput: document.querySelector("#rescale-height") as HTMLInputElement,
   rescaleLockInput: document.querySelector("#rescale-lock-ratio") as HTMLInputElement,
   privacyToggle: document.querySelector("#privacy-toggle") as HTMLButtonElement,
+  compressToggle: document.querySelector("#compress-toggle") as HTMLButtonElement,
+  compressOptions: document.querySelector("#compress-options") as HTMLDivElement,
+  compressTargetInput: document.querySelector("#compress-target-mb") as HTMLInputElement,
+  compressPresetBtns: document.querySelectorAll(".compress-preset-btn") as NodeListOf<HTMLButtonElement>,
+  compressModeToggle: document.querySelector("#compress-mode-toggle") as HTMLButtonElement,
   outputTray: document.querySelector("#output-tray") as HTMLDivElement,
   outputTrayGrid: document.querySelector("#output-tray-grid") as HTMLDivElement,
   downloadAllBtn: document.querySelector("#download-all-btn") as HTMLButtonElement,
@@ -1056,6 +1073,56 @@ if (ui.privacyToggle) {
   });
 }
 
+// ──── Compression Settings ────
+if (ui.compressToggle) {
+  ui.compressToggle.textContent = compressEnabled ? "Compress to fit: On" : "Compress to fit: Off";
+  ui.compressToggle.classList.toggle("active", compressEnabled);
+  if (ui.compressOptions) ui.compressOptions.classList.toggle("hidden", !compressEnabled);
+  ui.compressToggle.addEventListener("click", () => {
+    compressEnabled = !compressEnabled;
+    ui.compressToggle.textContent = compressEnabled ? "Compress to fit: On" : "Compress to fit: Off";
+    ui.compressToggle.classList.toggle("active", compressEnabled);
+    if (ui.compressOptions) ui.compressOptions.classList.toggle("hidden", !compressEnabled);
+    try { localStorage.setItem("convert-compress", String(compressEnabled)); } catch {}
+    updateProcessButton();
+  });
+}
+
+if (ui.compressTargetInput) {
+  if (compressTargetMB > 0) ui.compressTargetInput.value = String(compressTargetMB);
+  ui.compressTargetInput.addEventListener("input", () => {
+    compressTargetMB = parseFloat(ui.compressTargetInput.value) || 0;
+    ui.compressPresetBtns.forEach(b => b.classList.remove("selected"));
+    try { localStorage.setItem("convert-compress-target", String(compressTargetMB)); } catch {}
+    updateProcessButton();
+  });
+}
+
+ui.compressPresetBtns.forEach(btn => {
+  // Highlight saved preset on load
+  if (compressTargetMB === parseFloat(btn.getAttribute("data-size") ?? "0")) {
+    btn.classList.add("selected");
+  }
+  btn.addEventListener("click", () => {
+    const size = parseFloat(btn.getAttribute("data-size") ?? "0");
+    compressTargetMB = size;
+    if (ui.compressTargetInput) ui.compressTargetInput.value = String(size);
+    ui.compressPresetBtns.forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    try { localStorage.setItem("convert-compress-target", String(compressTargetMB)); } catch {}
+    updateProcessButton();
+  });
+});
+
+if (ui.compressModeToggle) {
+  ui.compressModeToggle.textContent = compressMode === "auto" ? "Mode: Auto" : "Mode: Lossy";
+  ui.compressModeToggle.addEventListener("click", () => {
+    compressMode = compressMode === "auto" ? "lossy" : "auto";
+    ui.compressModeToggle.textContent = compressMode === "auto" ? "Mode: Auto" : "Mode: Lossy";
+    try { localStorage.setItem("convert-compress-mode", compressMode); } catch {}
+  });
+}
+
 // ──── Output Tray: Download All / Clear ────
 if (ui.downloadAllBtn) {
   ui.downloadAllBtn.addEventListener("click", () => {
@@ -1430,6 +1497,13 @@ async function applyRescale(files: FileData[]): Promise<FileData[]> {
   return result;
 }
 
+/** Apply file compression to fit target size */
+async function applyCompression(files: FileData[]): Promise<FileData[]> {
+  if (!compressEnabled || compressTargetMB <= 0) return files;
+  const targetBytes = compressTargetMB * 1024 * 1024;
+  return await applyFileCompression(files, targetBytes, compressMode);
+}
+
 /** Update the convert button to show "Process" mode when processing settings are active but no output format is selected */
 function updateProcessButton() {
   const hasFiles = selectedFiles.length > 0;
@@ -1438,15 +1512,20 @@ function updateProcessButton() {
     return rescaleExts.has(ext) || bgRemovalExts.has(ext);
   });
   const rescaleReady = rescaleEnabled && (rescaleWidth > 0 || rescaleHeight > 0);
-  const hasProcessing = rescaleReady || removeBg;
+  const compressReady = compressEnabled && compressTargetMB > 0;
+  const hasImageProcessing = rescaleReady || removeBg;
+  const hasProcessing = hasImageProcessing || compressReady;
   const outputSelected = document.querySelector("#to-list .selected");
 
-  if (hasImageFiles && hasProcessing && !outputSelected) {
-    let label: string;
-    if (rescaleReady && removeBg) label = "Resize & remove background";
-    else if (rescaleReady) label = "Resize";
-    else label = "Remove background";
-    ui.convertButton.textContent = label;
+  // Compression applies to any file, image processing only to images
+  const canProcess = (hasImageFiles && hasImageProcessing) || (hasFiles && compressReady);
+
+  if (canProcess && hasProcessing && !outputSelected) {
+    const labels: string[] = [];
+    if (rescaleReady) labels.push("Resize");
+    if (removeBg) labels.push("Remove background");
+    if (compressReady) labels.push("Compress");
+    ui.convertButton.textContent = labels.join(" & ");
     ui.convertButton.className = "";
     ui.convertButton.setAttribute("data-process-mode", "true");
   } else {
@@ -1689,6 +1768,7 @@ ui.convertButton.onclick = async function () {
       fileData = await applyBgRemoval(fileData);
       fileData = await applyMetadataStrip(fileData);
       fileData = await applyRescale(fileData);
+      fileData = await applyCompression(fileData);
 
       for (const f of fileData) {
         downloadFile(f.bytes, f.name);
@@ -1766,7 +1846,7 @@ ui.convertButton.onclick = async function () {
         return;
       }
 
-      const processedOutputFiles = await applyRescale(await applyMetadataStrip(await applyBgRemoval(allOutputFiles)));
+      const processedOutputFiles = await applyCompression(await applyRescale(await applyMetadataStrip(await applyBgRemoval(allOutputFiles))));
 
       if (processedOutputFiles.length === 1) {
         downloadFile(processedOutputFiles[0].bytes, processedOutputFiles[0].name);
@@ -1816,7 +1896,7 @@ ui.convertButton.onclick = async function () {
           return;
         }
 
-        const processedQueueFiles = await applyRescale(await applyMetadataStrip(await applyBgRemoval(output.files)));
+        const processedQueueFiles = await applyCompression(await applyRescale(await applyMetadataStrip(await applyBgRemoval(output.files))));
         for (const file of processedQueueFiles) {
           downloadFile(file.bytes, file.name);
         }
@@ -1874,7 +1954,7 @@ ui.convertButton.onclick = async function () {
         return;
       }
 
-      const processedSingleFiles = await applyRescale(await applyMetadataStrip(await applyBgRemoval(output.files)));
+      const processedSingleFiles = await applyCompression(await applyRescale(await applyMetadataStrip(await applyBgRemoval(output.files))));
       for (const file of processedSingleFiles) {
         downloadFile(file.bytes, file.name);
       }
