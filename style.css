@@ -554,6 +554,123 @@ body {
 }
 
 /* =========================================
+   4b. OUTPUT TRAY
+   ========================================= */
+#output-tray {
+  display: none;
+  margin: 0 24px 24px;
+  background: var(--surface-color);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  box-sizing: border-box;
+}
+#output-tray.visible { display: block; }
+
+.output-tray-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.output-tray-header span {
+  font-weight: 700;
+  font-size: 1rem;
+}
+.output-tray-actions { display: flex; gap: 6px; }
+.output-tray-actions button {
+  padding: 6px 14px;
+  border: 1px solid var(--input-border);
+  border-radius: 50px;
+  background: var(--card-bg);
+  color: var(--text-main);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.output-tray-actions button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+#output-tray-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  width: 100%;
+  overflow-y: auto;
+  max-height: 280px;
+  padding: 4px 4px 4px 2px;
+  box-sizing: border-box;
+}
+
+.output-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 80px;
+  gap: 6px;
+  flex-shrink: 0;
+  position: relative;
+  cursor: grab;
+}
+.output-item:active { cursor: grabbing; }
+
+.output-item-thumb {
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--upload-icon-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--input-border);
+  flex-shrink: 0;
+  position: relative;
+}
+.output-item-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.output-item-name {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  text-align: center;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.output-download-btn {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  border: 2px solid var(--surface-color);
+  font-size: 12px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition);
+  z-index: 2;
+}
+.output-download-btn:hover {
+  background: var(--accent-hover);
+}
+
+/* =========================================
    5. MAIN LAYOUT
    ========================================= */
 #format-containers {
@@ -787,5 +904,6 @@ button.selected {
   .format-list { max-height: 45vh; }
   #settings-drawer { flex-direction: column; gap: 16px; }
   #file-area { margin: 12px; padding: 32px 16px; }
+  #output-tray { margin: 0 12px 12px; }
   #convert-button { width: 90%; bottom: 20px; }
 }

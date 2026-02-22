@@ -68,6 +68,11 @@ let selectedFiles: File[] = [];
  */
 let simpleMode: boolean = true;
 
+/** Auto-download: when true, files download immediately; when false, only appear in output tray */
+let autoDownload: boolean = (() => {
+  try { return localStorage.getItem("convert-auto-download") !== "false"; } catch { return true; }
+})();
+
 /** Queue for mixed-category batch conversion */
 let conversionQueue: File[][] = [];
 let currentQueueIndex = 0;
@@ -123,6 +128,11 @@ const ui = {
   settingsDrawer: document.querySelector("#settings-drawer") as HTMLDivElement,
   accentColors: document.querySelectorAll(".color-dot") as NodeListOf<HTMLButtonElement>,
   customAccent: document.querySelector("#custom-accent") as HTMLInputElement,
+  autoDownloadToggle: document.querySelector("#auto-download-toggle") as HTMLButtonElement,
+  outputTray: document.querySelector("#output-tray") as HTMLDivElement,
+  outputTrayGrid: document.querySelector("#output-tray-grid") as HTMLDivElement,
+  downloadAllBtn: document.querySelector("#download-all-btn") as HTMLButtonElement,
+  clearOutputBtn: document.querySelector("#clear-output-btn") as HTMLButtonElement,
 };
 
 /** Active category filter for input and output lists */
@@ -826,6 +836,36 @@ if (clearLogBtn) {
   });
 }
 
+// ──── Auto-download Toggle ────
+if (ui.autoDownloadToggle) {
+  ui.autoDownloadToggle.textContent = autoDownload ? "Auto-download: On" : "Auto-download: Off";
+  ui.autoDownloadToggle.addEventListener("click", () => {
+    autoDownload = !autoDownload;
+    ui.autoDownloadToggle.textContent = autoDownload ? "Auto-download: On" : "Auto-download: Off";
+    try { localStorage.setItem("convert-auto-download", String(autoDownload)); } catch {}
+  });
+}
+
+// ──── Output Tray: Download All / Clear ────
+if (ui.downloadAllBtn) {
+  ui.downloadAllBtn.addEventListener("click", () => {
+    for (const item of Array.from(ui.outputTrayGrid.children)) {
+      if (!(item instanceof HTMLElement)) continue;
+      const url = item.getAttribute("data-blob-url");
+      const name = item.getAttribute("data-file-name");
+      if (url && name) triggerDownload(url, name);
+    }
+  });
+}
+if (ui.clearOutputBtn) {
+  ui.clearOutputBtn.addEventListener("click", () => {
+    for (const url of outputTrayUrls) URL.revokeObjectURL(url);
+    outputTrayUrls.length = 0;
+    ui.outputTrayGrid.innerHTML = "";
+    ui.outputTray.classList.remove("visible");
+  });
+}
+
 let deadEndAttempts: ConvertPathNode[][];
 
 async function attemptConvertPath (files: FileData[], path: ConvertPathNode[]) {
@@ -917,12 +957,81 @@ window.tryConvertByTraversing = async function (
   return null;
 }
 
-function downloadFile (bytes: Uint8Array, name: string) {
-  const blob = new Blob([bytes as BlobPart], { type: "application/octet-stream" });
+/** Track blob URLs for cleanup */
+const outputTrayUrls: string[] = [];
+
+/** Trigger a browser download from a blob URL */
+function triggerDownload(blobUrl: string, name: string) {
   const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
+  link.href = blobUrl;
   link.download = name;
   link.click();
+}
+
+/** Add a converted file to the output tray */
+function addToOutputTray(bytes: Uint8Array, name: string) {
+  const blob = new Blob([bytes as BlobPart], { type: "application/octet-stream" });
+  const blobUrl = URL.createObjectURL(blob);
+  outputTrayUrls.push(blobUrl);
+
+  const item = document.createElement("div");
+  item.className = "output-item";
+  item.draggable = true;
+  item.setAttribute("data-blob-url", blobUrl);
+  item.setAttribute("data-file-name", name);
+
+  const thumb = document.createElement("div");
+  thumb.className = "output-item-thumb";
+
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  const imageExts = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "ico", "avif"];
+  if (imageExts.includes(ext)) {
+    const img = document.createElement("img");
+    img.src = blobUrl;
+    img.alt = name;
+    thumb.appendChild(img);
+  } else {
+    const badge = document.createElement("div");
+    badge.className = "file-ext-badge";
+    badge.textContent = ext.toUpperCase() || "?";
+    thumb.appendChild(badge);
+  }
+
+  // Download button on the thumbnail
+  const dlBtn = document.createElement("button");
+  dlBtn.className = "output-download-btn";
+  dlBtn.title = "Download";
+  dlBtn.innerHTML = "\u2913"; // downwards arrow
+  dlBtn.onclick = (e) => {
+    e.stopPropagation();
+    triggerDownload(blobUrl, name);
+  };
+  thumb.appendChild(dlBtn);
+
+  const nameEl = document.createElement("div");
+  nameEl.className = "output-item-name";
+  nameEl.textContent = name;
+  nameEl.title = name;
+
+  item.appendChild(thumb);
+  item.appendChild(nameEl);
+
+  // Drag support for drag-to-desktop (Chrome)
+  item.addEventListener("dragstart", (e) => {
+    e.dataTransfer?.setData("DownloadURL", `application/octet-stream:${name}:${blobUrl}`);
+    e.dataTransfer?.setData("text/uri-list", blobUrl);
+  });
+
+  ui.outputTrayGrid.appendChild(item);
+  ui.outputTray.classList.add("visible");
+}
+
+function downloadFile(bytes: Uint8Array, name: string) {
+  addToOutputTray(bytes, name);
+  if (autoDownload) {
+    const blobUrl = outputTrayUrls[outputTrayUrls.length - 1];
+    triggerDownload(blobUrl, name);
+  }
 }
 
 /** Whether archive mode temporarily suspended queue grouping */
