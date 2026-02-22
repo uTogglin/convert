@@ -78,6 +78,11 @@ let archiveMultiOutput: boolean = (() => {
   try { return localStorage.getItem("convert-archive-multi") !== "false"; } catch { return true; }
 })();
 
+/** Remove background: when true, image outputs have their background removed */
+let removeBg: boolean = (() => {
+  try { return localStorage.getItem("convert-remove-bg") === "true"; } catch { return false; }
+})();
+
 /** Queue for mixed-category batch conversion */
 let conversionQueue: File[][] = [];
 let currentQueueIndex = 0;
@@ -135,6 +140,7 @@ const ui = {
   customAccent: document.querySelector("#custom-accent") as HTMLInputElement,
   autoDownloadToggle: document.querySelector("#auto-download-toggle") as HTMLButtonElement,
   archiveMultiToggle: document.querySelector("#archive-multi-toggle") as HTMLButtonElement,
+  removeBgToggle: document.querySelector("#remove-bg-toggle") as HTMLButtonElement,
   outputTray: document.querySelector("#output-tray") as HTMLDivElement,
   outputTrayGrid: document.querySelector("#output-tray-grid") as HTMLDivElement,
   downloadAllBtn: document.querySelector("#download-all-btn") as HTMLButtonElement,
@@ -862,6 +868,16 @@ if (ui.archiveMultiToggle) {
   });
 }
 
+// ──── Remove Background Toggle ────
+if (ui.removeBgToggle) {
+  ui.removeBgToggle.textContent = removeBg ? "Remove background: On" : "Remove background: Off";
+  ui.removeBgToggle.addEventListener("click", () => {
+    removeBg = !removeBg;
+    ui.removeBgToggle.textContent = removeBg ? "Remove background: On" : "Remove background: Off";
+    try { localStorage.setItem("convert-remove-bg", String(removeBg)); } catch {}
+  });
+}
+
 // ──── Output Tray: Download All / Clear ────
 if (ui.downloadAllBtn) {
   ui.downloadAllBtn.addEventListener("click", () => {
@@ -975,6 +991,42 @@ window.tryConvertByTraversing = async function (
 
 /** Track blob URLs for cleanup */
 const outputTrayUrls: string[] = [];
+
+/** Extensions that support transparency (background removal makes sense) */
+const bgRemovalExts = new Set(["png", "webp", "avif", "tiff", "tif", "gif"]);
+
+/** Apply background removal to image files if the toggle is on */
+async function applyBgRemoval(files: FileData[]): Promise<FileData[]> {
+  if (!removeBg) return files;
+  const eligible = files.filter(f => {
+    const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
+    return bgRemovalExts.has(ext);
+  });
+  if (eligible.length === 0) return files;
+
+  window.showPopup(
+    `<h2>Removing background...</h2>` +
+    `<p>Processing ${eligible.length} image${eligible.length !== 1 ? "s" : ""}. This may take a moment on first run.</p>`
+  );
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+  const { removeBackground } = await import("@imgly/background-removal");
+  const result: FileData[] = [];
+  for (const f of files) {
+    const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
+    if (!bgRemovalExts.has(ext)) {
+      result.push(f);
+      continue;
+    }
+    const blob = await removeBackground(f.bytes, {
+      output: { format: "image/png", quality: 1, type: "foreground" }
+    });
+    const buf = await blob.arrayBuffer();
+    const baseName = f.name.replace(/\.[^.]+$/, "");
+    result.push({ name: baseName + ".png", bytes: new Uint8Array(buf) });
+  }
+  return result;
+}
 
 /** Trigger a browser download from a blob URL */
 function triggerDownload(blobUrl: string, name: string) {
@@ -1235,20 +1287,22 @@ ui.convertButton.onclick = async function () {
         return;
       }
 
-      if (allOutputFiles.length === 1) {
-        downloadFile(allOutputFiles[0].bytes, allOutputFiles[0].name);
+      const processedOutputFiles = await applyBgRemoval(allOutputFiles);
+
+      if (processedOutputFiles.length === 1) {
+        downloadFile(processedOutputFiles[0].bytes, processedOutputFiles[0].name);
       } else if (archiveMultiOutput) {
         const zip = new JSZip();
-        for (const f of allOutputFiles) zip.file(f.name, f.bytes);
+        for (const f of processedOutputFiles) zip.file(f.name, f.bytes);
         const zipBytes = await zip.generateAsync({ type: "uint8array" });
         downloadFile(zipBytes, "converted.zip");
       } else {
-        for (const f of allOutputFiles) downloadFile(f.bytes, f.name);
+        for (const f of processedOutputFiles) downloadFile(f.bytes, f.name);
       }
 
       window.showPopup(
-        `<h2>Converted ${allOutputFiles.length} file${allOutputFiles.length !== 1 ? "s" : ""} to ${outputFormat.format}!</h2>` +
-        (allOutputFiles.length > 1 && archiveMultiOutput ? `<p>Results delivered as a ZIP archive.</p>` : ``) +
+        `<h2>Converted ${processedOutputFiles.length} file${processedOutputFiles.length !== 1 ? "s" : ""} to ${outputFormat.format}!</h2>` +
+        (processedOutputFiles.length > 1 && archiveMultiOutput ? `<p>Results delivered as a ZIP archive.</p>` : ``) +
         `<button onclick="window.hidePopup()">OK</button>`
       );
 
@@ -1281,7 +1335,8 @@ ui.convertButton.onclick = async function () {
           return;
         }
 
-        for (const file of output.files) {
+        const processedQueueFiles = await applyBgRemoval(output.files);
+        for (const file of processedQueueFiles) {
           downloadFile(file.bytes, file.name);
         }
       }
@@ -1338,7 +1393,8 @@ ui.convertButton.onclick = async function () {
         return;
       }
 
-      for (const file of output.files) {
+      const processedSingleFiles = await applyBgRemoval(output.files);
+      for (const file of processedSingleFiles) {
         downloadFile(file.bytes, file.name);
       }
 
