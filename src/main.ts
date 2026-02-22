@@ -1424,6 +1424,8 @@ function updateProcessButton() {
   const hasProcessing = rescaleReady || removeBg;
   const outputSelected = document.querySelector("#to-list .selected");
 
+  console.info("[updateProcessButton]", { hasFiles, hasImageFiles, rescaleReady, removeBg, hasProcessing, outputSelected: !!outputSelected });
+
   if (hasImageFiles && hasProcessing && !outputSelected) {
     let label: string;
     if (rescaleReady && removeBg) label = "Resize & remove background";
