@@ -1359,7 +1359,8 @@ const extToMagickFormat: Record<string, MagickFormat> = {
 
 /** Get dimensions of an image from its bytes via ImageMagick */
 function getImageDimensions(bytes: Uint8Array, _ext: string): Promise<{ w: number; h: number }> {
-  return ImageMagick.read(bytes, (img: MagickImage) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return ImageMagick.read(bytes as any, (img: MagickImage) => {
     return { w: img.width, h: img.height };
   });
 }
@@ -1367,7 +1368,8 @@ function getImageDimensions(bytes: Uint8Array, _ext: string): Promise<{ w: numbe
 /** Resize image bytes to target dimensions via ImageMagick (lossless) */
 function resizeImageBytes(bytes: Uint8Array, ext: string, w: number, h: number): Promise<Uint8Array> {
   const fmt = extToMagickFormat[ext] ?? MagickFormat.Png;
-  return ImageMagick.read(bytes, (img: MagickImage) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return ImageMagick.read(bytes as any, (img: MagickImage) => {
     img.resize(w, h);
     img.quality = 100;
     return img.write(fmt, (out: Uint8Array) => new Uint8Array(out));
