@@ -84,6 +84,15 @@
         <input type="password" id="bg-api-key" placeholder="remove.bg API key" autocomplete="off">
         <p class="settings-hint">Get a free key at <a href="https://www.remove.bg/api" target="_blank" rel="noopener">remove.bg/api</a>. Images are sent to remove.bg servers.</p>
       </div>
+      <button id="rescale-toggle">Rescale images: Off</button>
+      <div id="rescale-options" class="hidden">
+        <div class="rescale-inputs">
+          <input type="number" id="rescale-width" placeholder="Width" min="1">
+          <span class="rescale-x">&times;</span>
+          <input type="number" id="rescale-height" placeholder="Height" min="1">
+        </div>
+        <label class="rescale-lock"><input type="checkbox" id="rescale-lock-ratio" checked> Lock aspect ratio</label>
+      </div>
     </div>
     <div class="settings-section">
       <h3>Error Log <span id="log-badge" class="log-badge hidden">0</span></h3>

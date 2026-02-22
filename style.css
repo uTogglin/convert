@@ -194,6 +194,36 @@ body {
 #bg-api-key-row .settings-hint a {
   color: var(--accent);
 }
+#rescale-options {
+  margin-top: 6px;
+}
+.rescale-inputs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.rescale-inputs input[type="number"] {
+  width: 80px;
+  padding: 6px 8px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  background: var(--card-bg);
+  color: var(--text-main);
+  font-size: 0.85rem;
+}
+.rescale-x {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+.rescale-lock {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  cursor: pointer;
+}
 #custom-color-row input[type="color"] {
   width: 28px; height: 28px;
   border: none; border-radius: 50%;

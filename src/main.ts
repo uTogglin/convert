@@ -98,6 +98,20 @@ let bgCorrection: boolean = (() => {
   try { return localStorage.getItem("convert-bg-correction") === "true"; } catch { return false; }
 })();
 
+/** Image rescaling settings */
+let rescaleEnabled: boolean = (() => {
+  try { return localStorage.getItem("convert-rescale") === "true"; } catch { return false; }
+})();
+let rescaleWidth: number = (() => {
+  try { return parseInt(localStorage.getItem("convert-rescale-width") ?? "0") || 0; } catch { return 0; }
+})();
+let rescaleHeight: number = (() => {
+  try { return parseInt(localStorage.getItem("convert-rescale-height") ?? "0") || 0; } catch { return 0; }
+})();
+let rescaleLockRatio: boolean = (() => {
+  try { return localStorage.getItem("convert-rescale-lock") !== "false"; } catch { return true; }
+})();
+
 /** Queue for mixed-category batch conversion */
 let conversionQueue: File[][] = [];
 let currentQueueIndex = 0;
@@ -160,6 +174,11 @@ const ui = {
   bgCorrectionToggle: document.querySelector("#bg-correction-toggle") as HTMLButtonElement,
   bgApiKeyRow: document.querySelector("#bg-api-key-row") as HTMLDivElement,
   bgApiKeyInput: document.querySelector("#bg-api-key") as HTMLInputElement,
+  rescaleToggle: document.querySelector("#rescale-toggle") as HTMLButtonElement,
+  rescaleOptions: document.querySelector("#rescale-options") as HTMLDivElement,
+  rescaleWidthInput: document.querySelector("#rescale-width") as HTMLInputElement,
+  rescaleHeightInput: document.querySelector("#rescale-height") as HTMLInputElement,
+  rescaleLockInput: document.querySelector("#rescale-lock-ratio") as HTMLInputElement,
   outputTray: document.querySelector("#output-tray") as HTMLDivElement,
   outputTrayGrid: document.querySelector("#output-tray-grid") as HTMLDivElement,
   downloadAllBtn: document.querySelector("#download-all-btn") as HTMLButtonElement,
@@ -933,6 +952,39 @@ if (ui.bgApiKeyInput) {
 }
 updateBgUI();
 
+// ──── Image Rescale Toggle ────
+if (ui.rescaleToggle) {
+  ui.rescaleToggle.textContent = rescaleEnabled ? "Rescale images: On" : "Rescale images: Off";
+  if (ui.rescaleOptions) ui.rescaleOptions.classList.toggle("hidden", !rescaleEnabled);
+  ui.rescaleToggle.addEventListener("click", () => {
+    rescaleEnabled = !rescaleEnabled;
+    ui.rescaleToggle.textContent = rescaleEnabled ? "Rescale images: On" : "Rescale images: Off";
+    if (ui.rescaleOptions) ui.rescaleOptions.classList.toggle("hidden", !rescaleEnabled);
+    try { localStorage.setItem("convert-rescale", String(rescaleEnabled)); } catch {}
+  });
+}
+if (ui.rescaleWidthInput) {
+  if (rescaleWidth > 0) ui.rescaleWidthInput.value = String(rescaleWidth);
+  ui.rescaleWidthInput.addEventListener("input", () => {
+    rescaleWidth = parseInt(ui.rescaleWidthInput.value) || 0;
+    try { localStorage.setItem("convert-rescale-width", String(rescaleWidth)); } catch {}
+  });
+}
+if (ui.rescaleHeightInput) {
+  if (rescaleHeight > 0) ui.rescaleHeightInput.value = String(rescaleHeight);
+  ui.rescaleHeightInput.addEventListener("input", () => {
+    rescaleHeight = parseInt(ui.rescaleHeightInput.value) || 0;
+    try { localStorage.setItem("convert-rescale-height", String(rescaleHeight)); } catch {}
+  });
+}
+if (ui.rescaleLockInput) {
+  ui.rescaleLockInput.checked = rescaleLockRatio;
+  ui.rescaleLockInput.addEventListener("change", () => {
+    rescaleLockRatio = ui.rescaleLockInput.checked;
+    try { localStorage.setItem("convert-rescale-lock", String(rescaleLockRatio)); } catch {}
+  });
+}
+
 // ──── Output Tray: Download All / Clear ────
 if (ui.downloadAllBtn) {
   ui.downloadAllBtn.addEventListener("click", () => {
@@ -1160,14 +1212,100 @@ async function applyBgRemoval(files: FileData[]): Promise<FileData[]> {
       continue;
     }
 
-    const outBytes = isApi
+    let outBytes = isApi
       ? await removeBgViaApi(f.bytes, ext)
       : await removeBgLocal(f, ext);
+
+    // Auto-resize remove.bg API output back to original dimensions
+    if (isApi) {
+      outBytes = await resizeToMatch(outBytes, f.bytes, ext);
+    }
 
     const baseName = f.name.replace(/\.[^.]+$/, "");
     const supportsAlpha = alphaExts.has(ext);
     const outName = supportsAlpha ? f.name : baseName + ".png";
     result.push({ name: outName, bytes: outBytes });
+  }
+  return result;
+}
+
+/** Resize image bytes to match the dimensions of a reference image */
+async function resizeToMatch(imgBytes: Uint8Array, refBytes: Uint8Array, ext: string): Promise<Uint8Array> {
+  const [imgDims, refDims] = await Promise.all([
+    getImageDimensions(imgBytes, ext),
+    getImageDimensions(refBytes, ext),
+  ]);
+  if (imgDims.w === refDims.w && imgDims.h === refDims.h) return imgBytes;
+  return resizeImageBytes(imgBytes, ext, refDims.w, refDims.h);
+}
+
+/** Get dimensions of an image from its bytes */
+function getImageDimensions(bytes: Uint8Array, ext: string): Promise<{ w: number; h: number }> {
+  return new Promise((res, rej) => {
+    const blob = new Blob([bytes as BlobPart], { type: "image/" + ext });
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); res({ w: img.width, h: img.height }); };
+    img.onerror = rej;
+    img.src = url;
+  });
+}
+
+/** Resize image bytes to target dimensions via canvas */
+async function resizeImageBytes(bytes: Uint8Array, ext: string, w: number, h: number): Promise<Uint8Array> {
+  const blob = new Blob([bytes as BlobPart], { type: "image/" + ext });
+  const url = URL.createObjectURL(blob);
+  const img = new Image();
+  await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = url; });
+  URL.revokeObjectURL(url);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d")!;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(img, 0, 0, w, h);
+
+  const outMime = (ext === "webp") ? "image/webp" : (ext === "jpg" || ext === "jpeg") ? "image/jpeg" : "image/png";
+  const outBlob = await new Promise<Blob>((res) => canvas.toBlob(b => res(b!), outMime, 1));
+  return new Uint8Array(await outBlob.arrayBuffer());
+}
+
+/** Image extensions eligible for rescaling */
+const rescaleExts = new Set(["png", "webp", "avif", "tiff", "tif", "gif", "jpg", "jpeg", "bmp", "ico", "svg"]);
+
+/** Apply user-specified rescaling to image files */
+async function applyRescale(files: FileData[]): Promise<FileData[]> {
+  if (!rescaleEnabled || (rescaleWidth <= 0 && rescaleHeight <= 0)) return files;
+
+  const result: FileData[] = [];
+  for (const f of files) {
+    const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
+    if (!rescaleExts.has(ext)) {
+      result.push(f);
+      continue;
+    }
+
+    const dims = await getImageDimensions(f.bytes, ext);
+    let targetW = rescaleWidth || 0;
+    let targetH = rescaleHeight || 0;
+
+    if (targetW > 0 && targetH <= 0) {
+      // Only width set — calculate height from aspect ratio
+      targetH = Math.round(dims.h * (targetW / dims.w));
+    } else if (targetH > 0 && targetW <= 0) {
+      // Only height set — calculate width from aspect ratio
+      targetW = Math.round(dims.w * (targetH / dims.h));
+    }
+
+    if (targetW === dims.w && targetH === dims.h) {
+      result.push(f);
+      continue;
+    }
+
+    const resized = await resizeImageBytes(f.bytes, ext, targetW, targetH);
+    result.push({ name: f.name, bytes: resized });
   }
   return result;
 }
@@ -1431,7 +1569,7 @@ ui.convertButton.onclick = async function () {
         return;
       }
 
-      const processedOutputFiles = await applyBgRemoval(allOutputFiles);
+      const processedOutputFiles = await applyRescale(await applyBgRemoval(allOutputFiles));
 
       if (processedOutputFiles.length === 1) {
         downloadFile(processedOutputFiles[0].bytes, processedOutputFiles[0].name);
@@ -1479,7 +1617,7 @@ ui.convertButton.onclick = async function () {
           return;
         }
 
-        const processedQueueFiles = await applyBgRemoval(output.files);
+        const processedQueueFiles = await applyRescale(await applyBgRemoval(output.files));
         for (const file of processedQueueFiles) {
           downloadFile(file.bytes, file.name);
         }
@@ -1537,7 +1675,7 @@ ui.convertButton.onclick = async function () {
         return;
       }
 
-      const processedSingleFiles = await applyBgRemoval(output.files);
+      const processedSingleFiles = await applyRescale(await applyBgRemoval(output.files));
       for (const file of processedSingleFiles) {
         downloadFile(file.bytes, file.name);
       }
