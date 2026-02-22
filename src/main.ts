@@ -995,11 +995,8 @@ const outputTrayUrls: string[] = [];
 /** Image extensions eligible for background removal */
 const bgRemovalExts = new Set(["png", "webp", "avif", "tiff", "tif", "gif", "jpg", "jpeg", "bmp"]);
 
-/** Map extension to a library-supported output MIME; fallback to image/png for unsupported ones */
-const bgRemovalMime: Record<string, "image/png" | "image/jpeg" | "image/webp"> = {
-  png: "image/png", webp: "image/webp",
-  jpg: "image/jpeg", jpeg: "image/jpeg",
-};
+/** Extensions that support transparency — others get forced to PNG */
+const alphaExts = new Set(["png", "webp", "avif", "tiff", "tif", "gif"]);
 
 /** Apply background removal to image files if the toggle is on */
 async function applyBgRemoval(files: FileData[]): Promise<FileData[]> {
@@ -1024,13 +1021,19 @@ async function applyBgRemoval(files: FileData[]): Promise<FileData[]> {
       result.push(f);
       continue;
     }
-    const outMime = bgRemovalMime[ext] ?? "image/png";
+    // Use webp if the format supports alpha, otherwise force png for transparency
+    const supportsAlpha = alphaExts.has(ext);
+    const outMime: "image/png" | "image/webp" = (ext === "webp") ? "image/webp" : "image/png";
+    const outExt = (ext === "webp") ? "webp" : "png";
     const inputBlob = new Blob([f.bytes as BlobPart], { type: "image/" + ext });
     const blob = await removeBackground(inputBlob, {
+      model: "isnet",
       output: { format: outMime, quality: 1 }
     });
     const buf = await blob.arrayBuffer();
-    result.push({ name: f.name, bytes: new Uint8Array(buf) });
+    const baseName = f.name.replace(/\.[^.]+$/, "");
+    const outName = supportsAlpha ? f.name : baseName + "." + outExt;
+    result.push({ name: outName, bytes: new Uint8Array(buf) });
   }
   return result;
 }
