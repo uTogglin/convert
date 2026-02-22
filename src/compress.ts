@@ -62,6 +62,28 @@ async function ffExecWithLog(args: string[]): Promise<string> {
   return log;
 }
 
+/** Run FFmpeg with progress bar updates (parses time= from log, compares to total duration) */
+async function ffExecWithProgress(args: string[], totalDuration: number, _label: string): Promise<void> {
+  const ff = await getFFmpeg();
+  const handler = (e: LogEvent) => {
+    const match = e.message.match(/time=\s*(\d+):(\d+):(\d+)\.(\d+)/);
+    if (match && totalDuration > 0) {
+      const current = parseInt(match[1]) * 3600 + parseInt(match[2]) * 60 + parseInt(match[3]) + parseInt(match[4]) / 100;
+      const pct = Math.min(Math.round((current / totalDuration) * 100), 99);
+      const bar = document.getElementById("compress-progress-bar");
+      const pctEl = document.getElementById("compress-progress-pct");
+      if (bar) bar.style.width = pct + "%";
+      if (pctEl) pctEl.textContent = pct + "%";
+    }
+  };
+  ff.on("log", handler);
+  try {
+    await ffExec(args);
+  } finally {
+    ff.off("log", handler);
+  }
+}
+
 // ── Lazy ImageMagick init ──
 
 let magickReady: Promise<void> | null = null;
@@ -122,6 +144,14 @@ async function compressImage(file: FileData, targetBytes: number, mode: "auto" |
     avif: MagickFormat.Avif,
   };
 
+  const updateProgress = (step: number, total: number) => {
+    const pct = Math.round((step / total) * 100);
+    const bar = document.getElementById("compress-progress-bar");
+    const pctEl = document.getElementById("compress-progress-pct");
+    if (bar) bar.style.width = pct + "%";
+    if (pctEl) pctEl.textContent = pct + "%";
+  };
+
   // Helper: encode image at given quality
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const encodeAt = (quality: number, fmt: any, resize?: { w: number; h: number }): Uint8Array => {
@@ -162,6 +192,7 @@ async function compressImage(file: FileData, targetBytes: number, mode: "auto" |
     let found = false;
 
     for (let i = 0; i < 8; i++) {
+      updateProgress(i + 1, 8);
       const mid = Math.round((lo + hi) / 2);
       try {
         const result = encodeAt(mid, fmt);
@@ -179,7 +210,7 @@ async function compressImage(file: FileData, targetBytes: number, mode: "auto" |
 
     // Quality alone wasn't enough — resize + quality
     const dims = getDims();
-    return resizeToFit(file, targetBytes, ext, fmt, dims, encodeAt);
+    return resizeToFit(file, targetBytes, ext, fmt, dims, encodeAt, updateProgress);
   }
 
   // Lossless format (PNG/BMP/TIFF) that's still too big → convert to WebP lossy
@@ -188,6 +219,7 @@ async function compressImage(file: FileData, targetBytes: number, mode: "auto" |
     let bestBytes: Uint8Array | null = null;
 
     for (let i = 0; i < 8; i++) {
+      updateProgress(i + 1, 8);
       const mid = Math.round((lo + hi) / 2);
       try {
         const result = encodeAt(mid, MagickFormat.WebP);
@@ -223,7 +255,8 @@ function resizeToFit(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   outFmt: any, dims: { w: number; h: number },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  encodeAt: (quality: number, fmt: any, resize?: { w: number; h: number }) => Uint8Array
+  encodeAt: (quality: number, fmt: any, resize?: { w: number; h: number }) => Uint8Array,
+  progressFn?: (step: number, total: number) => void
 ): FileData {
   const baseName = file.name.replace(/\.[^.]+$/, "");
   let lo = 0.1, hi = 1.0;
@@ -231,6 +264,7 @@ function resizeToFit(
   let found = false;
 
   for (let i = 0; i < 6; i++) {
+    if (progressFn) progressFn(i + 1, 6);
     const scale = (lo + hi) / 2;
     const w = Math.round(dims.w * scale);
     const h = Math.round(dims.h * scale);
@@ -345,7 +379,7 @@ async function compressVideo(file: FileData, targetBytes: number): Promise<FileD
   ];
 
   try {
-    await ffExec(args);
+    await ffExecWithProgress(args, duration, "Compressing video...");
   } catch (e) {
     await ff.deleteFile(inputName).catch(() => {});
     console.warn(`Video compression failed for "${file.name}":`, e);
@@ -421,11 +455,11 @@ async function compressAudio(file: FileData, targetBytes: number, mode: "auto" |
   const outputName = "compress_output." + outExt;
 
   try {
-    await ffExec([
+    await ffExecWithProgress([
       "-hide_banner", "-y", "-i", inputName,
       "-c:a", codec, "-b:a", String(Math.floor(bitrate / 1000)) + "k",
       outputName,
-    ]);
+    ], duration, "Compressing audio...");
   } catch (e) {
     await ff.deleteFile(inputName).catch(() => {});
     console.warn(`Audio compression failed for "${file.name}":`, e);
@@ -447,12 +481,19 @@ async function compressAudio(file: FileData, targetBytes: number, mode: "auto" |
 
 // ── Main entry point ──
 
+function showCompressPopup(html: string) {
+  const popup = document.getElementById("popup");
+  if (popup) popup.innerHTML = html;
+}
+
 export async function applyFileCompression(
   files: FileData[],
   targetBytes: number,
   mode: "auto" | "lossy"
 ): Promise<FileData[]> {
   const result: FileData[] = [];
+  const toCompress = files.filter(f => f.bytes.length > targetBytes);
+  const targetMB = (targetBytes / 1024 / 1024).toFixed(1);
 
   for (const f of files) {
     if (f.bytes.length <= targetBytes) {
@@ -460,7 +501,19 @@ export async function applyFileCompression(
       continue;
     }
 
+    const idx = toCompress.indexOf(f) + 1;
     const type = getMediaType(f.name);
+    const sizeMB = (f.bytes.length / 1024 / 1024).toFixed(1);
+    showCompressPopup(
+      `<h2>Compressing ${type}...</h2>` +
+      `<p>${f.name} (${sizeMB} MB → ${targetMB} MB)</p>` +
+      (toCompress.length > 1 ? `<p style="color:var(--text-muted);font-size:0.85rem">File ${idx} of ${toCompress.length}</p>` : "") +
+      `<div style="background:var(--input-border);border-radius:8px;height:18px;margin:12px 0;overflow:hidden">` +
+        `<div id="compress-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s;border-radius:8px"></div>` +
+      `</div>` +
+      `<p id="compress-progress-pct" style="text-align:center;color:var(--text-muted);font-size:0.85rem">0%</p>`
+    );
+
     switch (type) {
       case "image":
         result.push(await compressImage(f, targetBytes, mode));
