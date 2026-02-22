@@ -112,6 +112,11 @@ let rescaleLockRatio: boolean = (() => {
   try { return localStorage.getItem("convert-rescale-lock") !== "false"; } catch { return true; }
 })();
 
+/** Privacy mode: strips metadata and randomizes filenames for API calls */
+let privacyMode: boolean = (() => {
+  try { return localStorage.getItem("convert-privacy") === "true"; } catch { return false; }
+})();
+
 /** Queue for mixed-category batch conversion */
 let conversionQueue: File[][] = [];
 let currentQueueIndex = 0;
@@ -179,6 +184,7 @@ const ui = {
   rescaleWidthInput: document.querySelector("#rescale-width") as HTMLInputElement,
   rescaleHeightInput: document.querySelector("#rescale-height") as HTMLInputElement,
   rescaleLockInput: document.querySelector("#rescale-lock-ratio") as HTMLInputElement,
+  privacyToggle: document.querySelector("#privacy-toggle") as HTMLButtonElement,
   outputTray: document.querySelector("#output-tray") as HTMLDivElement,
   outputTrayGrid: document.querySelector("#output-tray-grid") as HTMLDivElement,
   downloadAllBtn: document.querySelector("#download-all-btn") as HTMLButtonElement,
@@ -985,6 +991,16 @@ if (ui.rescaleLockInput) {
   });
 }
 
+// ──── Privacy Mode Toggle ────
+if (ui.privacyToggle) {
+  ui.privacyToggle.textContent = privacyMode ? "Privacy mode: On" : "Privacy mode: Off";
+  ui.privacyToggle.addEventListener("click", () => {
+    privacyMode = !privacyMode;
+    ui.privacyToggle.textContent = privacyMode ? "Privacy mode: On" : "Privacy mode: Off";
+    try { localStorage.setItem("convert-privacy", String(privacyMode)); } catch {}
+  });
+}
+
 // ──── Output Tray: Download All / Clear ────
 if (ui.downloadAllBtn) {
   ui.downloadAllBtn.addEventListener("click", () => {
@@ -1105,11 +1121,48 @@ const bgRemovalExts = new Set(["png", "webp", "avif", "tiff", "tif", "gif", "jpg
 /** Extensions that support transparency — others get forced to PNG */
 const alphaExts = new Set(["png", "webp", "avif", "tiff", "tif", "gif"]);
 
+/** Strip metadata from an image by re-encoding through canvas */
+async function stripImageMetadata(bytes: Uint8Array, ext: string): Promise<Uint8Array> {
+  const blob = new Blob([bytes as BlobPart], { type: "image/" + ext });
+  const url = URL.createObjectURL(blob);
+  const img = new Image();
+  await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = url; });
+  URL.revokeObjectURL(url);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = img.width;
+  canvas.height = img.height;
+  const ctx = canvas.getContext("2d")!;
+  ctx.drawImage(img, 0, 0);
+
+  const outMime = (ext === "webp") ? "image/webp" : (ext === "jpg" || ext === "jpeg") ? "image/jpeg" : "image/png";
+  const outBlob = await new Promise<Blob>((res) => canvas.toBlob(b => res(b!), outMime, 1));
+  return new Uint8Array(await outBlob.arrayBuffer());
+}
+
+/** Apply metadata stripping to all image files if privacy mode is on */
+async function applyMetadataStrip(files: FileData[]): Promise<FileData[]> {
+  if (!privacyMode) return files;
+  const result: FileData[] = [];
+  for (const f of files) {
+    const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
+    if (bgRemovalExts.has(ext)) {
+      const stripped = await stripImageMetadata(f.bytes, ext);
+      result.push({ name: f.name, bytes: stripped });
+    } else {
+      result.push(f);
+    }
+  }
+  return result;
+}
+
 /** Remove background via remove.bg API */
 async function removeBgViaApi(fileBytes: Uint8Array, ext: string): Promise<Uint8Array> {
   if (!bgApiKey) throw new Error("No remove.bg API key provided. Add your key in Settings → Processing.");
+  const sendBytes = privacyMode ? await stripImageMetadata(fileBytes, ext) : fileBytes;
+  const fileName = privacyMode ? crypto.randomUUID().substring(0, 8) + "." + ext : "image." + ext;
   const formData = new FormData();
-  formData.append("image_file", new Blob([fileBytes as BlobPart], { type: "image/" + ext }), "image." + ext);
+  formData.append("image_file", new Blob([sendBytes as BlobPart], { type: "image/" + ext }), fileName);
   formData.append("size", "auto");
   const resp = await fetch("https://api.remove.bg/v1.0/removebg", {
     method: "POST",
@@ -1318,6 +1371,14 @@ function triggerDownload(blobUrl: string, name: string) {
   link.click();
 }
 
+/** Format byte count as human-readable size */
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  return (bytes / (1024 * 1024 * 1024)).toFixed(1) + " GB";
+}
+
 /** Add a converted file to the output tray */
 function addToOutputTray(bytes: Uint8Array, name: string) {
   const blob = new Blob([bytes as BlobPart], { type: "application/octet-stream" });
@@ -1363,8 +1424,13 @@ function addToOutputTray(bytes: Uint8Array, name: string) {
   nameEl.textContent = name;
   nameEl.title = name;
 
+  const sizeEl = document.createElement("div");
+  sizeEl.className = "output-item-size";
+  sizeEl.textContent = formatFileSize(bytes.length);
+
   item.appendChild(thumb);
   item.appendChild(nameEl);
+  item.appendChild(sizeEl);
 
   // Drag support for drag-to-desktop (Chrome)
   item.addEventListener("dragstart", (e) => {
@@ -1569,7 +1635,7 @@ ui.convertButton.onclick = async function () {
         return;
       }
 
-      const processedOutputFiles = await applyRescale(await applyBgRemoval(allOutputFiles));
+      const processedOutputFiles = await applyRescale(await applyMetadataStrip(await applyBgRemoval(allOutputFiles)));
 
       if (processedOutputFiles.length === 1) {
         downloadFile(processedOutputFiles[0].bytes, processedOutputFiles[0].name);
@@ -1582,8 +1648,10 @@ ui.convertButton.onclick = async function () {
         for (const f of processedOutputFiles) downloadFile(f.bytes, f.name);
       }
 
+      const totalSize = processedOutputFiles.reduce((s, f) => s + f.bytes.length, 0);
       window.showPopup(
         `<h2>Converted ${processedOutputFiles.length} file${processedOutputFiles.length !== 1 ? "s" : ""} to ${outputFormat.format}!</h2>` +
+        `<p>Total size: ${formatFileSize(totalSize)}</p>` +
         (processedOutputFiles.length > 1 && archiveMultiOutput ? `<p>Results delivered as a ZIP archive.</p>` : ``) +
         `<button onclick="window.hidePopup()">OK</button>`
       );
@@ -1617,7 +1685,7 @@ ui.convertButton.onclick = async function () {
           return;
         }
 
-        const processedQueueFiles = await applyRescale(await applyBgRemoval(output.files));
+        const processedQueueFiles = await applyRescale(await applyMetadataStrip(await applyBgRemoval(output.files)));
         for (const file of processedQueueFiles) {
           downloadFile(file.bytes, file.name);
         }
@@ -1675,13 +1743,15 @@ ui.convertButton.onclick = async function () {
         return;
       }
 
-      const processedSingleFiles = await applyRescale(await applyBgRemoval(output.files));
+      const processedSingleFiles = await applyRescale(await applyMetadataStrip(await applyBgRemoval(output.files)));
       for (const file of processedSingleFiles) {
         downloadFile(file.bytes, file.name);
       }
 
+      const singleTotalSize = processedSingleFiles.reduce((s, f) => s + f.bytes.length, 0);
       window.showPopup(
         `<h2>Converted ${inputOption.format.format} to ${outputOption.format.format}!</h2>` +
+        `<p>Size: ${formatFileSize(singleTotalSize)}</p>` +
         `<p>Path used: <b>${output.path.map(c => c.format.format).join(" → ")}</b>.</p>\n` +
         `<button onclick="window.hidePopup()">OK</button>`
       );
