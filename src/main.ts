@@ -83,6 +83,11 @@ let removeBg: boolean = (() => {
   try { return localStorage.getItem("convert-remove-bg") === "true"; } catch { return false; }
 })();
 
+/** Correction: when true, preserves text/graphics during background removal */
+let bgCorrection: boolean = (() => {
+  try { return localStorage.getItem("convert-bg-correction") === "true"; } catch { return false; }
+})();
+
 /** Queue for mixed-category batch conversion */
 let conversionQueue: File[][] = [];
 let currentQueueIndex = 0;
@@ -141,6 +146,7 @@ const ui = {
   autoDownloadToggle: document.querySelector("#auto-download-toggle") as HTMLButtonElement,
   archiveMultiToggle: document.querySelector("#archive-multi-toggle") as HTMLButtonElement,
   removeBgToggle: document.querySelector("#remove-bg-toggle") as HTMLButtonElement,
+  bgCorrectionToggle: document.querySelector("#bg-correction-toggle") as HTMLButtonElement,
   outputTray: document.querySelector("#output-tray") as HTMLDivElement,
   outputTrayGrid: document.querySelector("#output-tray-grid") as HTMLDivElement,
   downloadAllBtn: document.querySelector("#download-all-btn") as HTMLButtonElement,
@@ -871,10 +877,22 @@ if (ui.archiveMultiToggle) {
 // ──── Remove Background Toggle ────
 if (ui.removeBgToggle) {
   ui.removeBgToggle.textContent = removeBg ? "Remove background: On" : "Remove background: Off";
+  if (ui.bgCorrectionToggle) ui.bgCorrectionToggle.classList.toggle("hidden", !removeBg);
   ui.removeBgToggle.addEventListener("click", () => {
     removeBg = !removeBg;
     ui.removeBgToggle.textContent = removeBg ? "Remove background: On" : "Remove background: Off";
+    if (ui.bgCorrectionToggle) ui.bgCorrectionToggle.classList.toggle("hidden", !removeBg);
     try { localStorage.setItem("convert-remove-bg", String(removeBg)); } catch {}
+  });
+}
+
+// ──── Background Correction Toggle ────
+if (ui.bgCorrectionToggle) {
+  ui.bgCorrectionToggle.textContent = bgCorrection ? "Correction: On" : "Correction: Off";
+  ui.bgCorrectionToggle.addEventListener("click", () => {
+    bgCorrection = !bgCorrection;
+    ui.bgCorrectionToggle.textContent = bgCorrection ? "Correction: On" : "Correction: Off";
+    try { localStorage.setItem("convert-bg-correction", String(bgCorrection)); } catch {}
   });
 }
 
@@ -1044,12 +1062,42 @@ async function applyBgRemoval(files: FileData[]): Promise<FileData[]> {
     const maskResult = (output as { mask: InstanceType<typeof RawImage> }[])[0];
     const mask = maskResult.mask;
 
-    // Resize mask to match original image if needed, then apply as alpha
+    // Resize mask to match original image if needed
     const resizedMask = mask.width !== img.width || mask.height !== img.height
       ? await mask.resize(img.width, img.height)
       : mask;
-    for (let i = 0; i < imageData.data.length / 4; i++) {
-      imageData.data[i * 4 + 3] = resizedMask.data[i];
+
+    const pixels = imageData.data;
+    if (bgCorrection) {
+      // Correction mode: preserve text/graphics that differ from the dominant background color
+      let bgR = 0, bgG = 0, bgB = 0, bgCount = 0;
+      for (let i = 0; i < resizedMask.data.length; i++) {
+        if (resizedMask.data[i] < 30) {
+          bgR += pixels[i * 4];
+          bgG += pixels[i * 4 + 1];
+          bgB += pixels[i * 4 + 2];
+          bgCount++;
+        }
+      }
+      if (bgCount > 0) { bgR /= bgCount; bgG /= bgCount; bgB /= bgCount; }
+
+      const colorThreshold = 40;
+      for (let i = 0; i < resizedMask.data.length; i++) {
+        if (resizedMask.data[i] >= 128) {
+          pixels[i * 4 + 3] = 255;
+        } else {
+          const dr = pixels[i * 4] - bgR;
+          const dg = pixels[i * 4 + 1] - bgG;
+          const db = pixels[i * 4 + 2] - bgB;
+          const dist = Math.sqrt(dr * dr + dg * dg + db * db);
+          pixels[i * 4 + 3] = dist > colorThreshold ? 255 : 0;
+        }
+      }
+    } else {
+      // Standard mode: apply mask directly as alpha
+      for (let i = 0; i < resizedMask.data.length; i++) {
+        pixels[i * 4 + 3] = resizedMask.data[i];
+      }
     }
     ctx.putImageData(imageData, 0, 0);
 
