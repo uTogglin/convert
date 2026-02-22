@@ -68,6 +68,35 @@ let selectedFiles: File[] = [];
  */
 let simpleMode: boolean = true;
 
+/** Queue for mixed-category batch conversion */
+let conversionQueue: File[][] = [];
+let currentQueueIndex = 0;
+/** True when all uploaded files share the same media category */
+let isSameCategoryBatch = false;
+/** All files from the original upload (before queue splitting) */
+let allUploadedFiles: File[] = [];
+
+/** Returns the broad media category from a file's MIME type */
+function getMediaCategory(file: File): string {
+  return file.type.split("/")[0] || "unknown";
+}
+
+/** Finds the matching allOptions entry for a file */
+function findInputOption(file: File): { format: FileFormat; handler: FormatHandler } | null {
+  const mime = normalizeMimeType(file.type);
+  const ext = file.name.split(".").pop()?.toLowerCase();
+  const matches = allOptions.filter(o => o.format.from && o.format.mime === mime);
+  if (matches.length === 0) {
+    // Fall back to extension match
+    return allOptions.find(o => o.format.from && o.format.extension?.toLowerCase() === ext) || null;
+  }
+  if (matches.length > 1 && ext) {
+    const extMatch = matches.find(o => o.format.extension?.toLowerCase() === ext);
+    if (extMatch) return extMatch;
+  }
+  return matches[0];
+}
+
 /** Handlers that support conversion from any formats. */
 const conversionsFromAnyInput: ConvertPathNode[] = handlers
 .filter(h => h.supportAnyInput && h.supportedFormats)
@@ -155,9 +184,13 @@ const renderFilePreviews = (files: File[]) => {
   header.className = "file-preview-header";
 
   const countLabel = document.createElement("span");
-  countLabel.textContent = files.length === 1
-    ? "1 file selected"
-    : `${files.length} files selected`;
+  if (conversionQueue.length > 1) {
+    countLabel.textContent = `Group ${currentQueueIndex + 1} of ${conversionQueue.length} — ${files.length} file${files.length !== 1 ? "s" : ""}`;
+  } else {
+    countLabel.textContent = files.length === 1
+      ? "1 file selected"
+      : `${files.length} files selected`;
+  }
 
   const addMoreBtn = document.createElement("button");
   addMoreBtn.className = "browse-btn";
@@ -234,25 +267,44 @@ const fileSelectHandler = (event: Event) => {
   const files = Array.from(inputFiles);
   if (files.length === 0) return;
 
-  if (files.some(c => c.type !== files[0].type)) {
-    return alert("All input files must be of the same type.");
-  }
   files.sort((a, b) => a.name === b.name ? 0 : (a.name < b.name ? -1 : 1));
-  selectedFiles = files;
+  allUploadedFiles = files;
 
-  renderFilePreviews(files);
+  // Determine if all files share the same media category
+  const categories = new Set(files.map(f => getMediaCategory(f)));
+  isSameCategoryBatch = categories.size === 1;
 
-  // Common MIME type adjustments (to match "mime" library)
-  let mimeType = normalizeMimeType(files[0].type);
+  if (isSameCategoryBatch) {
+    // Same category: show all files, auto-select input format from first file
+    conversionQueue = [];
+    currentQueueIndex = 0;
+    selectedFiles = files;
+    renderFilePreviews(files);
+    autoSelectInputFormat(files[0]);
+  } else {
+    // Mixed categories: group by media category and start queue
+    const groupMap = new Map<string, File[]>();
+    for (const file of files) {
+      const cat = getMediaCategory(file);
+      if (!groupMap.has(cat)) groupMap.set(cat, []);
+      groupMap.get(cat)!.push(file);
+    }
+    conversionQueue = Array.from(groupMap.values());
+    currentQueueIndex = 0;
+    presentQueueGroup(currentQueueIndex);
+  }
+};
 
-  const fileExtension = files[0].name.split(".").pop()?.toLowerCase();
+/** Auto-select the input format button for a given file */
+function autoSelectInputFormat(file: File) {
+  const mimeType = normalizeMimeType(file.type);
+  const fileExtension = file.name.split(".").pop()?.toLowerCase();
 
-  // Find all buttons matching the input MIME type.
   const buttonsMatchingMime = Array.from(ui.inputList.children).filter(button => {
     if (!(button instanceof HTMLButtonElement)) return false;
     return button.getAttribute("mime-type") === mimeType;
   }) as HTMLButtonElement[];
-  // If there are multiple, find one with a matching extension too
+
   let inputFormatButton: HTMLButtonElement;
   if (buttonsMatchingMime.length > 1) {
     inputFormatButton = buttonsMatchingMime.find(button => {
@@ -264,7 +316,7 @@ const fileSelectHandler = (event: Event) => {
   } else {
     inputFormatButton = buttonsMatchingMime[0];
   }
-  // Click button with matching MIME type.
+
   if (mimeType && inputFormatButton instanceof HTMLButtonElement) {
     inputFormatButton.click();
     ui.inputSearch.value = mimeType;
@@ -272,7 +324,6 @@ const fileSelectHandler = (event: Event) => {
     return;
   }
 
-  // Fall back to matching format by file extension if MIME type wasn't found.
   const buttonExtension = Array.from(ui.inputList.children).find(button => {
     if (!(button instanceof HTMLButtonElement)) return false;
     const formatIndex = button.getAttribute("format-index");
@@ -286,10 +337,21 @@ const fileSelectHandler = (event: Event) => {
   } else {
     ui.inputSearch.value = fileExtension || "";
   }
-
   filterButtonList(ui.inputList, ui.inputSearch.value);
+}
 
-};
+/** Present a specific queue group for conversion */
+function presentQueueGroup(index: number) {
+  const group = conversionQueue[index];
+  selectedFiles = group;
+  renderFilePreviews(group);
+  autoSelectInputFormat(group[0]);
+
+  // Clear output selection
+  const prevOutput = ui.outputList.querySelector(".selected");
+  if (prevOutput) prevOutput.className = "";
+  ui.convertButton.className = "disabled";
+}
 
 // Add the file selection handler to both the file input element and to
 // the window as a drag-and-drop event, and to the clipboard paste event.
@@ -395,7 +457,11 @@ async function buildOptionList () {
         if (previous) previous.className = "";
         event.target.className = "selected";
         const allSelected = document.getElementsByClassName("selected");
-        if (allSelected.length === 2) {
+        // In same-category batch mode with mixed exact formats, only output selection is needed
+        const outputSelected = ui.outputList.querySelector(".selected");
+        if (isSameCategoryBatch && allUploadedFiles.length > 1 && outputSelected) {
+          ui.convertButton.className = "";
+        } else if (allSelected.length === 2) {
           ui.convertButton.className = "";
         } else {
           ui.convertButton.className = "disabled";
@@ -773,54 +839,175 @@ ui.convertButton.onclick = async function () {
     return alert("Select an input file.");
   }
 
-  const inputButton = document.querySelector("#from-list .selected");
-  if (!inputButton) return alert("Specify input file format.");
-
   const outputButton = document.querySelector("#to-list .selected");
   if (!outputButton) return alert("Specify output file format.");
-
-  const inputOption = allOptions[Number(inputButton.getAttribute("format-index"))];
   const outputOption = allOptions[Number(outputButton.getAttribute("format-index"))];
-
-  const inputFormat = inputOption.format;
   const outputFormat = outputOption.format;
 
   try {
 
-    const inputFileData = [];
-    for (const inputFile of inputFiles) {
-      const inputBuffer = await inputFile.arrayBuffer();
-      const inputBytes = new Uint8Array(inputBuffer);
-      if (
-        inputFormat.mime === outputFormat.mime
-        && inputFormat.format === outputFormat.format
-      ) {
-        downloadFile(inputBytes, inputFile.name);
-        continue;
+    if (isSameCategoryBatch && allUploadedFiles.length > 1) {
+      // ── Same-category batch: group by exact MIME, convert all, zip if multiple outputs ──
+      const groups = new Map<string, { files: File[], inputOption: { format: FileFormat; handler: FormatHandler } }>();
+      for (const file of inputFiles) {
+        const opt = findInputOption(file);
+        if (!opt) {
+          alert(`Could not determine format for "${file.name}".`);
+          return;
+        }
+        const key = `${opt.format.mime}|${opt.format.format}`;
+        if (!groups.has(key)) groups.set(key, { files: [], inputOption: opt });
+        groups.get(key)!.files.push(file);
       }
-      inputFileData.push({ name: inputFile.name, bytes: inputBytes });
+
+      window.showPopup("<h2>Finding conversion route...</h2>");
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+      const allOutputFiles: FileData[] = [];
+
+      for (const group of groups.values()) {
+        const { files: groupFiles, inputOption } = group;
+
+        // If input and output are the same format, pass through
+        if (inputOption.format.mime === outputFormat.mime && inputOption.format.format === outputFormat.format) {
+          for (const f of groupFiles) {
+            const buf = await f.arrayBuffer();
+            allOutputFiles.push({ name: f.name, bytes: new Uint8Array(buf) });
+          }
+          continue;
+        }
+
+        const fileData: FileData[] = [];
+        for (const f of groupFiles) {
+          const buf = await f.arrayBuffer();
+          fileData.push({ name: f.name, bytes: new Uint8Array(buf) });
+        }
+
+        const output = await window.tryConvertByTraversing(fileData, inputOption, outputOption);
+        if (!output) {
+          window.hidePopup();
+          alert(`Failed to find conversion route for ${inputOption.format.format} → ${outputFormat.format}.`);
+          return;
+        }
+        allOutputFiles.push(...output.files);
+      }
+
+      if (allOutputFiles.length === 0) {
+        window.hidePopup();
+        return;
+      }
+
+      if (allOutputFiles.length === 1) {
+        downloadFile(allOutputFiles[0].bytes, allOutputFiles[0].name);
+      } else {
+        const zip = new JSZip();
+        for (const f of allOutputFiles) zip.file(f.name, f.bytes);
+        const zipBytes = await zip.generateAsync({ type: "uint8array" });
+        downloadFile(zipBytes, "converted.zip");
+      }
+
+      window.showPopup(
+        `<h2>Converted ${allOutputFiles.length} file${allOutputFiles.length !== 1 ? "s" : ""} to ${outputFormat.format}!</h2>` +
+        (allOutputFiles.length > 1 ? `<p>Results delivered as a ZIP archive.</p>` : ``) +
+        `<button onclick="window.hidePopup()">OK</button>`
+      );
+
+    } else if (conversionQueue.length > 1) {
+      // ── Mixed-category queue: convert current group, advance queue ──
+      const inputButton = document.querySelector("#from-list .selected");
+      if (!inputButton) return alert("Specify input file format.");
+      const inputOption = allOptions[Number(inputButton.getAttribute("format-index"))];
+      const inputFormat = inputOption.format;
+
+      const inputFileData: FileData[] = [];
+      for (const inputFile of inputFiles) {
+        const inputBuffer = await inputFile.arrayBuffer();
+        const inputBytes = new Uint8Array(inputBuffer);
+        if (inputFormat.mime === outputFormat.mime && inputFormat.format === outputFormat.format) {
+          downloadFile(inputBytes, inputFile.name);
+          continue;
+        }
+        inputFileData.push({ name: inputFile.name, bytes: inputBytes });
+      }
+
+      if (inputFileData.length > 0) {
+        window.showPopup("<h2>Finding conversion route...</h2>");
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+        const output = await window.tryConvertByTraversing(inputFileData, inputOption, outputOption);
+        if (!output) {
+          window.hidePopup();
+          alert("Failed to find conversion route.");
+          return;
+        }
+
+        for (const file of output.files) {
+          downloadFile(file.bytes, file.name);
+        }
+      }
+
+      // Advance to next queue group
+      currentQueueIndex++;
+      if (currentQueueIndex < conversionQueue.length) {
+        window.showPopup(
+          `<h2>Group ${currentQueueIndex} of ${conversionQueue.length} done!</h2>` +
+          `<p>Advancing to next group...</p>` +
+          `<button onclick="window.hidePopup()">OK</button>`
+        );
+        // Present next group after a short delay
+        setTimeout(() => {
+          window.hidePopup();
+          presentQueueGroup(currentQueueIndex);
+        }, 1000);
+      } else {
+        // All groups done
+        conversionQueue = [];
+        currentQueueIndex = 0;
+        window.showPopup(
+          `<h2>All conversions complete!</h2>` +
+          `<p>All ${allUploadedFiles.length} files have been converted.</p>` +
+          `<button onclick="window.hidePopup()">OK</button>`
+        );
+      }
+
+    } else {
+      // ── Single file or single-type group: original behavior ──
+      const inputButton = document.querySelector("#from-list .selected");
+      if (!inputButton) return alert("Specify input file format.");
+      const inputOption = allOptions[Number(inputButton.getAttribute("format-index"))];
+      const inputFormat = inputOption.format;
+
+      const inputFileData: FileData[] = [];
+      for (const inputFile of inputFiles) {
+        const inputBuffer = await inputFile.arrayBuffer();
+        const inputBytes = new Uint8Array(inputBuffer);
+        if (inputFormat.mime === outputFormat.mime && inputFormat.format === outputFormat.format) {
+          downloadFile(inputBytes, inputFile.name);
+          continue;
+        }
+        inputFileData.push({ name: inputFile.name, bytes: inputBytes });
+      }
+
+      window.showPopup("<h2>Finding conversion route...</h2>");
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+      const output = await window.tryConvertByTraversing(inputFileData, inputOption, outputOption);
+      if (!output) {
+        window.hidePopup();
+        alert("Failed to find conversion route.");
+        return;
+      }
+
+      for (const file of output.files) {
+        downloadFile(file.bytes, file.name);
+      }
+
+      window.showPopup(
+        `<h2>Converted ${inputOption.format.format} to ${outputOption.format.format}!</h2>` +
+        `<p>Path used: <b>${output.path.map(c => c.format.format).join(" → ")}</b>.</p>\n` +
+        `<button onclick="window.hidePopup()">OK</button>`
+      );
     }
-
-    window.showPopup("<h2>Finding conversion route...</h2>");
-    // Delay for a bit to give the browser time to render
-    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-
-    const output = await window.tryConvertByTraversing(inputFileData, inputOption, outputOption);
-    if (!output) {
-      window.hidePopup();
-      alert("Failed to find conversion route.");
-      return;
-    }
-
-    for (const file of output.files) {
-      downloadFile(file.bytes, file.name);
-    }
-
-    window.showPopup(
-      `<h2>Converted ${inputOption.format.format} to ${outputOption.format.format}!</h2>` +
-      `<p>Path used: <b>${output.path.map(c => c.format.format).join(" → ")}</b>.</p>\n` +
-      `<button onclick="window.hidePopup()">OK</button>`
-    );
 
   } catch (e) {
 
