@@ -1360,20 +1360,20 @@ const extToMagickFormat: Record<string, MagickFormat> = {
 /** Get dimensions of an image from its bytes via ImageMagick */
 function getImageDimensions(bytes: Uint8Array, _ext: string): Promise<{ w: number; h: number }> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return ImageMagick.read(bytes as any, (img) => {
-    return { w: img.width, h: img.height };
-  });
+  return Promise.resolve(ImageMagick.read(bytes as any, (img: any) => {
+    return { w: img.width as number, h: img.height as number };
+  }));
 }
 
 /** Resize image bytes to target dimensions via ImageMagick (lossless) */
 function resizeImageBytes(bytes: Uint8Array, ext: string, w: number, h: number): Promise<Uint8Array> {
   const fmt = extToMagickFormat[ext] ?? MagickFormat.Png;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return ImageMagick.read(bytes as any, (img) => {
+  return Promise.resolve(ImageMagick.read(bytes as any, (img: any) => {
     img.resize(w, h);
     img.quality = 100;
-    return img.write(fmt, (out) => new Uint8Array(out));
-  });
+    return img.write(fmt, (out: any) => new Uint8Array(out));
+  }));
 }
 
 /** Image extensions eligible for rescaling */
