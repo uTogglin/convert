@@ -5,7 +5,6 @@ import { TraversionGraph } from "./TraversionGraph.js";
 import JSZip from "jszip";
 import { gzip as pakoGzip } from "pako";
 import { createTar } from "./handlers/archive.js";
-import { ImageMagick, MagickFormat } from "@imagemagick/magick-wasm";
 
 // ── In-app console log capture ─────────────────────────────────────────────
 interface AppLogEntry { level: "error" | "warn" | "info"; msg: string; time: string; }
@@ -1349,16 +1348,9 @@ async function resizeToMatch(imgBytes: Uint8Array, refBytes: Uint8Array, ext: st
   return resizeImageBytes(imgBytes, ext, refDims.w, refDims.h);
 }
 
-/** Map file extension to MagickFormat for format-preserving I/O */
-const extToMagickFormat: Record<string, MagickFormat> = {
-  png: MagickFormat.Png, webp: MagickFormat.WebP, avif: MagickFormat.Avif,
-  tiff: MagickFormat.Tiff, tif: MagickFormat.Tiff, gif: MagickFormat.Gif,
-  jpg: MagickFormat.Jpeg, jpeg: MagickFormat.Jpeg, bmp: MagickFormat.Bmp,
-  ico: MagickFormat.Ico, svg: MagickFormat.Svg,
-};
-
 /** Get dimensions of an image from its bytes via ImageMagick */
-function getImageDimensions(bytes: Uint8Array, _ext: string): Promise<{ w: number; h: number }> {
+async function getImageDimensions(bytes: Uint8Array, _ext: string): Promise<{ w: number; h: number }> {
+  const { ImageMagick } = await import("@imagemagick/magick-wasm");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return Promise.resolve(ImageMagick.read(bytes as any, (img: any) => {
     return { w: img.width as number, h: img.height as number };
@@ -1366,7 +1358,14 @@ function getImageDimensions(bytes: Uint8Array, _ext: string): Promise<{ w: numbe
 }
 
 /** Resize image bytes to target dimensions via ImageMagick (lossless) */
-function resizeImageBytes(bytes: Uint8Array, ext: string, w: number, h: number): Promise<Uint8Array> {
+async function resizeImageBytes(bytes: Uint8Array, ext: string, w: number, h: number): Promise<Uint8Array> {
+  const { ImageMagick, MagickFormat } = await import("@imagemagick/magick-wasm");
+  const extToMagickFormat: Record<string, typeof MagickFormat[keyof typeof MagickFormat]> = {
+    png: MagickFormat.Png, webp: MagickFormat.WebP, avif: MagickFormat.Avif,
+    tiff: MagickFormat.Tiff, tif: MagickFormat.Tiff, gif: MagickFormat.Gif,
+    jpg: MagickFormat.Jpeg, jpeg: MagickFormat.Jpeg, bmp: MagickFormat.Bmp,
+    ico: MagickFormat.Ico, svg: MagickFormat.Svg,
+  };
   const fmt = extToMagickFormat[ext] ?? MagickFormat.Png;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return Promise.resolve(ImageMagick.read(bytes as any, (img: any) => {
