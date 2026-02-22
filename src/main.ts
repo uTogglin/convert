@@ -1046,7 +1046,7 @@ async function applyBgRemoval(files: FileData[]): Promise<FileData[]> {
 
     // Resize mask to match original image if needed, then apply as alpha
     const resizedMask = mask.width !== img.width || mask.height !== img.height
-      ? mask.resize(img.width, img.height)
+      ? await mask.resize(img.width, img.height)
       : mask;
     for (let i = 0; i < imageData.data.length / 4; i++) {
       imageData.data[i * 4 + 3] = resizedMask.data[i];
