@@ -1168,6 +1168,7 @@ async function removeBgViaApi(fileBytes: Uint8Array, ext: string): Promise<Uint8
     method: "POST",
     headers: { "X-Api-Key": bgApiKey },
     body: formData,
+    referrerPolicy: "no-referrer",
   });
   if (!resp.ok) {
     const errText = await resp.text();
