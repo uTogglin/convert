@@ -2,6 +2,9 @@ import type { FileData } from "./FormatHandler.ts";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import type { LogEvent } from "@ffmpeg/ffmpeg";
 
+/** Yield to the browser so pending DOM updates get painted */
+const yieldToBrowser = () => new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
 // ── Lazy FFmpeg instance for compression ──
 
 let compressFFmpeg: FFmpeg | null = null;
@@ -159,12 +162,13 @@ async function compressImage(file: FileData, targetBytes: number, mode: "auto" |
     avif: MagickFormat.Avif,
   };
 
-  const updateProgress = (step: number, total: number) => {
+  const updateProgress = async (step: number, total: number) => {
     const pct = Math.round((step / total) * 100);
     const bar = document.getElementById("compress-progress-bar");
     const pctEl = document.getElementById("compress-progress-pct");
     if (bar) bar.style.width = pct + "%";
     if (pctEl) pctEl.textContent = pct + "%";
+    await yieldToBrowser();
   };
 
   // Helper: encode image at given quality
@@ -207,7 +211,7 @@ async function compressImage(file: FileData, targetBytes: number, mode: "auto" |
     let found = false;
 
     for (let i = 0; i < 8; i++) {
-      updateProgress(i + 1, 8);
+      await updateProgress(i + 1, 8);
       const mid = Math.round((lo + hi) / 2);
       try {
         const result = encodeAt(mid, fmt);
@@ -225,7 +229,7 @@ async function compressImage(file: FileData, targetBytes: number, mode: "auto" |
 
     // Quality alone wasn't enough — resize + quality
     const dims = getDims();
-    return resizeToFit(file, targetBytes, ext, fmt, dims, encodeAt, updateProgress);
+    return await resizeToFit(file, targetBytes, ext, fmt, dims, encodeAt, updateProgress);
   }
 
   // Lossless format (PNG/BMP/TIFF) that's still too big → convert to WebP lossy
@@ -234,7 +238,7 @@ async function compressImage(file: FileData, targetBytes: number, mode: "auto" |
     let bestBytes: Uint8Array | null = null;
 
     for (let i = 0; i < 8; i++) {
-      updateProgress(i + 1, 8);
+      await updateProgress(i + 1, 8);
       const mid = Math.round((lo + hi) / 2);
       try {
         const result = encodeAt(mid, MagickFormat.WebP);
@@ -265,21 +269,21 @@ async function compressImage(file: FileData, targetBytes: number, mode: "auto" |
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function resizeToFit(
+async function resizeToFit(
   file: FileData, targetBytes: number, outExt: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   outFmt: any, dims: { w: number; h: number },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   encodeAt: (quality: number, fmt: any, resize?: { w: number; h: number }) => Uint8Array,
-  progressFn?: (step: number, total: number) => void
-): FileData {
+  progressFn?: (step: number, total: number) => Promise<void> | void
+): Promise<FileData> {
   const baseName = file.name.replace(/\.[^.]+$/, "");
   let lo = 0.1, hi = 1.0;
   let bestBytes: Uint8Array = file.bytes;
   let found = false;
 
   for (let i = 0; i < 6; i++) {
-    if (progressFn) progressFn(i + 1, 6);
+    if (progressFn) await progressFn(i + 1, 6);
     const scale = (lo + hi) / 2;
     const w = Math.round(dims.w * scale);
     const h = Math.round(dims.h * scale);
@@ -313,8 +317,18 @@ async function compressGif(file: FileData, targetBytes: number): Promise<FileDat
   const scales = [1, 0.75, 0.5, 0.35];
   const fpsOptions = [15, 10, 8];
 
+  const totalAttempts = fpsOptions.length * scales.length;
+  let attempt = 0;
+
   for (const fps of fpsOptions) {
     for (const scale of scales) {
+      attempt++;
+      const pct = Math.min(Math.round((attempt / totalAttempts) * 100), 99);
+      const bar = document.getElementById("compress-progress-bar");
+      const pctEl = document.getElementById("compress-progress-pct");
+      if (bar) bar.style.width = pct + "%";
+      if (pctEl) pctEl.textContent = pct + "%";
+
       const vf = scale < 1
         ? `fps=${fps},scale=iw*${scale}:ih*${scale}:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=128[p];[s1][p]paletteuse`
         : `fps=${fps},split[s0][s1];[s0]palettegen=max_colors=128[p];[s1][p]paletteuse`;
@@ -496,9 +510,10 @@ async function compressAudio(file: FileData, targetBytes: number, mode: "auto" |
 
 // ── Main entry point ──
 
-function showCompressPopup(html: string) {
+async function showCompressPopup(html: string) {
   const popup = document.getElementById("popup");
   if (popup) popup.innerHTML = html;
+  await yieldToBrowser();
 }
 
 export async function applyFileCompression(
@@ -519,7 +534,7 @@ export async function applyFileCompression(
     const idx = toCompress.indexOf(f) + 1;
     const type = getMediaType(f.name);
     const sizeMB = (f.bytes.length / 1024 / 1024).toFixed(1);
-    showCompressPopup(
+    await showCompressPopup(
       `<h2>Compressing ${type}...</h2>` +
       `<p>${f.name} (${sizeMB} MB → ${targetMB} MB)</p>` +
       (toCompress.length > 1 ? `<p style="color:var(--text-muted);font-size:0.85rem">File ${idx} of ${toCompress.length}</p>` : "") +
