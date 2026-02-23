@@ -3,7 +3,7 @@ import { FFmpeg } from "@ffmpeg/ffmpeg";
 import type { LogEvent } from "@ffmpeg/ffmpeg";
 
 /** Yield to the browser so pending DOM updates get painted */
-const yieldToBrowser = () => new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+const yieldToBrowser = () => new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
 
 // ── Lazy FFmpeg instance for compression ──
 
