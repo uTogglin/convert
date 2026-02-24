@@ -3,8 +3,12 @@ import { PriorityQueue } from './PriorityQueue.ts';
 
 interface QueueNode {
     index: number;
+    /** f = gcost + heuristic — used for priority queue ordering */
     cost: number;
+    /** g = actual cost from start — used for path result and logging */
+    gcost: number;
     path: ConvertPathNode[];
+    /** Only used in multi-path (simple=false) mode */
     visitedBorder: number;
 };
 interface CategoryChangeCost {
@@ -28,6 +32,10 @@ const HANDLER_PRIORITY_COST : number = 0.02; // Cost multiplier for handler prio
 const FORMAT_PRIORITY_COST : number = 0.05; // Cost multiplier for format priority. Higher values will make the algorithm prefer formats with higher priority more strongly.
 
 const LOG_FREQUENCY = 1000;
+/** Yield to the browser event loop every this many iterations to stay responsive */
+const YIELD_EVERY = 200;
+/** Hard cap on search iterations — avoids infinite hang when no route exists. */
+const MAX_SEARCH_ITERATIONS = 500_000;
 
 export interface Node {
     identifier: string;
@@ -42,9 +50,22 @@ export interface Edge {
 };
 
 export class TraversionGraph {
+    constructor(disableSafeChecks: boolean = false) {
+        this.disableSafeChecks = disableSafeChecks;
+    }
+    private disableSafeChecks: boolean;
     private handlers: FormatHandler[] = [];
     private nodes: Node[] = [];
     private edges: Edge[] = [];
+    /** Set to true by abortSearch() to cancel an in-progress searchPath call */
+    private _searchAborted: boolean = false;
+    // Keeps track of path segments that have failed when attempted during the last run
+    private temporaryDeadEnds: ConvertPathNode[][] = [];
+
+    /** Call this to cancel an in-progress searchPath (e.g. user clicked Cancel) */
+    public abortSearch(): void {
+        this._searchAborted = true;
+    }
     private categoryChangeCosts: CategoryChangeCost[] = [
         {from: "image", to: "video", cost: 0.2}, // Almost lossless
         {from: "video", to: "image", cost: 0.4}, // Potentially lossy and more complex
@@ -66,8 +87,6 @@ export class TraversionGraph {
         { categories: ["image", "video", "audio"], cost: 10000 }, // Converting from image to audio through video is especially lossy
         { categories: ["audio", "video", "image"], cost: 10000 }, // Converting from audio to image through video is especially lossy
     ];
-    // Keeps track of path segments that have failed when attempted during the last run
-    private temporaryDeadEnds: ConvertPathNode[][] = [];
 
     public addCategoryChangeCost(from: string, to: string, cost: number, handler?: string, updateIfExists: boolean = true) : boolean {
         if (this.hasCategoryChangeCost(from, to, handler)) {
@@ -276,40 +295,111 @@ export class TraversionGraph {
     public addPathEventListener(listener: (state: string, path: ConvertPathNode[]) => void) {
         this.listeners.push(listener);
     }
+    public removePathEventListener(listener: (state: string, path: ConvertPathNode[]) => void) {
+        const idx = this.listeners.indexOf(listener);
+        if (idx >= 0) this.listeners.splice(idx, 1);
+    }
 
     private dispatchEvent(state: string, path: ConvertPathNode[]) {
         this.listeners.forEach(l => l(state, path));
     }
 
+    /**
+     * A* heuristic: estimates minimum remaining cost from `current` to `target`.
+     * Admissible: never overestimates (uses the minimum possible cost per step).
+     * Guides search toward the target category, dramatically reducing iterations.
+     */
+    private heuristic(current: FileFormat, target: FileFormat): number {
+        if (current.mime === target.mime) return 0;
+        const currentCats = [current.category ?? current.mime.split("/")[0]].flat();
+        const targetCats = [target.category ?? target.mime.split("/")[0]].flat();
+        // If already in the same category as target, cost within DEPTH_COST range
+        if (currentCats.some(c => targetCats.includes(c))) return DEPTH_COST;
+        // Different category — estimate one extra conversion step plus min category change cost
+        return DEPTH_COST + DEFAULT_CATEGORY_CHANGE_COST;
+    }
+
     public async* searchPath(from: ConvertPathNode, to: ConvertPathNode, simpleMode: boolean) : AsyncGenerator<ConvertPathNode[]> {
-        // Dijkstra's algorithm
-        // Priority queue of {index, cost, path}
+        // A* search (simpleMode=true) or Dijkstra multi-path (simpleMode=false)
         let queue: PriorityQueue<QueueNode> = new PriorityQueue<QueueNode>(
             1000,
             (a: QueueNode, b: QueueNode) => a.cost - b.cost
         );
-        let visited = new Array<number>();
+        // O(1) visited set for simple mode (A* / standard Dijkstra)
+        let visitedSet = new Set<number>();
+        // Ordered array for multi-path mode visitedBorder position lookups
+        let visitedArr: number[] = [];
         const fromIdentifier = from.format.mime + `(${from.format.format})`;
         const toIdentifier = to.format.mime + `(${to.format.format})`;
         let fromIndex = this.nodes.findIndex(node => node.identifier === fromIdentifier);
         let toIndex = this.nodes.findIndex(node => node.identifier === toIdentifier);
         if (fromIndex === -1 || toIndex === -1) return []; // If either format is not in the graph, return empty array
-        queue.add({index: fromIndex, cost: 0, path: [from], visitedBorder: visited.length });
+        const toFormat = to.format;
+        const h0 = simpleMode ? this.heuristic(from.format, toFormat) : 0;
+        queue.add({index: fromIndex, cost: h0, gcost: 0, path: [from], visitedBorder: 0});
         console.log(`Starting path search from ${from.format.mime}(${from.handler?.name}) to ${to.format.mime}(${to.handler?.name}) (simple mode: ${simpleMode})`);
         let iterations = 0;
         let pathsFound = 0;
+        this._searchAborted = false; // reset from any previous call
         while (queue.size() > 0) {
             iterations++;
+
+            // Keep the browser responsive: yield to the event loop every YIELD_EVERY steps
+            if (iterations % YIELD_EVERY === 0) {
+                await new Promise(r => setTimeout(r, 0));
+            }
+            // Hard stop to prevent infinite hang when no route exists
+            if (iterations > MAX_SEARCH_ITERATIONS) {
+                console.warn(`searchPath exceeded ${MAX_SEARCH_ITERATIONS} iterations — aborting to prevent hang.`);
+                return;
+            }
+            // User-requested abort (Cancel button)
+            if (this._searchAborted) {
+                console.log(`Path search aborted by user after ${iterations} iterations.`);
+                return;
+            }
             // Get the node with the lowest cost
             let current = queue.poll()!;
-            const indexInVisited = visited.indexOf(current.index);
-            if (indexInVisited >= 0 && indexInVisited < current.visitedBorder) {
-                this.dispatchEvent("skipped", current.path);
-                continue;
+
+            // --- Visited check ---
+            if (simpleMode) {
+                // Standard A* / Dijkstra: each node processed at most once
+                if (visitedSet.has(current.index)) continue;
+            } else {
+                // Multi-path mode: allow re-visiting if node was queued before it was first visited
+                const indexInVisited = visitedArr.indexOf(current.index);
+                if (indexInVisited >= 0 && indexInVisited < current.visitedBorder) {
+                    this.dispatchEvent("skipped", current.path);
+                    continue;
+                }
             }
+
             if (current.index === toIndex) {
                 // Return the path of handlers and formats to get from the input format to the output format
-                const logString = `${iterations} with cost ${current.cost.toFixed(3)}: ${current.path.map(p => p.handler.name + "(" + p.format.mime + ")").join(" → ")}`;
+                const logString = `${iterations} with cost ${current.gcost.toFixed(3)}: ${current.path.map(p => p.handler.name + "(" + p.format.mime + ")").join(" → ")}`;
+                if (!this.disableSafeChecks) {
+                    // Converting image -> video -> audio loses all meaningful media.
+                    // Explicitly check for this case to avoid complete loss of media.
+                    let found = false;
+                    for (let i = 0; i < current.path.length; i ++) {
+                        const curr = current.path[i];
+                        const next = current.path[i + 1];
+                        const last = current.path[i + 2];
+                        if (!curr || !next || !last) break;
+                        if (
+                            [curr.format.category].flat().includes("image")
+                            && [next.format.category].flat().includes("video")
+                            && [last.format.category].flat().includes("audio")
+                        ) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (found) {
+                        console.log(`Skipping path ${current.path.map(p => p.format.mime).join(" → ")} due to complete loss of media.`);
+                        continue;
+                    }
+                }
                 const foundPathLast = current.path.at(-1);
                 if (simpleMode || !to.handler || to.handler.name === foundPathLast?.handler.name) {
                     console.log(`Found path at iteration ${logString}`);
@@ -323,25 +413,45 @@ export class TraversionGraph {
                 }
                 continue;
             }
-            visited.push(current.index);
+
+            // Mark current node as visited
+            if (simpleMode) {
+                visitedSet.add(current.index);
+            } else {
+                visitedArr.push(current.index);
+            }
             this.dispatchEvent("searching", current.path);
+
             this.nodes[current.index].edges.forEach(edgeIndex => {
                 let edge = this.edges[edgeIndex];
-                const indexInVisited = visited.indexOf(edge.to.index);
-                if (indexInVisited >= 0 && indexInVisited < current.visitedBorder) return;
+
+                if (simpleMode) {
+                    // A*: never enqueue already-visited nodes — keeps queue small
+                    if (visitedSet.has(edge.to.index)) return;
+                } else {
+                    // Multi-path: legacy visitedBorder check
+                    const indexInVisited = visitedArr.indexOf(edge.to.index);
+                    if (indexInVisited >= 0 && indexInVisited < current.visitedBorder) return;
+                }
+
                 const handler = this.handlers.find(h => h.name === edge.handler);
                 if (!handler) return; // If the handler for this edge is not found, skip it
 
                 let path = current.path.concat({handler: handler, format: edge.to.format});
+                const gcost = current.gcost + edge.cost + this.calculateAdaptiveCost(path);
+                const hcost = simpleMode ? this.heuristic(edge.to.format, toFormat) : 0;
                 queue.add({
                     index: edge.to.index,
-                    cost: current.cost + edge.cost + this.calculateAdaptiveCost(path),
+                    cost: gcost + hcost,
+                    gcost,
                     path: path,
-                    visitedBorder: visited.length
+                    visitedBorder: simpleMode ? 0 : visitedArr.length
                 });
             });
             if (iterations % LOG_FREQUENCY === 0) {
                 console.log(`Still searching... Iterations: ${iterations}, Paths found: ${pathsFound}, Queue length: ${queue.size()}`);
+                const statusEl = document.getElementById("convert-search-status");
+                if (statusEl) statusEl.textContent = `Searching\u2026 (${iterations.toLocaleString()} steps explored)`;
             }
         }
         console.log(`Path search completed. Total iterations: ${iterations}, Total paths found: ${pathsFound}`);

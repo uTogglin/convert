@@ -1019,6 +1019,18 @@ button.selected {
 }
 #popup button:hover { opacity: 0.85; }
 
+#popup .search-status {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin: 4px 0;
+}
+#popup .search-path {
+  font-size: 0.85rem;
+  color: var(--text-main);
+  margin: 8px 0 12px;
+  min-height: 1.2em;
+}
+
 /* ──── Global themed scrollbars ──── */
 * {
   scrollbar-width: thin;

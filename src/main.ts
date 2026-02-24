@@ -1165,7 +1165,9 @@ async function attemptConvertPath (files: FileData[], path: ConvertPathNode[]) {
   }
 
   ui.popupBox.innerHTML = `<h2>Finding conversion route...</h2>
-    <p>Trying <b>${pathString}</b>...</p>`;
+    <p id="convert-search-status" class="search-status"></p>
+    <p>Trying <b>${pathString}</b>...</p>
+    <button onclick="window.traversionGraph.abortSearch()">Cancel</button>`;
 
   for (let i = 0; i < path.length - 1; i ++) {
     const handler = path[i + 1].handler;
@@ -1204,7 +1206,8 @@ async function attemptConvertPath (files: FileData[], path: ConvertPathNode[]) {
       window.traversionGraph.addDeadEndPath(path.slice(0, i + 2));
 
       ui.popupBox.innerHTML = `<h2>Finding conversion route...</h2>
-        <p>Looking for a valid path...</p>`;
+        <p id="convert-search-status" class="search-status">Looking for a valid path...</p>
+        <button onclick="window.traversionGraph.abortSearch()">Cancel</button>`;
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
       return null;
@@ -1223,15 +1226,42 @@ window.tryConvertByTraversing = async function (
 ) {
   deadEndAttempts = [];
   window.traversionGraph.clearDeadEndPaths();
+
+  // Show initial search popup with cancel button
+  ui.popupBox.innerHTML = `<h2>Finding conversion route...</h2>
+    <p id="convert-search-status" class="search-status">Searching\u2026</p>
+    <p id="convert-search-path" class="search-path"></p>
+    <button onclick="window.traversionGraph.abortSearch()">Cancel</button>`;
+  ui.popupBox.style.display = "block";
+  ui.popupBackground.style.display = "block";
+
+  // Live listener: update popup with the path currently being explored
+  const searchListener = (state: string, path: ConvertPathNode[]) => {
+    const pathEl = document.getElementById("convert-search-path");
+    if (!pathEl) return;
+    if (state === "searching") {
+      pathEl.innerHTML = `Exploring <b>${path.map(p => p.format.format).join(" \u2192 ")}</b>\u2026`;
+    } else if (state === "found") {
+      pathEl.innerHTML = `Found route: <b>${path.map(p => p.format.format).join(" \u2192 ")}</b>`;
+    }
+  };
+  window.traversionGraph.addPathEventListener(searchListener);
+
+  let result = null;
   for await (const path of window.traversionGraph.searchPath(from, to, simpleMode)) {
     // Use exact output format if the target handler supports it
     if (path.at(-1)?.handler === to.handler) {
       path[path.length - 1] = to;
     }
     const attempt = await attemptConvertPath(files, path);
-    if (attempt) return attempt;
+    if (attempt) {
+      result = attempt;
+      break;
+    }
   }
-  return null;
+
+  window.traversionGraph.removePathEventListener(searchListener);
+  return result;
 }
 
 /** Track blob URLs for cleanup */

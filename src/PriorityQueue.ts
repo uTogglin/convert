@@ -148,7 +148,7 @@ class PriorityQueue<T extends object> {
     const s = --this._size;
     const result = <T>this._queue[0];
     const x = <T>this._queue[s];
-    this._queue.slice(s, 1);
+    this._queue.splice(s, 1);
     if (s !== 0) {
       this.sink(0, x);
     }
