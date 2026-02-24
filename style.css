@@ -474,6 +474,38 @@ body {
   z-index: 2;
 }
 
+/* --- Folder Button --- */
+.folder-btn {
+  margin-top: 8px;
+  background-color: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  padding: 8px 20px;
+  border-radius: 50px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  z-index: 2;
+  transition: all var(--transition);
+}
+.folder-btn:hover {
+  background-color: var(--accent);
+  color: white;
+}
+
+/* --- Folder Indicator --- */
+.folder-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.folder-indicator strong {
+  color: var(--text-main);
+}
+
 /* --- LOGIC FOR "UPLOADED" STATE --- */
 #file-area.has-file {
   border-color: var(--accent);

@@ -1,6 +1,28 @@
 import type { FileFormat, FileData, ConvertPathNode } from "./FormatHandler.js";
 import type { TraversionGraph } from "./TraversionGraph.js";
 
+// File System Access API types (Chromium-only)
+interface FileSystemFileHandle {
+  readonly kind: "file";
+  readonly name: string;
+  getFile(): Promise<File>;
+  createWritable(options?: { keepExistingData?: boolean }): Promise<FileSystemWritableFileStream>;
+}
+
+interface FileSystemDirectoryHandle {
+  readonly kind: "directory";
+  readonly name: string;
+  getFileHandle(name: string, options?: { create?: boolean }): Promise<FileSystemFileHandle>;
+  getDirectoryHandle(name: string, options?: { create?: boolean }): Promise<FileSystemDirectoryHandle>;
+  removeEntry(name: string, options?: { recursive?: boolean }): Promise<void>;
+  values(): AsyncIterableIterator<FileSystemFileHandle | FileSystemDirectoryHandle>;
+}
+
+interface FileSystemWritableFileStream extends WritableStream {
+  write(data: BufferSource | Blob | string): Promise<void>;
+  close(): Promise<void>;
+}
+
 declare global {
   interface Window {
     supportedFormatCache: Map<string, FileFormat[]>;
@@ -12,6 +34,7 @@ declare global {
       files: FileData[];
       path: ConvertPathNode[];
     } | null>;
+    showDirectoryPicker?: (options?: { id?: string; mode?: "read" | "readwrite" }) => Promise<FileSystemDirectoryHandle>;
   }
 }
 
