@@ -591,19 +591,25 @@ function appendFolderButton() {
 async function openFolderPicker() {
   let dirHandle: FileSystemDirectoryHandle;
   try {
-    if (!window.showDirectoryPicker) throw new TypeError("showDirectoryPicker is not a function");
+    if (!window.showDirectoryPicker) throw new TypeError("not supported");
     dirHandle = await window.showDirectoryPicker({ mode: "readwrite", id: "convert-folder" }) as FileSystemDirectoryHandle;
   } catch (e) {
+    // User cancelled the picker — not an error
     if (e instanceof DOMException && e.name === "AbortError") return;
+    // API missing or blocked — show appropriate message
     if (e instanceof TypeError) {
       window.showPopup(
         `<h2>Browser not supported</h2>` +
         `<p>Folder conversion requires a Chromium-based browser such as <b>Chrome</b>, <b>Edge</b>, or <b>Brave</b>.</p>` +
         `<button onclick="window.hidePopup()">OK</button>`
       );
-      return;
+    } else {
+      window.showPopup(
+        `<h2>Could not open folder</h2>` +
+        `<p>${e instanceof DOMException ? e.message : "The browser blocked the folder picker. Check your browser permissions or shield settings."}</p>` +
+        `<button onclick="window.hidePopup()">OK</button>`
+      );
     }
-    console.error("Failed to open folder:", e);
     return;
   }
 
