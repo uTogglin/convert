@@ -439,6 +439,7 @@ export class TraversionGraph {
 
     private calculateAdaptiveCost(path: ConvertPathNode[]) : number {
         for (const deadEnd of this.temporaryDeadEnds) {
+            if (path.length < deadEnd.length) continue; // path too short to match
             let isDeadEnd = true;
             for (let i = 0; i < deadEnd.length; i ++) {
                 if (TraversionGraph.pathNodesMatch(path[i], deadEnd[i])) continue;
