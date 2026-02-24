@@ -589,20 +589,20 @@ function appendFolderButton() {
 
 /** Open a directory picker, read all files, and feed them into the conversion pipeline */
 async function openFolderPicker() {
-  if (!window.showDirectoryPicker) {
-    window.showPopup(
-      `<h2>Browser not supported</h2>` +
-      `<p>Folder conversion requires a Chromium-based browser such as <b>Chrome</b>, <b>Edge</b>, or <b>Brave</b>.</p>` +
-      `<button onclick="window.hidePopup()">OK</button>`
-    );
-    return;
-  }
-
   let dirHandle: FileSystemDirectoryHandle;
   try {
-    dirHandle = await window.showDirectoryPicker!({ mode: "readwrite", id: "convert-folder" }) as FileSystemDirectoryHandle;
+    if (!window.showDirectoryPicker) throw new TypeError("showDirectoryPicker is not a function");
+    dirHandle = await window.showDirectoryPicker({ mode: "readwrite", id: "convert-folder" }) as FileSystemDirectoryHandle;
   } catch (e) {
     if (e instanceof DOMException && e.name === "AbortError") return;
+    if (e instanceof TypeError) {
+      window.showPopup(
+        `<h2>Browser not supported</h2>` +
+        `<p>Folder conversion requires a Chromium-based browser such as <b>Chrome</b>, <b>Edge</b>, or <b>Brave</b>.</p>` +
+        `<button onclick="window.hidePopup()">OK</button>`
+      );
+      return;
+    }
     console.error("Failed to open folder:", e);
     return;
   }
