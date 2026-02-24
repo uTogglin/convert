@@ -600,7 +600,7 @@ async function openFolderPicker() {
 
   let dirHandle: FileSystemDirectoryHandle;
   try {
-    dirHandle = await window.showDirectoryPicker({ mode: "readwrite", id: "convert-folder" });
+    dirHandle = await window.showDirectoryPicker!({ mode: "readwrite", id: "convert-folder" }) as FileSystemDirectoryHandle;
   } catch (e) {
     if (e instanceof DOMException && e.name === "AbortError") return;
     console.error("Failed to open folder:", e);
@@ -688,7 +688,7 @@ async function writeFileToFolder(bytes: Uint8Array, name: string): Promise<void>
   if (!activeDirHandle) return;
   const fileHandle = await activeDirHandle.getFileHandle(name, { create: true });
   const writable = await fileHandle.createWritable();
-  await writable.write(bytes);
+  await writable.write(bytes as unknown as ArrayBuffer);
   await writable.close();
 }
 
