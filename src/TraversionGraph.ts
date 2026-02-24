@@ -430,11 +430,18 @@ export class TraversionGraph {
         console.log(`Path search completed. Total iterations: ${iterations}, Total paths found: ${pathsFound}`);
     }
 
+    private static pathNodesMatch(a: ConvertPathNode, b: ConvertPathNode): boolean {
+        return a === b
+            || (a.handler.name === b.handler.name
+                && a.format.mime === b.format.mime
+                && a.format.format === b.format.format);
+    }
+
     private calculateAdaptiveCost(path: ConvertPathNode[]) : number {
         for (const deadEnd of this.temporaryDeadEnds) {
             let isDeadEnd = true;
             for (let i = 0; i < deadEnd.length; i ++) {
-                if (path[i] === deadEnd[i]) continue;
+                if (TraversionGraph.pathNodesMatch(path[i], deadEnd[i])) continue;
                 isDeadEnd = false;
                 break;
             }
