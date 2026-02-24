@@ -137,10 +137,8 @@ let isSameCategoryBatch = false;
 /** All files from the original upload (before queue splitting) */
 let allUploadedFiles: File[] = [];
 
-/** Active directory handle from File System Access API (null = not in folder mode) */
-let activeDirHandle: FileSystemDirectoryHandle | null = null;
-/** Accumulator for files to write to the folder after conversion completes */
-let folderOutputFiles: FileData[] = [];
+/** Name of the folder picked via "Open Folder", or null if files were added individually */
+let activeFolderName: string | null = null;
 
 /** Returns the broad media category from a file's MIME type */
 function getMediaCategory(file: File): string {
@@ -308,8 +306,7 @@ function resetToUploadPrompt() {
     <p><span id="drop-hint-text">or </span>click to browse</p>
     <button class="browse-btn" onclick="document.getElementById('file-input').click(); event.stopPropagation();">Browse files</button>
   `;
-  activeDirHandle = null;
-  folderOutputFiles = [];
+  activeFolderName = null;
   ui.archivePanel.classList.remove("visible");
   appendFolderButton();
   // Clear format selections
@@ -438,10 +435,10 @@ const renderFilePreviews = (files: File[]) => {
   ui.archivePanel.classList.add("visible");
 
   // Show folder indicator when in folder mode
-  if (activeDirHandle) {
+  if (activeFolderName) {
     const indicator = document.createElement("div");
     indicator.className = "folder-indicator";
-    indicator.innerHTML = `&#128193; <strong>${activeDirHandle.name}</strong> &mdash; ${allUploadedFiles.length} file${allUploadedFiles.length !== 1 ? "s" : ""}`;
+    indicator.innerHTML = `&#128193; <strong>${activeFolderName}</strong> &mdash; ${allUploadedFiles.length} file${allUploadedFiles.length !== 1 ? "s" : ""}`;
     header.insertBefore(indicator, header.firstChild);
   }
 };
@@ -573,93 +570,40 @@ window.addEventListener("drop", fileSelectHandler);
 window.addEventListener("dragover", e => e.preventDefault());
 window.addEventListener("paste", fileSelectHandler);
 
-// ── Folder I/O via File System Access API ──
+// ── Folder input via hidden webkitdirectory input ──
 
-/** Append the "Open Folder" button to the file area */
-function appendFolderButton() {
-  const btn = document.createElement("button");
-  btn.className = "browse-btn folder-btn";
-  btn.textContent = "Open Folder";
-  btn.onclick = (e) => {
-    e.stopPropagation();
-    openFolderPicker();
-  };
-  ui.fileSelectArea.appendChild(btn);
-}
+/** Hidden input element for folder selection (works on all browsers) */
+const folderInput = document.createElement("input");
+folderInput.type = "file";
+folderInput.setAttribute("webkitdirectory", "");
+folderInput.style.display = "none";
+document.body.appendChild(folderInput);
 
-/** Open a directory picker, read all files, and feed them into the conversion pipeline */
-async function openFolderPicker() {
-  let dirHandle: FileSystemDirectoryHandle;
-  try {
-    if (!window.showDirectoryPicker) throw new TypeError("not supported");
-    dirHandle = await window.showDirectoryPicker({ mode: "readwrite", id: "convert-folder" }) as FileSystemDirectoryHandle;
-  } catch (e) {
-    // User cancelled the picker — not an error
-    if (e instanceof DOMException && e.name === "AbortError") return;
-    // API missing or blocked — show appropriate message
-    if (e instanceof TypeError) {
-      window.showPopup(
-        `<h2>Browser not supported</h2>` +
-        `<p>Folder conversion requires a Chromium-based browser such as <b>Chrome</b>, <b>Edge</b>, or <b>Brave</b>.</p>` +
-        `<button onclick="window.hidePopup()">OK</button>`
-      );
-    } else {
-      window.showPopup(
-        `<h2>Could not open folder</h2>` +
-        `<p>${e instanceof DOMException ? e.message : "The browser blocked the folder picker. Check your browser permissions or shield settings."}</p>` +
-        `<button onclick="window.hidePopup()">OK</button>`
-      );
-    }
-    return;
-  }
+folderInput.addEventListener("change", () => {
+  const fileList = folderInput.files;
+  if (!fileList || fileList.length === 0) return;
 
-  // Collect all non-hidden top-level files (skip _originals/ and dotfiles)
+  // Filter out hidden/system files
   const files: File[] = [];
-  for await (const entry of dirHandle.values()) {
-    if (entry.kind !== "file") continue;
-    if (entry.name.startsWith(".") || entry.name.startsWith("_")) continue;
-    try {
-      const file = await (entry as FileSystemFileHandle).getFile();
-      files.push(file);
-    } catch (e) {
-      console.warn(`Skipped unreadable file: ${entry.name}`, e);
-    }
+  for (let i = 0; i < fileList.length; i++) {
+    const f = fileList[i];
+    if (f.name.startsWith(".") || f.name.startsWith("_")) continue;
+    files.push(f);
   }
 
   if (files.length === 0) {
     window.showPopup(
       `<h2>Empty folder</h2>` +
-      `<p>No files found in <b>${dirHandle.name}</b>.</p>` +
+      `<p>No supported files found in this folder.</p>` +
       `<button onclick="window.hidePopup()">OK</button>`
     );
+    folderInput.value = "";
     return;
   }
 
-  // Warn user about _originals/ backup
-  const confirmed = await new Promise<boolean>(resolve => {
-    window.showPopup(
-      `<h2>Open folder: ${dirHandle.name}</h2>` +
-      `<p>Found <b>${files.length}</b> file${files.length !== 1 ? "s" : ""}.</p>` +
-      `<p>After conversion, original files will be moved to <code>_originals/</code> in this folder.</p>` +
-      `<button id="folder-confirm-btn" style="margin-right:8px">Continue</button>` +
-      `<button onclick="window.hidePopup()">Cancel</button>`
-    );
-    const confirmBtn = document.getElementById("folder-confirm-btn");
-    if (confirmBtn) {
-      confirmBtn.onclick = () => { window.hidePopup(); resolve(true); };
-    }
-    // If they close popup via Cancel, resolve false after a tick
-    const bg = ui.popupBackground;
-    const checkClosed = setInterval(() => {
-      if (bg.style.display === "none") { clearInterval(checkClosed); resolve(false); }
-    }, 100);
-  });
-
-  if (!confirmed) return;
-
-  // Store the directory handle for write-back
-  activeDirHandle = dirHandle;
-  folderOutputFiles = [];
+  // Extract folder name from webkitRelativePath (format: "FolderName/file.ext")
+  const firstPath = (fileList[0] as any).webkitRelativePath as string || "";
+  activeFolderName = firstPath.split("/")[0] || "Folder";
 
   // Sort alphabetically for consistency
   files.sort((a, b) => a.name.localeCompare(b.name));
@@ -687,67 +631,19 @@ async function openFolderPicker() {
     presentQueueGroup(currentQueueIndex);
   }
   updateProcessButton();
-}
+  folderInput.value = "";
+});
 
-/** Write a converted file directly to the active folder */
-async function writeFileToFolder(bytes: Uint8Array, name: string): Promise<void> {
-  if (!activeDirHandle) return;
-  const fileHandle = await activeDirHandle.getFileHandle(name, { create: true });
-  const writable = await fileHandle.createWritable();
-  await writable.write(bytes as unknown as ArrayBuffer);
-  await writable.close();
-}
-
-/** Back up original files by moving them to _originals/ subfolder */
-async function backupOriginalFiles(fileNames: string[]): Promise<void> {
-  if (!activeDirHandle) return;
-  const backupDir = await activeDirHandle.getDirectoryHandle("_originals", { create: true });
-
-  for (const name of fileNames) {
-    try {
-      const srcHandle = await activeDirHandle.getFileHandle(name);
-      const srcFile = await srcHandle.getFile();
-      const srcBytes = new Uint8Array(await srcFile.arrayBuffer());
-      const dstHandle = await backupDir.getFileHandle(name, { create: true });
-      const writable = await dstHandle.createWritable();
-      await writable.write(srcBytes);
-      await writable.close();
-      await activeDirHandle.removeEntry(name);
-    } catch (e) {
-      console.warn(`Could not back up "${name}":`, e);
-    }
-  }
-}
-
-/** After conversion, write accumulated output files to the folder and return status HTML */
-async function finalizeFolderOutput(): Promise<string> {
-  if (!activeDirHandle || folderOutputFiles.length === 0) {
-    folderOutputFiles = [];
-    return "";
-  }
-
-  window.showPopup("<h2>Saving to folder...</h2><p>Backing up originals...</p>");
-  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-
-  // Back up originals first
-  const originalNames = allUploadedFiles.map(f => f.name);
-  await backupOriginalFiles(originalNames);
-
-  // Write converted files
-  let written = 0;
-  for (const f of folderOutputFiles) {
-    try {
-      await writeFileToFolder(f.bytes, f.name);
-      written++;
-    } catch (e) {
-      console.error(`Failed to write "${f.name}" to folder:`, e);
-    }
-  }
-
-  const folderName = activeDirHandle.name;
-  folderOutputFiles = [];
-  return `<p>${written} file${written !== 1 ? "s" : ""} saved to <b>${folderName}/</b></p>` +
-    `<p>Originals moved to <b>_originals/</b></p>`;
+/** Append the "Open Folder" button to the file area */
+function appendFolderButton() {
+  const btn = document.createElement("button");
+  btn.className = "browse-btn folder-btn";
+  btn.textContent = "Open Folder";
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    folderInput.click();
+  };
+  ui.fileSelectArea.appendChild(btn);
 }
 
 // Inject the folder button on initial load
@@ -1845,9 +1741,7 @@ function addToOutputTray(bytes: Uint8Array, name: string) {
 
 function downloadFile(bytes: Uint8Array, name: string) {
   addToOutputTray(bytes, name);
-  if (activeDirHandle) {
-    folderOutputFiles.push({ bytes: new Uint8Array(bytes), name });
-  } else if (autoDownload) {
+  if (autoDownload) {
     const blobUrl = outputTrayUrls[outputTrayUrls.length - 1];
     triggerDownload(blobUrl, name);
   }
@@ -2002,12 +1896,10 @@ ui.convertButton.onclick = async function () {
         downloadFile(f.bytes, f.name);
       }
 
-      const folderMsg = await finalizeFolderOutput();
       const totalSize = fileData.reduce((s, f) => s + f.bytes.length, 0);
       window.showPopup(
         `<h2>Processed ${fileData.length} file${fileData.length !== 1 ? "s" : ""}!</h2>` +
         `<p>Total size: ${formatFileSize(totalSize)}</p>` +
-        folderMsg +
         `<button onclick="window.hidePopup()">OK</button>`
       );
     } catch (e) {
@@ -2089,13 +1981,11 @@ ui.convertButton.onclick = async function () {
         for (const f of processedOutputFiles) downloadFile(f.bytes, f.name);
       }
 
-      const folderMsg = await finalizeFolderOutput();
       const totalSize = processedOutputFiles.reduce((s, f) => s + f.bytes.length, 0);
       window.showPopup(
         `<h2>Converted ${processedOutputFiles.length} file${processedOutputFiles.length !== 1 ? "s" : ""} to ${outputFormat.format}!</h2>` +
         `<p>Total size: ${formatFileSize(totalSize)}</p>` +
         (processedOutputFiles.length > 1 && archiveMultiOutput ? `<p>Results delivered as a ZIP archive.</p>` : ``) +
-        folderMsg +
         `<button onclick="window.hidePopup()">OK</button>`
       );
 
@@ -2151,11 +2041,9 @@ ui.convertButton.onclick = async function () {
         // All groups done
         conversionQueue = [];
         currentQueueIndex = 0;
-        const folderMsg = await finalizeFolderOutput();
         window.showPopup(
           `<h2>All conversions complete!</h2>` +
           `<p>All ${allUploadedFiles.length} files have been converted.</p>` +
-          folderMsg +
           `<button onclick="window.hidePopup()">OK</button>`
         );
       }
@@ -2193,13 +2081,11 @@ ui.convertButton.onclick = async function () {
         downloadFile(file.bytes, file.name);
       }
 
-      const folderMsg = await finalizeFolderOutput();
       const singleTotalSize = processedSingleFiles.reduce((s, f) => s + f.bytes.length, 0);
       window.showPopup(
         `<h2>Converted ${inputOption.format.format} to ${outputOption.format.format}!</h2>` +
         `<p>Size: ${formatFileSize(singleTotalSize)}</p>` +
         `<p>Path used: <b>${output.path.map(c => c.format.format).join(" → ")}</b>.</p>\n` +
-        folderMsg +
         `<button onclick="window.hidePopup()">OK</button>`
       );
     }
