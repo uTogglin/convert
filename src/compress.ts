@@ -379,6 +379,8 @@ async function compressVideo(
   // Codec selection: VP9 + Opus for WebM, user-selected codec + AAC for everything else
   const videoCodec = isWebM ? "libvpx-vp9" : (codec === "h265" ? "libx265" : "libx264");
   const audioCodec = isWebM ? "libopus" : "aac";
+  // libx265 in ffmpeg.wasm only supports 10-bit pixel format
+  const pixFmtArgs: string[] = (!isWebM && codec === "h265") ? ["-pix_fmt", "yuv420p10le"] : [];
 
   await ff.writeFile(inputName, new Uint8Array(file.bytes));
 
@@ -402,7 +404,7 @@ async function compressVideo(
 
     const args = [
       "-hide_banner", "-y", "-i", inputName,
-      "-c:v", videoCodec, ...speedArgs, ...crfArgs,
+      "-c:v", videoCodec, ...pixFmtArgs, ...speedArgs, ...crfArgs,
       ...(hasAudio ? ["-c:a", "copy"] : ["-an"]),
       outputName,
     ];
@@ -455,7 +457,7 @@ async function compressVideo(
   try {
     await ffExecWithProgress([
       "-hide_banner", "-y", "-i", inputName,
-      "-c:v", videoCodec, ...speedArgs, ...cqArgs,
+      "-c:v", videoCodec, ...pixFmtArgs, ...speedArgs, ...cqArgs,
       ...audioArgs,
       outputName,
     ], duration, "Compressing video...");
@@ -495,7 +497,7 @@ async function compressVideo(
 
     await ffExecWithProgress([
       "-hide_banner", "-y", "-i", inputName,
-      "-c:v", videoCodec, ...speedArgs,
+      "-c:v", videoCodec, ...pixFmtArgs, ...speedArgs,
       "-b:v", String(videoBitrate),
       "-pass", "1", "-passlogfile", "/tmp/ffpass",
       "-an", "-f", "null", "-",
@@ -512,7 +514,7 @@ async function compressVideo(
 
     await ffExecWithProgress([
       "-hide_banner", "-y", "-i", inputName,
-      "-c:v", videoCodec, ...speedArgs,
+      "-c:v", videoCodec, ...pixFmtArgs, ...speedArgs,
       "-b:v", String(videoBitrate),
       "-pass", "2", "-passlogfile", "/tmp/ffpass",
       ...audioArgs,
