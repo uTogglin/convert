@@ -131,12 +131,6 @@ let compressMode: "auto" | "lossy" = (() => {
 let compressType: "target" | "reencode" = (() => {
   try { return localStorage.getItem("convert-compress-type") === "reencode" ? "reencode" : "target"; } catch { return "target" as const; }
 })();
-let encoderSpeed: "fast" | "balanced" | "quality" = (() => {
-  try {
-    const v = localStorage.getItem("convert-encoder-speed");
-    return v === "fast" || v === "quality" ? v : "balanced";
-  } catch { return "balanced" as const; }
-})();
 let reencodeCrf: number = (() => {
   try { return parseInt(localStorage.getItem("convert-reencode-crf") ?? "23") || 23; } catch { return 23; }
 })();
@@ -222,7 +216,6 @@ const ui = {
   crfPresetBtns: document.querySelectorAll(".crf-preset-btn") as NodeListOf<HTMLButtonElement>,
   crfSlider: document.querySelector("#crf-slider") as HTMLInputElement,
   crfValue: document.querySelector("#crf-value") as HTMLSpanElement,
-  encoderPresetBtns: document.querySelectorAll(".encoder-preset-btn") as NodeListOf<HTMLButtonElement>,
   outputTray: document.querySelector("#output-tray") as HTMLDivElement,
   outputTrayGrid: document.querySelector("#output-tray-grid") as HTMLDivElement,
   downloadAllBtn: document.querySelector("#download-all-btn") as HTMLButtonElement,
@@ -1265,17 +1258,6 @@ if (ui.crfSlider) {
   });
 }
 
-// Encoder speed presets
-ui.encoderPresetBtns.forEach(btn => {
-  const speed = btn.getAttribute("data-speed") ?? "balanced";
-  btn.classList.toggle("selected", speed === encoderSpeed);
-  btn.addEventListener("click", () => {
-    encoderSpeed = speed as "fast" | "balanced" | "quality";
-    ui.encoderPresetBtns.forEach(b => b.classList.toggle("selected", b.getAttribute("data-speed") === speed));
-    try { localStorage.setItem("convert-encoder-speed", encoderSpeed); } catch {}
-  });
-});
-
 // ──── Output Tray: Download All / Clear ────
 if (ui.downloadAllBtn) {
   ui.downloadAllBtn.addEventListener("click", () => {
@@ -1684,11 +1666,11 @@ async function applyRescale(files: FileData[]): Promise<FileData[]> {
 async function applyCompression(files: FileData[]): Promise<FileData[]> {
   if (!compressEnabled) return files;
   if (compressType === "reencode") {
-    return await applyFileCompression(files, 0, compressMode, encoderSpeed, reencodeCrf);
+    return await applyFileCompression(files, 0, compressMode, "quality", reencodeCrf);
   }
   if (compressTargetMB <= 0) return files;
   const targetBytes = compressTargetMB * 1024 * 1024;
-  return await applyFileCompression(files, targetBytes, compressMode, encoderSpeed);
+  return await applyFileCompression(files, targetBytes, compressMode, "quality");
 }
 
 /** Update the convert button to show "Process" mode when processing settings are active but no output format is selected */

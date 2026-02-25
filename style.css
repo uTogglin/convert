@@ -336,8 +336,7 @@ body {
 .compress-type-btn:hover:not(.selected) {
   color: var(--accent);
 }
-.crf-preset-btn,
-.encoder-preset-btn {
+.crf-preset-btn {
   padding: 6px 14px;
   border: 2px solid var(--input-border);
   border-radius: 50px;
@@ -348,13 +347,11 @@ body {
   cursor: pointer;
   transition: all 0.2s ease;
 }
-.crf-preset-btn:hover,
-.encoder-preset-btn:hover {
+.crf-preset-btn:hover {
   border-color: var(--accent);
   color: var(--accent);
 }
-.crf-preset-btn.selected,
-.encoder-preset-btn.selected {
+.crf-preset-btn.selected {
   border-color: var(--accent);
   background: var(--accent);
   color: white;
