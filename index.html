@@ -108,9 +108,10 @@
           <div class="compress-preset-grid">
             <button class="codec-preset-btn selected" data-codec="h264">H.264<span class="compress-preset-note">Compatible</span></button>
             <button class="codec-preset-btn" data-codec="h265">H.265<span class="compress-preset-note">Smaller files</span></button>
+            <button class="codec-preset-btn" data-codec="av1">AV1<span class="compress-preset-note">Smallest files</span></button>
           </div>
         </div>
-        <p id="codec-hint" class="settings-hint hidden">H.265 produces ~50% smaller files but may not play on older devices. Falls back to H.264 if encoding stalls.</p>
+        <p id="codec-hint" class="settings-hint hidden"></p>
         <div class="compress-size-row">
           <input type="number" id="compress-target-mb" placeholder="Target MB (optional)" min="0.1" step="0.1">
           <span class="compress-unit">MB</span>
