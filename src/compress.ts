@@ -534,7 +534,7 @@ async function compressVideo(
   // If re-encode is larger than original, discard it and compress the original instead
   if (bytes.length >= file.bytes.length) {
     console.warn(`CQ pass of "${file.name}" is larger than original, compressing original with stricter bitrate.`);
-    bytes = file.bytes;
+    bytes = new Uint8Array(file.bytes);
   }
 
   // If result fits target, done
