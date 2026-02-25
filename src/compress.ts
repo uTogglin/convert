@@ -363,61 +363,157 @@ async function compressGif(file: FileData, targetBytes: number): Promise<FileDat
 
 // ── Video compression ──
 
-async function compressVideo(file: FileData, targetBytes: number): Promise<FileData> {
+async function compressVideo(
+  file: FileData,
+  targetBytes: number,
+  encoderSpeed: "fast" | "balanced" | "quality" = "balanced",
+  crf?: number
+): Promise<FileData> {
   const ff = await getFFmpeg();
   const ext = getExt(file.name);
   const inputName = "compress_input." + ext;
   const outputName = "compress_output." + ext;
+  const isWebM = ext === "webm";
+
+  // Upgraded codecs: VP9 + Opus for WebM, x264 + AAC for everything else
+  const videoCodec = isWebM ? "libvpx-vp9" : "libx264";
+  const audioCodec = isWebM ? "libopus" : "aac";
 
   await ff.writeFile(inputName, new Uint8Array(file.bytes));
 
-  // Probe duration
+  // Probe duration and audio presence
   const probeLog = await ffExecWithLog(["-hide_banner", "-i", inputName, "-f", "null", "-"]);
   const duration = parseDuration(probeLog);
+  const hasAudio = probeLog.includes("Audio:");
 
+  // Encoder speed arguments
+  const speedArgs: string[] = isWebM
+    ? (encoderSpeed === "fast" ? ["-deadline", "realtime"]
+       : encoderSpeed === "quality" ? ["-deadline", "good", "-cpu-used", "0"]
+       : ["-deadline", "good", "-cpu-used", "2"])
+    : ["-preset", encoderSpeed === "fast" ? "fast" : encoderSpeed === "quality" ? "slow" : "medium"];
+
+  // ── Quality / re-encode mode (CRF only, no target size) ──
+  if (targetBytes === 0 && crf !== undefined) {
+    const crfArgs: string[] = isWebM
+      ? ["-crf", String(crf), "-b:v", "0"]
+      : ["-crf", String(crf)];
+
+    const args = [
+      "-hide_banner", "-y", "-i", inputName,
+      "-c:v", videoCodec, ...speedArgs, ...crfArgs,
+      ...(hasAudio ? ["-c:a", "copy"] : ["-an"]),
+      outputName,
+    ];
+
+    try {
+      await ffExecWithProgress(args, duration > 0 ? duration : 0, "Re-encoding video...");
+    } catch (e) {
+      await ff.deleteFile(inputName).catch(() => {});
+      console.warn(`Video re-encode failed for "${file.name}":`, e);
+      return file;
+    }
+
+    const data = await ff.readFile(outputName);
+    const bytes = data instanceof Uint8Array ? new Uint8Array(data) : new TextEncoder().encode(data as string);
+    await ff.deleteFile(inputName).catch(() => {});
+    await ff.deleteFile(outputName).catch(() => {});
+    return { name: file.name, bytes };
+  }
+
+  // ── Target size mode ──
   if (duration <= 0) {
     await ff.deleteFile(inputName).catch(() => {});
     console.warn(`Could not determine duration for "${file.name}", skipping compression.`);
     return file;
   }
 
-  const hasAudio = probeLog.includes("Audio:");
-
-  // Calculate target bitrate (95% of limit for container overhead)
+  // Calculate target bitrate (95% safety margin for container overhead)
   const safeTarget = targetBytes * 0.95;
-  const audioBitrate = hasAudio ? 128000 : 0;
+  const audioBits = hasAudio ? 128000 : 0;
   const totalBitrate = (safeTarget * 8) / duration;
-  const videoBitrate = Math.max(Math.floor(totalBitrate - audioBitrate), 50000);
+  const videoBitrate = Math.max(Math.floor(totalBitrate - audioBits), 50000);
 
-  const isWebM = ext === "webm";
-  const videoCodec = isWebM ? "libvpx" : "libx264";
-  const audioCodec = isWebM ? "libvorbis" : "aac";
+  const audioArgs = hasAudio
+    ? ["-c:a", audioCodec, "-b:a", "128k"]
+    : ["-an"];
 
-  const args = [
-    "-hide_banner", "-y", "-i", inputName,
-    "-c:v", videoCodec,
-    ...(isWebM
-      ? ["-crf", "30", "-b:v", String(videoBitrate)]
-      : ["-crf", "28", "-maxrate", String(videoBitrate), "-bufsize", String(videoBitrate * 2)]
-    ),
-    ...(hasAudio
-      ? ["-c:a", audioCodec, "-b:a", String(Math.min(Math.floor(audioBitrate / 1000), 128)) + "k"]
-      : ["-an"]
-    ),
-    outputName,
-  ];
+  // Step 1: Constrained quality (auto-lossless-first strategy)
+  // CRF 18 = visually lossless ceiling; bitrate limit constrains file size
+  const cqArgs: string[] = isWebM
+    ? ["-crf", "18", "-b:v", String(videoBitrate)]
+    : ["-crf", "18", "-maxrate", String(videoBitrate), "-bufsize", String(videoBitrate * 2)];
 
   try {
-    await ffExecWithProgress(args, duration, "Compressing video...");
+    await ffExecWithProgress([
+      "-hide_banner", "-y", "-i", inputName,
+      "-c:v", videoCodec, ...speedArgs, ...cqArgs,
+      ...audioArgs,
+      outputName,
+    ], duration, "Compressing video...");
   } catch (e) {
     await ff.deleteFile(inputName).catch(() => {});
     console.warn(`Video compression failed for "${file.name}":`, e);
     return file;
   }
 
-  const data = await ff.readFile(outputName);
-  const bytes = data instanceof Uint8Array ? new Uint8Array(data) : new TextEncoder().encode(data as string);
+  let data = await ff.readFile(outputName);
+  let bytes = data instanceof Uint8Array ? new Uint8Array(data) : new TextEncoder().encode(data as string);
 
+  // If constrained quality pass fits target, done
+  if (bytes.length <= targetBytes) {
+    await ff.deleteFile(inputName).catch(() => {});
+    await ff.deleteFile(outputName).catch(() => {});
+    return { name: file.name, bytes };
+  }
+
+  // Step 2: Two-pass ABR fallback for tighter size control
+  try {
+    await showCompressPopup(
+      `<h2>Compressing video (pass 1/2)...</h2>` +
+      `<p>${file.name}</p>` +
+      `<div style="background:var(--input-border);border-radius:8px;height:18px;margin:12px 0;overflow:hidden">` +
+        `<div id="compress-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s;border-radius:8px"></div>` +
+      `</div>` +
+      `<p id="compress-progress-pct" style="text-align:center;color:var(--text-muted);font-size:0.85rem">0%</p>`
+    );
+
+    await ffExecWithProgress([
+      "-hide_banner", "-y", "-i", inputName,
+      "-c:v", videoCodec, ...speedArgs,
+      "-b:v", String(videoBitrate),
+      "-pass", "1", "-passlogfile", "/tmp/ffpass",
+      "-an", "-f", "null", "-",
+    ], duration, "Analyzing video...");
+
+    await showCompressPopup(
+      `<h2>Compressing video (pass 2/2)...</h2>` +
+      `<p>${file.name}</p>` +
+      `<div style="background:var(--input-border);border-radius:8px;height:18px;margin:12px 0;overflow:hidden">` +
+        `<div id="compress-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s;border-radius:8px"></div>` +
+      `</div>` +
+      `<p id="compress-progress-pct" style="text-align:center;color:var(--text-muted);font-size:0.85rem">0%</p>`
+    );
+
+    await ffExecWithProgress([
+      "-hide_banner", "-y", "-i", inputName,
+      "-c:v", videoCodec, ...speedArgs,
+      "-b:v", String(videoBitrate),
+      "-pass", "2", "-passlogfile", "/tmp/ffpass",
+      ...audioArgs,
+      outputName,
+    ], duration, "Encoding video...");
+
+    data = await ff.readFile(outputName);
+    bytes = data instanceof Uint8Array ? new Uint8Array(data) : new TextEncoder().encode(data as string);
+  } catch (e) {
+    console.warn(`Two-pass fallback failed for "${file.name}", using single-pass result:`, e);
+  }
+
+  // Clean up pass log files
+  for (const logFile of ["/tmp/ffpass-0.log", "/tmp/ffpass-0.log.mbtree"]) {
+    await ff.deleteFile(logFile).catch(() => {});
+  }
   await ff.deleteFile(inputName).catch(() => {});
   await ff.deleteFile(outputName).catch(() => {});
 
@@ -519,25 +615,37 @@ async function showCompressPopup(html: string) {
 export async function applyFileCompression(
   files: FileData[],
   targetBytes: number,
-  mode: "auto" | "lossy"
+  mode: "auto" | "lossy",
+  encoderSpeed: "fast" | "balanced" | "quality" = "balanced",
+  crf?: number
 ): Promise<FileData[]> {
+  const isReencode = targetBytes === 0 && crf !== undefined;
   const result: FileData[] = [];
-  const toCompress = files.filter(f => f.bytes.length > targetBytes);
-  const targetMB = (targetBytes / 1024 / 1024).toFixed(1);
+
+  // Re-encode mode: only process video files. Target mode: only files above target.
+  const toProcess = isReencode
+    ? files.filter(f => getMediaType(f.name) === "video")
+    : files.filter(f => f.bytes.length > targetBytes);
+
+  const targetMB = isReencode ? null : (targetBytes / 1024 / 1024).toFixed(1);
 
   for (const f of files) {
-    if (f.bytes.length <= targetBytes) {
+    if (!toProcess.includes(f)) {
       result.push(f);
       continue;
     }
 
-    const idx = toCompress.indexOf(f) + 1;
+    const idx = toProcess.indexOf(f) + 1;
     const type = getMediaType(f.name);
     const sizeMB = (f.bytes.length / 1024 / 1024).toFixed(1);
+
+    const heading = isReencode
+      ? `<h2>Re-encoding video...</h2><p>${f.name} (${sizeMB} MB)</p>`
+      : `<h2>Compressing ${type}...</h2><p>${f.name} (${sizeMB} MB → ${targetMB} MB)</p>`;
+
     await showCompressPopup(
-      `<h2>Compressing ${type}...</h2>` +
-      `<p>${f.name} (${sizeMB} MB → ${targetMB} MB)</p>` +
-      (toCompress.length > 1 ? `<p style="color:var(--text-muted);font-size:0.85rem">File ${idx} of ${toCompress.length}</p>` : "") +
+      heading +
+      (toProcess.length > 1 ? `<p style="color:var(--text-muted);font-size:0.85rem">File ${idx} of ${toProcess.length}</p>` : "") +
       `<div style="background:var(--input-border);border-radius:8px;height:18px;margin:12px 0;overflow:hidden">` +
         `<div id="compress-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s;border-radius:8px"></div>` +
       `</div>` +
@@ -546,13 +654,15 @@ export async function applyFileCompression(
 
     switch (type) {
       case "image":
-        result.push(await compressImage(f, targetBytes, mode));
+        if (!isReencode) result.push(await compressImage(f, targetBytes, mode));
+        else result.push(f);
         break;
       case "video":
-        result.push(await compressVideo(f, targetBytes));
+        result.push(await compressVideo(f, targetBytes, encoderSpeed, crf));
         break;
       case "audio":
-        result.push(await compressAudio(f, targetBytes, mode));
+        if (!isReencode) result.push(await compressAudio(f, targetBytes, mode));
+        else result.push(f);
         break;
       default:
         result.push(f);

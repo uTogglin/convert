@@ -310,6 +310,65 @@ body {
   font-weight: 400;
   opacity: 0.7;
 }
+.compress-type-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 10px;
+  border: 2px solid var(--input-border);
+  border-radius: 50px;
+  overflow: hidden;
+}
+.compress-type-btn {
+  flex: 1;
+  padding: 6px 12px;
+  border: none;
+  background: var(--card-bg);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.compress-type-btn.selected {
+  background: var(--accent);
+  color: white;
+}
+.compress-type-btn:hover:not(.selected) {
+  color: var(--accent);
+}
+.crf-preset-btn,
+.encoder-preset-btn {
+  padding: 6px 14px;
+  border: 2px solid var(--input-border);
+  border-radius: 50px;
+  background: var(--card-bg);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.crf-preset-btn:hover,
+.encoder-preset-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.crf-preset-btn.selected,
+.encoder-preset-btn.selected {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: white;
+}
+.compress-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.compress-slider-row input[type="range"] {
+  flex: 1;
+  accent-color: var(--accent);
+}
 #custom-color-row input[type="color"] {
   width: 28px; height: 28px;
   border: none; border-radius: 50%;
