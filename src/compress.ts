@@ -367,7 +367,8 @@ async function compressVideo(
   file: FileData,
   targetBytes: number,
   encoderSpeed: "fast" | "balanced" | "quality" = "balanced",
-  crf?: number
+  crf?: number,
+  codec: "h264" | "h265" = "h264"
 ): Promise<FileData> {
   const ff = await getFFmpeg();
   const ext = getExt(file.name);
@@ -375,8 +376,8 @@ async function compressVideo(
   const outputName = "compress_output." + ext;
   const isWebM = ext === "webm";
 
-  // Upgraded codecs: VP9 + Opus for WebM, x264 + AAC for everything else
-  const videoCodec = isWebM ? "libvpx-vp9" : "libx264";
+  // Codec selection: VP9 + Opus for WebM, user-selected codec + AAC for everything else
+  const videoCodec = isWebM ? "libvpx-vp9" : (codec === "h265" ? "libx265" : "libx264");
   const audioCodec = isWebM ? "libopus" : "aac";
 
   await ff.writeFile(inputName, new Uint8Array(file.bytes));
@@ -409,6 +410,13 @@ async function compressVideo(
     try {
       await ffExecWithProgress(args, duration > 0 ? duration : 0, "Re-encoding video...");
     } catch (e) {
+      // If H.265 failed, fall back to H.264
+      if (codec === "h265" && !isWebM) {
+        console.warn(`H.265 encoding failed for "${file.name}", falling back to H.264:`, e);
+        await ff.deleteFile(inputName).catch(() => {});
+        await ff.deleteFile(outputName).catch(() => {});
+        return compressVideo(file, targetBytes, encoderSpeed, crf, "h264");
+      }
       await ff.deleteFile(inputName).catch(() => {});
       console.warn(`Video re-encode failed for "${file.name}":`, e);
       return file;
@@ -452,6 +460,13 @@ async function compressVideo(
       outputName,
     ], duration, "Compressing video...");
   } catch (e) {
+    // If H.265 failed, fall back to H.264
+    if (codec === "h265" && !isWebM) {
+      console.warn(`H.265 compression failed for "${file.name}", falling back to H.264:`, e);
+      await ff.deleteFile(inputName).catch(() => {});
+      await ff.deleteFile(outputName).catch(() => {});
+      return compressVideo(file, targetBytes, encoderSpeed, crf, "h264");
+    }
     await ff.deleteFile(inputName).catch(() => {});
     console.warn(`Video compression failed for "${file.name}":`, e);
     return file;
@@ -617,7 +632,8 @@ export async function applyFileCompression(
   targetBytes: number,
   mode: "auto" | "lossy",
   encoderSpeed: "fast" | "balanced" | "quality" = "balanced",
-  crf?: number
+  crf?: number,
+  codec: "h264" | "h265" = "h264"
 ): Promise<FileData[]> {
   const isReencode = targetBytes === 0 && crf !== undefined;
   const result: FileData[] = [];
@@ -658,7 +674,7 @@ export async function applyFileCompression(
         else result.push(f);
         break;
       case "video":
-        result.push(await compressVideo(f, targetBytes, encoderSpeed, crf));
+        result.push(await compressVideo(f, targetBytes, encoderSpeed, crf, codec));
         break;
       case "audio":
         if (!isReencode) result.push(await compressAudio(f, targetBytes, mode));

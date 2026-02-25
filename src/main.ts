@@ -128,6 +128,9 @@ let compressTargetMB: number = (() => {
 let compressMode: "auto" | "lossy" = (() => {
   try { return localStorage.getItem("convert-compress-mode") === "lossy" ? "lossy" : "auto"; } catch { return "auto" as const; }
 })();
+let compressCodec: "h264" | "h265" = (() => {
+  try { return localStorage.getItem("convert-compress-codec") === "h265" ? "h265" : "h264"; } catch { return "h264" as const; }
+})();
 /** Queue for mixed-category batch conversion */
 let conversionQueue: File[][] = [];
 let currentQueueIndex = 0;
@@ -203,6 +206,8 @@ const ui = {
   compressOptions: document.querySelector("#compress-options") as HTMLDivElement,
   compressTargetInput: document.querySelector("#compress-target-mb") as HTMLInputElement,
   compressPresetBtns: document.querySelectorAll(".compress-preset-btn") as NodeListOf<HTMLButtonElement>,
+  codecPresetBtns: document.querySelectorAll(".codec-preset-btn") as NodeListOf<HTMLButtonElement>,
+  codecHint: document.querySelector("#codec-hint") as HTMLParagraphElement,
   outputTray: document.querySelector("#output-tray") as HTMLDivElement,
   outputTrayGrid: document.querySelector("#output-tray-grid") as HTMLDivElement,
   downloadAllBtn: document.querySelector("#download-all-btn") as HTMLButtonElement,
@@ -1204,6 +1209,19 @@ ui.compressPresetBtns.forEach(btn => {
   });
 });
 
+// Codec selection (H.264 / H.265)
+ui.codecPresetBtns.forEach(btn => {
+  const codec = btn.getAttribute("data-codec") ?? "h264";
+  btn.classList.toggle("selected", codec === compressCodec);
+  btn.addEventListener("click", () => {
+    compressCodec = codec as "h264" | "h265";
+    ui.codecPresetBtns.forEach(b => b.classList.toggle("selected", b.getAttribute("data-codec") === codec));
+    if (ui.codecHint) ui.codecHint.classList.toggle("hidden", codec !== "h265");
+    try { localStorage.setItem("convert-compress-codec", compressCodec); } catch {}
+  });
+});
+if (ui.codecHint) ui.codecHint.classList.toggle("hidden", compressCodec !== "h265");
+
 // ──── Output Tray: Download All / Clear ────
 if (ui.downloadAllBtn) {
   ui.downloadAllBtn.addEventListener("click", () => {
@@ -1612,7 +1630,7 @@ async function applyRescale(files: FileData[]): Promise<FileData[]> {
 async function applyCompression(files: FileData[]): Promise<FileData[]> {
   if (!compressEnabled) return files;
   const targetBytes = compressTargetMB > 0 ? compressTargetMB * 1024 * 1024 : 0;
-  return await applyFileCompression(files, targetBytes, compressMode, "quality", 18);
+  return await applyFileCompression(files, targetBytes, compressMode, "quality", 18, compressCodec);
 }
 
 /** Update the convert button to show "Process" mode when processing settings are active but no output format is selected */
