@@ -66,7 +66,7 @@ async function ffExecWithLog(args: string[]): Promise<string> {
 }
 
 /** Run FFmpeg with progress bar updates via the "progress" event */
-async function ffExecWithProgress(args: string[], _totalDuration: number, _label: string): Promise<void> {
+async function ffExecWithProgress(args: string[], _totalDuration: number, _label: string, timeout = -1): Promise<void> {
   const ff = await getFFmpeg();
 
   // Use the "progress" event which provides { progress: 0..1, time: microseconds }
@@ -95,7 +95,14 @@ async function ffExecWithProgress(args: string[], _totalDuration: number, _label
   ff.on("progress", onProgress);
   ff.on("log", onLog);
   try {
-    await ffExec(args);
+    if (timeout > 0) {
+      await Promise.race([
+        ffExec(args),
+        new Promise<void>((_, reject) => setTimeout(() => reject(new Error("FFmpeg stall timeout")), timeout)),
+      ]);
+    } else {
+      await ffExec(args);
+    }
   } finally {
     ff.off("progress", onProgress);
     ff.off("log", onLog);
@@ -410,13 +417,23 @@ async function compressVideo(
     ];
 
     try {
-      await ffExecWithProgress(args, duration > 0 ? duration : 0, "Re-encoding video...");
+      // H.265 gets a 30s stall timeout — if it hangs, we fall back to H.264
+      const h265Timeout = (codec === "h265" && !isWebM) ? 30000 : -1;
+      await ffExecWithProgress(args, duration > 0 ? duration : 0, "Re-encoding video...", h265Timeout);
     } catch (e) {
-      // If H.265 failed, fall back to H.264
+      // If H.265 failed or stalled, reload FFmpeg and fall back to H.264
       if (codec === "h265" && !isWebM) {
         console.warn(`H.265 encoding failed for "${file.name}", falling back to H.264:`, e);
-        await ff.deleteFile(inputName).catch(() => {});
-        await ff.deleteFile(outputName).catch(() => {});
+        await showCompressPopup(
+          `<h2>H.265 failed, falling back to H.264...</h2>` +
+          `<p>${file.name}</p>` +
+          `<p style="color:var(--text-muted);font-size:0.85rem">H.265 is not supported in this browser build. Re-encoding with H.264 instead.</p>` +
+          `<div style="background:var(--input-border);border-radius:8px;height:18px;margin:12px 0;overflow:hidden">` +
+            `<div id="compress-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s;border-radius:8px"></div>` +
+          `</div>` +
+          `<p id="compress-progress-pct" style="text-align:center;color:var(--text-muted);font-size:0.85rem">0%</p>`
+        );
+        await reloadFFmpeg();
         return compressVideo(file, targetBytes, encoderSpeed, crf, "h264");
       }
       await ff.deleteFile(inputName).catch(() => {});
@@ -455,18 +472,27 @@ async function compressVideo(
     : ["-crf", "18", "-maxrate", String(videoBitrate), "-bufsize", String(videoBitrate * 2)];
 
   try {
+    const h265Timeout = (codec === "h265" && !isWebM) ? 30000 : -1;
     await ffExecWithProgress([
       "-hide_banner", "-y", "-i", inputName,
       "-c:v", videoCodec, ...pixFmtArgs, ...speedArgs, ...cqArgs,
       ...audioArgs,
       outputName,
-    ], duration, "Compressing video...");
+    ], duration, "Compressing video...", h265Timeout);
   } catch (e) {
-    // If H.265 failed, fall back to H.264
+    // If H.265 failed or stalled, reload FFmpeg and fall back to H.264
     if (codec === "h265" && !isWebM) {
       console.warn(`H.265 compression failed for "${file.name}", falling back to H.264:`, e);
-      await ff.deleteFile(inputName).catch(() => {});
-      await ff.deleteFile(outputName).catch(() => {});
+      await showCompressPopup(
+        `<h2>H.265 failed, falling back to H.264...</h2>` +
+        `<p>${file.name}</p>` +
+        `<p style="color:var(--text-muted);font-size:0.85rem">H.265 is not supported in this browser build. Compressing with H.264 instead.</p>` +
+        `<div style="background:var(--input-border);border-radius:8px;height:18px;margin:12px 0;overflow:hidden">` +
+          `<div id="compress-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s;border-radius:8px"></div>` +
+        `</div>` +
+        `<p id="compress-progress-pct" style="text-align:center;color:var(--text-muted);font-size:0.85rem">0%</p>`
+      );
+      await reloadFFmpeg();
       return compressVideo(file, targetBytes, encoderSpeed, crf, "h264");
     }
     await ff.deleteFile(inputName).catch(() => {});
