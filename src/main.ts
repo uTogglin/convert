@@ -128,13 +128,6 @@ let compressTargetMB: number = (() => {
 let compressMode: "auto" | "lossy" = (() => {
   try { return localStorage.getItem("convert-compress-mode") === "lossy" ? "lossy" : "auto"; } catch { return "auto" as const; }
 })();
-let compressType: "target" | "reencode" = (() => {
-  try { return localStorage.getItem("convert-compress-type") === "reencode" ? "reencode" : "target"; } catch { return "target" as const; }
-})();
-let reencodeCrf: number = (() => {
-  try { return parseInt(localStorage.getItem("convert-reencode-crf") ?? "23") || 23; } catch { return 23; }
-})();
-
 /** Queue for mixed-category batch conversion */
 let conversionQueue: File[][] = [];
 let currentQueueIndex = 0;
@@ -210,12 +203,6 @@ const ui = {
   compressOptions: document.querySelector("#compress-options") as HTMLDivElement,
   compressTargetInput: document.querySelector("#compress-target-mb") as HTMLInputElement,
   compressPresetBtns: document.querySelectorAll(".compress-preset-btn") as NodeListOf<HTMLButtonElement>,
-  compressTypeBtns: document.querySelectorAll(".compress-type-btn") as NodeListOf<HTMLButtonElement>,
-  compressTargetOptions: document.querySelector("#compress-target-options") as HTMLDivElement,
-  compressReencodeOptions: document.querySelector("#compress-reencode-options") as HTMLDivElement,
-  crfPresetBtns: document.querySelectorAll(".crf-preset-btn") as NodeListOf<HTMLButtonElement>,
-  crfSlider: document.querySelector("#crf-slider") as HTMLInputElement,
-  crfValue: document.querySelector("#crf-value") as HTMLSpanElement,
   outputTray: document.querySelector("#output-tray") as HTMLDivElement,
   outputTrayGrid: document.querySelector("#output-tray-grid") as HTMLDivElement,
   downloadAllBtn: document.querySelector("#download-all-btn") as HTMLButtonElement,
@@ -1178,12 +1165,6 @@ if (ui.privacyToggle) {
 
 // ──── Compression Settings ────
 
-function updateCompressTypeUI() {
-  if (ui.compressTargetOptions) ui.compressTargetOptions.classList.toggle("hidden", compressType !== "target");
-  if (ui.compressReencodeOptions) ui.compressReencodeOptions.classList.toggle("hidden", compressType !== "reencode");
-  ui.compressTypeBtns.forEach(b => b.classList.toggle("selected", b.getAttribute("data-type") === compressType));
-}
-
 if (ui.compressToggle) {
   ui.compressToggle.textContent = compressEnabled ? "Compress: On" : "Compress: Off";
   ui.compressToggle.classList.toggle("active", compressEnabled);
@@ -1197,17 +1178,6 @@ if (ui.compressToggle) {
     updateProcessButton();
   });
 }
-
-// Compress type tabs (Target Size / Re-encode)
-ui.compressTypeBtns.forEach(btn => {
-  btn.addEventListener("click", () => {
-    compressType = (btn.getAttribute("data-type") as "target" | "reencode") ?? "target";
-    updateCompressTypeUI();
-    try { localStorage.setItem("convert-compress-type", compressType); } catch {}
-    updateProcessButton();
-  });
-});
-updateCompressTypeUI();
 
 if (ui.compressTargetInput) {
   if (compressTargetMB > 0) ui.compressTargetInput.value = String(compressTargetMB);
@@ -1233,30 +1203,6 @@ ui.compressPresetBtns.forEach(btn => {
     updateProcessButton();
   });
 });
-
-// CRF quality presets + slider (Re-encode mode)
-ui.crfPresetBtns.forEach(btn => {
-  const val = parseInt(btn.getAttribute("data-crf") ?? "23");
-  btn.classList.toggle("selected", val === reencodeCrf);
-  btn.addEventListener("click", () => {
-    reencodeCrf = val;
-    if (ui.crfSlider) ui.crfSlider.value = String(val);
-    if (ui.crfValue) ui.crfValue.textContent = "CRF " + val;
-    ui.crfPresetBtns.forEach(b => b.classList.toggle("selected", parseInt(b.getAttribute("data-crf") ?? "0") === val));
-    try { localStorage.setItem("convert-reencode-crf", String(val)); } catch {}
-  });
-});
-
-if (ui.crfSlider) {
-  ui.crfSlider.value = String(reencodeCrf);
-  if (ui.crfValue) ui.crfValue.textContent = "CRF " + reencodeCrf;
-  ui.crfSlider.addEventListener("input", () => {
-    reencodeCrf = parseInt(ui.crfSlider.value) || 23;
-    if (ui.crfValue) ui.crfValue.textContent = "CRF " + reencodeCrf;
-    ui.crfPresetBtns.forEach(b => b.classList.toggle("selected", parseInt(b.getAttribute("data-crf") ?? "0") === reencodeCrf));
-    try { localStorage.setItem("convert-reencode-crf", String(reencodeCrf)); } catch {}
-  });
-}
 
 // ──── Output Tray: Download All / Clear ────
 if (ui.downloadAllBtn) {
@@ -1662,15 +1608,11 @@ async function applyRescale(files: FileData[]): Promise<FileData[]> {
   return result;
 }
 
-/** Apply file compression (target size or quality re-encode) */
+/** Apply file compression: always re-encodes video at best quality, optionally constrained to target size */
 async function applyCompression(files: FileData[]): Promise<FileData[]> {
   if (!compressEnabled) return files;
-  if (compressType === "reencode") {
-    return await applyFileCompression(files, 0, compressMode, "quality", reencodeCrf);
-  }
-  if (compressTargetMB <= 0) return files;
-  const targetBytes = compressTargetMB * 1024 * 1024;
-  return await applyFileCompression(files, targetBytes, compressMode, "quality");
+  const targetBytes = compressTargetMB > 0 ? compressTargetMB * 1024 * 1024 : 0;
+  return await applyFileCompression(files, targetBytes, compressMode, "quality", 18);
 }
 
 /** Update the convert button to show "Process" mode when processing settings are active but no output format is selected */
@@ -1681,7 +1623,7 @@ function updateProcessButton() {
     return rescaleExts.has(ext) || bgRemovalExts.has(ext);
   });
   const rescaleReady = rescaleEnabled && (rescaleWidth > 0 || rescaleHeight > 0);
-  const compressReady = compressEnabled && (compressType === "reencode" || compressTargetMB > 0);
+  const compressReady = compressEnabled;
   const hasImageProcessing = rescaleReady || removeBg;
   const hasProcessing = hasImageProcessing || compressReady;
   const outputSelected = document.querySelector("#to-list .selected");
@@ -1693,7 +1635,7 @@ function updateProcessButton() {
     const labels: string[] = [];
     if (rescaleReady) labels.push("Resize");
     if (removeBg) labels.push("Remove background");
-    if (compressReady) labels.push(compressType === "reencode" ? "Re-encode" : "Compress");
+    if (compressReady) labels.push("Compress");
     ui.convertButton.textContent = labels.join(" & ");
     ui.convertButton.className = "";
     ui.convertButton.setAttribute("data-process-mode", "true");

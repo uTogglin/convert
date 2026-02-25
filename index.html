@@ -102,39 +102,18 @@
       <h3>Compression</h3>
       <button id="compress-toggle">Compress: Off</button>
       <div id="compress-options" class="hidden">
-        <div class="compress-type-tabs">
-          <button class="compress-type-btn selected" data-type="target">Target Size</button>
-          <button class="compress-type-btn" data-type="reencode">Re-encode</button>
+        <p class="settings-hint">Re-encodes video to H.264 at best quality. Set a target size to also constrain file size.</p>
+        <div class="compress-size-row">
+          <input type="number" id="compress-target-mb" placeholder="Target MB (optional)" min="0.1" step="0.1">
+          <span class="compress-unit">MB</span>
         </div>
-        <div id="compress-target-options">
-          <div class="compress-size-row">
-            <input type="number" id="compress-target-mb" placeholder="Target MB" min="0.1" step="0.1">
-            <span class="compress-unit">MB</span>
+        <div class="compress-presets">
+          <span class="compress-presets-label">Discord</span>
+          <div class="compress-preset-grid">
+            <button class="compress-preset-btn" data-size="10">10 MB<span class="compress-preset-note">Free</span></button>
+            <button class="compress-preset-btn" data-size="50">50 MB<span class="compress-preset-note">Basic</span></button>
+            <button class="compress-preset-btn" data-size="500">500 MB<span class="compress-preset-note">Nitro</span></button>
           </div>
-          <div class="compress-presets">
-            <span class="compress-presets-label">Discord</span>
-            <div class="compress-preset-grid">
-              <button class="compress-preset-btn" data-size="10">10 MB<span class="compress-preset-note">Free</span></button>
-              <button class="compress-preset-btn" data-size="50">50 MB<span class="compress-preset-note">Basic</span></button>
-              <button class="compress-preset-btn" data-size="500">500 MB<span class="compress-preset-note">Nitro</span></button>
-            </div>
-          </div>
-        </div>
-        <div id="compress-reencode-options" class="hidden">
-          <div class="compress-presets">
-            <span class="compress-presets-label">Quality</span>
-            <div class="compress-preset-grid">
-              <button class="crf-preset-btn" data-crf="18">Lossless</button>
-              <button class="crf-preset-btn" data-crf="20">High</button>
-              <button class="crf-preset-btn selected" data-crf="23">Medium</button>
-              <button class="crf-preset-btn" data-crf="28">Low</button>
-            </div>
-          </div>
-          <div class="compress-slider-row">
-            <input type="range" id="crf-slider" min="18" max="40" value="23" step="1">
-            <span id="crf-value" class="compress-unit">CRF 23</span>
-          </div>
-          <p class="settings-hint">Lower CRF = better quality, larger file</p>
         </div>
       </div>
     </div>
