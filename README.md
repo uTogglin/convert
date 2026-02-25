@@ -13,7 +13,7 @@ Need to turn an AVI into a PDF? A MIDI file into a WAV? A 3D model into an image
 - **Cross-medium conversion** — Convert between completely different media types, not just within the same category
 - **Background removal** — Local AI-powered (RMBG-1.4 via WebGPU/WASM) or remove.bg API, with optional correction mode for preserving text and fine details
 - **Image rescaling** — Custom dimensions with aspect ratio lock
-- **Compression** — Compress output to a target file size, with handy Discord presets (10/25/50 MB)
+- **Compression** — Compress output to a target file size, with handy Discord presets (10/50/500 MB)
 - **Privacy mode** — Strips EXIF/GPS metadata, randomizes filenames, and hides referrer headers
 - **Archive creation** — Bundle files into .zip, .7z, .tar, .tar.gz, or .gz
 - **Output tray** — Preview converted files, drag them out, or download individually or all at once
