@@ -445,6 +445,12 @@ async function compressVideo(
     const bytes = data instanceof Uint8Array ? new Uint8Array(data) : new TextEncoder().encode(data as string);
     await ff.deleteFile(inputName).catch(() => {});
     await ff.deleteFile(outputName).catch(() => {});
+
+    // If re-encode is larger than original, keep original
+    if (bytes.length >= file.bytes.length) {
+      console.warn(`Re-encode of "${file.name}" is larger than original (${(bytes.length / 1024 / 1024).toFixed(1)} MB vs ${(file.bytes.length / 1024 / 1024).toFixed(1)} MB), keeping original.`);
+      return file;
+    }
     return { name: file.name, bytes };
   }
 
@@ -503,11 +509,22 @@ async function compressVideo(
   let data = await ff.readFile(outputName);
   let bytes = data instanceof Uint8Array ? new Uint8Array(data) : new TextEncoder().encode(data as string);
 
-  // If constrained quality pass fits target, done
+  // If re-encode is larger than original, discard it and compress the original instead
+  if (bytes.length >= file.bytes.length) {
+    console.warn(`CQ pass of "${file.name}" is larger than original, compressing original with stricter bitrate.`);
+    bytes = file.bytes;
+  }
+
+  // If result fits target, done
   if (bytes.length <= targetBytes) {
     await ff.deleteFile(inputName).catch(() => {});
     await ff.deleteFile(outputName).catch(() => {});
-    return { name: file.name, bytes };
+    return bytes === file.bytes ? file : { name: file.name, bytes };
+  }
+
+  // Re-write original to input if CQ was discarded (needed for two-pass)
+  if (bytes === file.bytes) {
+    await ff.writeFile(inputName, new Uint8Array(file.bytes));
   }
 
   // Step 2: Two-pass ABR fallback for tighter size control
