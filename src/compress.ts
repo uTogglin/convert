@@ -69,9 +69,13 @@ async function ffExecWithLog(args: string[]): Promise<string> {
 async function ffExecWithProgress(args: string[], _totalDuration: number, _label: string, timeout = -1): Promise<void> {
   const ff = await getFFmpeg();
 
+  // Track whether encoding progress has moved beyond 0% (for stall detection)
+  let progressMoved = false;
+
   // Use the "progress" event which provides { progress: 0..1, time: microseconds }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const onProgress = (e: any) => {
+    if ((e.progress ?? 0) > 0) progressMoved = true;
     const pct = Math.min(Math.round((e.progress ?? 0) * 100), 99);
     const bar = document.getElementById("compress-progress-bar");
     const pctEl = document.getElementById("compress-progress-pct");
@@ -82,13 +86,16 @@ async function ffExecWithProgress(args: string[], _totalDuration: number, _label
   // Also parse time= from log as fallback (some ffmpeg.wasm versions)
   const onLog = (e: LogEvent) => {
     const match = e.message.match(/time=\s*(\d+):(\d+):(\d+)\.(\d+)/);
-    if (match && _totalDuration > 0) {
+    if (match) {
       const current = parseInt(match[1]) * 3600 + parseInt(match[2]) * 60 + parseInt(match[3]) + parseInt(match[4]) / 100;
-      const pct = Math.min(Math.round((current / _totalDuration) * 100), 99);
-      const bar = document.getElementById("compress-progress-bar");
-      const pctEl = document.getElementById("compress-progress-pct");
-      if (bar) bar.style.width = pct + "%";
-      if (pctEl) pctEl.textContent = pct + "%";
+      if (current > 0) progressMoved = true;
+      if (_totalDuration > 0) {
+        const pct = Math.min(Math.round((current / _totalDuration) * 100), 99);
+        const bar = document.getElementById("compress-progress-bar");
+        const pctEl = document.getElementById("compress-progress-pct");
+        if (bar) bar.style.width = pct + "%";
+        if (pctEl) pctEl.textContent = pct + "%";
+      }
     }
   };
 
@@ -96,10 +103,20 @@ async function ffExecWithProgress(args: string[], _totalDuration: number, _label
   ff.on("log", onLog);
   try {
     if (timeout > 0) {
-      await Promise.race([
-        ffExec(args),
-        new Promise<void>((_, reject) => setTimeout(() => reject(new Error("FFmpeg stall timeout")), timeout)),
-      ]);
+      // Stall detection: if progress hasn't moved from 0% within the timeout, abort.
+      // Once progress moves, the stall check disarms and encoding runs freely.
+      let stallTimer: ReturnType<typeof setTimeout>;
+      const stallPromise = new Promise<void>((resolve, reject) => {
+        const check = setInterval(() => {
+          if (progressMoved) { clearInterval(check); clearTimeout(stallTimer); resolve(); }
+        }, 1000);
+        stallTimer = setTimeout(() => {
+          clearInterval(check);
+          if (!progressMoved) reject(new Error("FFmpeg stall timeout"));
+          else resolve();
+        }, timeout);
+      });
+      await Promise.race([ffExec(args), stallPromise]);
     } else {
       await ffExec(args);
     }
@@ -390,8 +407,8 @@ async function compressVideo(
   const audioCodec = isWebM ? "libopus" : "aac";
   // libx265 in ffmpeg.wasm only supports 10-bit pixel format
   const pixFmtArgs: string[] = (!isWebM && codec === "h265") ? ["-pix_fmt", "yuv420p10le"] : [];
-  // Stall timeout: H.265 and AV1 may hang in WASM (AV1 gets longer since it's slower)
-  const stallTimeout = (codec === "av1") ? 60000 : (codec === "h265" && !isWebM) ? 30000 : -1;
+  // Stall detection: if progress stays at 0% for 15s, codec likely unsupported in this WASM build
+  const stallTimeout = (codec !== "h264") ? 15000 : -1;
 
   await ff.writeFile(inputName, new Uint8Array(file.bytes));
 
