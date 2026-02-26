@@ -31,20 +31,23 @@ async function reloadFFmpeg(): Promise<FFmpeg> {
 
 async function ffExec(args: string[], timeout = -1): Promise<void> {
   const ff = await getFFmpeg();
+  const checkExit = (code: number | void) => {
+    if (typeof code === "number" && code !== 0) throw new Error(`FFmpeg exited with code ${code}`);
+  };
   try {
     if (timeout === -1) {
-      await ff.exec(args);
+      checkExit(await ff.exec(args));
     } else {
-      await Promise.race([
+      checkExit(await Promise.race([
         ff.exec(args, timeout),
-        new Promise<void>((_, reject) => setTimeout(() => reject(new Error("FFmpeg timeout")), timeout)),
-      ]);
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("FFmpeg timeout")), timeout)),
+      ]));
     }
   } catch (e) {
     if (typeof e === "string" && e.includes("out of bounds")) {
       await reloadFFmpeg();
       const ff2 = await getFFmpeg();
-      await ff2.exec(args);
+      checkExit(await ff2.exec(args));
     } else {
       throw e;
     }
