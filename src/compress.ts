@@ -445,7 +445,7 @@ async function compressVideo(
     ? (encoderSpeed === "fast" ? ["-deadline", "realtime"]
        : encoderSpeed === "quality" ? ["-deadline", "good", "-cpu-used", "0"]
        : ["-deadline", "good", "-cpu-used", "2"])
-    : ["-preset", encoderSpeed === "fast" ? "fast" : encoderSpeed === "quality" ? "slow" : "medium"];
+    : ["-preset", encoderSpeed === "fast" ? "ultrafast" : encoderSpeed === "quality" ? "medium" : "fast"];
 
   // ── Quality / re-encode mode (CRF only, no target size) ──
   if (targetBytes === 0 && crf !== undefined) {

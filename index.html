@@ -112,6 +112,14 @@
           </div>
         </div>
         <p id="codec-hint" class="settings-hint hidden">H.265 produces ~50% smaller files but may not play on older devices. Falls back to H.264 if encoding stalls.</p>
+        <div class="compress-presets">
+          <span class="compress-presets-label">Speed</span>
+          <div class="compress-preset-grid">
+            <button class="speed-preset-btn" data-speed="fast">Fast<span class="compress-preset-note">Fastest</span></button>
+            <button class="speed-preset-btn selected" data-speed="balanced">Balanced<span class="compress-preset-note">Default</span></button>
+            <button class="speed-preset-btn" data-speed="quality">Quality<span class="compress-preset-note">Slowest</span></button>
+          </div>
+        </div>
         <button id="skip-reencode-toggle">Fast mode: Off</button>
         <p id="skip-reencode-hint" class="settings-hint hidden">Skips re-encoding. Faster but files will be larger or lower quality at the same target size.</p>
         <div class="compress-size-row">

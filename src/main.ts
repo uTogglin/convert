@@ -134,6 +134,13 @@ let compressCodec: "h264" | "h265" = (() => {
     return v === "h265" ? v : "h264";
   } catch { return "h264" as const; }
 })();
+let compressSpeed: "fast" | "balanced" | "quality" = (() => {
+  try {
+    const v = localStorage.getItem("convert-compress-speed");
+    if (v === "fast" || v === "balanced") return v;
+    return "balanced";
+  } catch { return "balanced" as const; }
+})();
 let skipReencode = (() => {
   try { return localStorage.getItem("convert-skip-reencode") === "true"; } catch { return false; }
 })();
@@ -214,6 +221,7 @@ const ui = {
   compressPresetBtns: document.querySelectorAll(".compress-preset-btn") as NodeListOf<HTMLButtonElement>,
   codecPresetBtns: document.querySelectorAll(".codec-preset-btn") as NodeListOf<HTMLButtonElement>,
   codecHint: document.querySelector("#codec-hint") as HTMLParagraphElement,
+  speedPresetBtns: document.querySelectorAll(".speed-preset-btn") as NodeListOf<HTMLButtonElement>,
   skipReencodeToggle: document.querySelector("#skip-reencode-toggle") as HTMLButtonElement,
   skipReencodeHint: document.querySelector("#skip-reencode-hint") as HTMLParagraphElement,
   outputTray: document.querySelector("#output-tray") as HTMLDivElement,
@@ -1241,6 +1249,17 @@ ui.codecPresetBtns.forEach(btn => {
 });
 updateCodecHint();
 
+// Encoder speed preset
+ui.speedPresetBtns.forEach(btn => {
+  const speed = btn.getAttribute("data-speed") ?? "balanced";
+  btn.classList.toggle("selected", speed === compressSpeed);
+  btn.addEventListener("click", () => {
+    compressSpeed = speed as "fast" | "balanced" | "quality";
+    ui.speedPresetBtns.forEach(b => b.classList.toggle("selected", b.getAttribute("data-speed") === speed));
+    try { localStorage.setItem("convert-compress-speed", compressSpeed); } catch {}
+  });
+});
+
 // Skip re-encode (fast mode) toggle
 if (ui.skipReencodeToggle) {
   ui.skipReencodeToggle.textContent = `Fast mode: ${skipReencode ? "On" : "Off"}`;
@@ -1664,9 +1683,9 @@ async function applyCompression(files: FileData[]): Promise<FileData[]> {
   if (skipReencode) {
     // Fast mode: skip re-encode, only compress to target size if set
     if (targetBytes <= 0) return files;
-    return await applyFileCompression(files, targetBytes, compressMode, "quality", undefined, compressCodec);
+    return await applyFileCompression(files, targetBytes, compressMode, compressSpeed, undefined, compressCodec);
   }
-  return await applyFileCompression(files, targetBytes, compressMode, "quality", 23, compressCodec);
+  return await applyFileCompression(files, targetBytes, compressMode, compressSpeed, 23, compressCodec);
 }
 
 const videoCompressionExts = new Set([

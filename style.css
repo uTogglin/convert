@@ -334,6 +334,30 @@ body {
   background: var(--accent);
   color: white;
 }
+.speed-preset-btn {
+  padding: 6px 14px;
+  border: 2px solid var(--input-border);
+  border-radius: 50px;
+  background: var(--card-bg);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.speed-preset-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.speed-preset-btn.selected {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: white;
+}
 #custom-color-row input[type="color"] {
   width: 28px; height: 28px;
   border: none; border-radius: 50%;
