@@ -510,7 +510,7 @@ async function compressVideo(
   const videoBitrate = Math.max(Math.floor(totalBitrate - audioBits), 50000);
 
   const audioArgs = hasAudio
-    ? ["-c:a", audioCodec, "-b:a", "128k"]
+    ? ["-c:a", audioCodec, "-b:a", "96k"]
     : ["-an"];
 
   // Step 1: Constrained quality (auto-lossless-first strategy)

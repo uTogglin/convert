@@ -1644,7 +1644,7 @@ async function applyRescale(files: FileData[]): Promise<FileData[]> {
 async function applyCompression(files: FileData[]): Promise<FileData[]> {
   if (!compressEnabled) return files;
   const targetBytes = compressTargetMB > 0 ? compressTargetMB * 1024 * 1024 : 0;
-  return await applyFileCompression(files, targetBytes, compressMode, "quality", 18, compressCodec);
+  return await applyFileCompression(files, targetBytes, compressMode, "quality", 23, compressCodec);
 }
 
 /** Update the convert button to show "Process" mode when processing settings are active but no output format is selected */
