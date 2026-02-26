@@ -134,6 +134,9 @@ let compressCodec: "h264" | "h265" = (() => {
     return v === "h265" ? v : "h264";
   } catch { return "h264" as const; }
 })();
+let skipReencode = (() => {
+  try { return localStorage.getItem("convert-skip-reencode") === "true"; } catch { return false; }
+})();
 /** Queue for mixed-category batch conversion */
 let conversionQueue: File[][] = [];
 let currentQueueIndex = 0;
@@ -211,6 +214,8 @@ const ui = {
   compressPresetBtns: document.querySelectorAll(".compress-preset-btn") as NodeListOf<HTMLButtonElement>,
   codecPresetBtns: document.querySelectorAll(".codec-preset-btn") as NodeListOf<HTMLButtonElement>,
   codecHint: document.querySelector("#codec-hint") as HTMLParagraphElement,
+  skipReencodeToggle: document.querySelector("#skip-reencode-toggle") as HTMLButtonElement,
+  skipReencodeHint: document.querySelector("#skip-reencode-hint") as HTMLParagraphElement,
   outputTray: document.querySelector("#output-tray") as HTMLDivElement,
   outputTrayGrid: document.querySelector("#output-tray-grid") as HTMLDivElement,
   downloadAllBtn: document.querySelector("#download-all-btn") as HTMLButtonElement,
@@ -1236,6 +1241,18 @@ ui.codecPresetBtns.forEach(btn => {
 });
 updateCodecHint();
 
+// Skip re-encode (fast mode) toggle
+if (ui.skipReencodeToggle) {
+  ui.skipReencodeToggle.textContent = `Fast mode: ${skipReencode ? "On" : "Off"}`;
+  ui.skipReencodeHint?.classList.toggle("hidden", !skipReencode);
+  ui.skipReencodeToggle.addEventListener("click", () => {
+    skipReencode = !skipReencode;
+    ui.skipReencodeToggle.textContent = `Fast mode: ${skipReencode ? "On" : "Off"}`;
+    ui.skipReencodeHint?.classList.toggle("hidden", !skipReencode);
+    try { localStorage.setItem("convert-skip-reencode", String(skipReencode)); } catch {};
+  });
+}
+
 // ──── Output Tray: Download All / Clear ────
 if (ui.downloadAllBtn) {
   ui.downloadAllBtn.addEventListener("click", () => {
@@ -1644,6 +1661,11 @@ async function applyRescale(files: FileData[]): Promise<FileData[]> {
 async function applyCompression(files: FileData[]): Promise<FileData[]> {
   if (!compressEnabled) return files;
   const targetBytes = compressTargetMB > 0 ? compressTargetMB * 1024 * 1024 : 0;
+  if (skipReencode) {
+    // Fast mode: skip re-encode, only compress to target size if set
+    if (targetBytes <= 0) return files;
+    return await applyFileCompression(files, targetBytes, compressMode, "quality", undefined, compressCodec);
+  }
   return await applyFileCompression(files, targetBytes, compressMode, "quality", 23, compressCodec);
 }
 
@@ -1655,7 +1677,7 @@ function updateProcessButton() {
     return rescaleExts.has(ext) || bgRemovalExts.has(ext);
   });
   const rescaleReady = rescaleEnabled && (rescaleWidth > 0 || rescaleHeight > 0);
-  const compressReady = compressEnabled;
+  const compressReady = compressEnabled && !(skipReencode && compressTargetMB <= 0);
   const hasImageProcessing = rescaleReady || removeBg;
   const hasProcessing = hasImageProcessing || compressReady;
   const outputSelected = document.querySelector("#to-list .selected");
