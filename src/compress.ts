@@ -108,11 +108,33 @@ async function ffExecWithProgress(args: string[], _totalDuration: number, _label
     if (timeout > 0) {
       // Stall detection: if progress hasn't moved from 0% within the timeout, abort.
       // Once progress moves, the stall check disarms and encoding runs freely.
+      // Shows a visible countdown so the user knows when fallback will happen.
+      const stallSeconds = Math.round(timeout / 1000);
       let stallTimer: ReturnType<typeof setTimeout>;
       const stallPromise = new Promise<void>((resolve, reject) => {
+        let elapsed = 0;
         const check = setInterval(() => {
-          if (progressMoved) { clearInterval(check); clearTimeout(stallTimer); resolve(); }
+          if (progressMoved) {
+            clearInterval(check); clearTimeout(stallTimer);
+            const fallbackEl = document.getElementById("compress-fallback-timer");
+            if (fallbackEl) fallbackEl.remove();
+            resolve();
+            return;
+          }
+          elapsed++;
+          const remaining = stallSeconds - elapsed;
+          const fallbackEl = document.getElementById("compress-fallback-timer");
+          if (fallbackEl) fallbackEl.textContent = `Falling back to H.264 in ${remaining}s if no progress...`;
         }, 1000);
+        // Insert countdown element into the popup
+        const pctEl = document.getElementById("compress-progress-pct");
+        if (pctEl) {
+          const timer = document.createElement("p");
+          timer.id = "compress-fallback-timer";
+          timer.style.cssText = "text-align:center;color:var(--text-muted);font-size:0.8rem;margin-top:4px";
+          timer.textContent = `Falling back to H.264 in ${stallSeconds}s if no progress...`;
+          pctEl.insertAdjacentElement("afterend", timer);
+        }
         stallTimer = setTimeout(() => {
           clearInterval(check);
           if (!progressMoved) reject(new Error("FFmpeg stall timeout"));
