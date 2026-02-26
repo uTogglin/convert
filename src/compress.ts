@@ -513,16 +513,19 @@ async function compressVideo(
     ? ["-c:a", audioCodec, "-b:a", "96k"]
     : ["-an"];
 
-  // Step 1: Constrained quality (auto-lossless-first strategy)
-  // CRF 18 = visually lossless ceiling; bitrate limit constrains file size
-  const cqArgs: string[] = isWebM
-    ? ["-crf", "18", "-b:v", String(videoBitrate)]
-    : ["-crf", "18", "-maxrate", String(videoBitrate), "-bufsize", String(videoBitrate * 2)];
+  // Adaptive CRF: pick a CRF that naturally aligns with the target bitrate
+  const ratio = file.bytes.length / targetBytes;
+  const adaptiveCrf = Math.min(40, Math.round(18 + (Math.log2(ratio) * 6)));
+
+  // Step 1: Single-pass adaptive CRF with maxrate safety net
+  const crfArgs: string[] = isWebM
+    ? ["-crf", String(adaptiveCrf), "-b:v", String(videoBitrate)]
+    : ["-crf", String(adaptiveCrf), "-maxrate", String(videoBitrate), "-bufsize", String(videoBitrate * 2)];
 
   try {
     await ffExecWithProgress([
       "-hide_banner", "-y", "-i", inputName,
-      "-c:v", videoCodec, ...pixFmtArgs, ...speedArgs, ...cqArgs,
+      "-c:v", videoCodec, ...pixFmtArgs, ...speedArgs, ...crfArgs,
       ...audioArgs,
       outputName,
     ], duration, "Compressing video...", stallTimeout);
@@ -550,28 +553,24 @@ async function compressVideo(
   let data = await ff.readFile(outputName);
   let bytes = data instanceof Uint8Array ? new Uint8Array(data) : new TextEncoder().encode(data as string);
 
-  // If re-encode is larger than original, discard it and compress the original instead
+  // If re-encode is larger than original, keep original
   if (bytes.length >= file.bytes.length) {
-    console.warn(`CQ pass of "${file.name}" is larger than original, compressing original with stricter bitrate.`);
-    bytes = new Uint8Array(file.bytes);
+    await ff.deleteFile(inputName).catch(() => {});
+    await ff.deleteFile(outputName).catch(() => {});
+    return file;
   }
 
   // If result fits target, done
   if (bytes.length <= targetBytes) {
     await ff.deleteFile(inputName).catch(() => {});
     await ff.deleteFile(outputName).catch(() => {});
-    return bytes === file.bytes ? file : { name: file.name, bytes };
+    return { name: file.name, bytes };
   }
 
-  // Re-write original to input if CQ was discarded (needed for two-pass)
-  if (bytes === file.bytes) {
-    await ff.writeFile(inputName, new Uint8Array(file.bytes));
-  }
-
-  // Step 2: Two-pass ABR fallback for tighter size control
+  // Step 2: Single-pass ABR fallback for tighter size control
   try {
     await showCompressPopup(
-      `<h2>Compressing video (pass 1/2)...</h2>` +
+      `<h2>Compressing video (ABR pass)...</h2>` +
       `<p>${file.name}</p>` +
       `<div style="background:var(--input-border);border-radius:8px;height:18px;margin:12px 0;overflow:hidden">` +
         `<div id="compress-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s;border-radius:8px"></div>` +
@@ -583,38 +582,16 @@ async function compressVideo(
       "-hide_banner", "-y", "-i", inputName,
       "-c:v", videoCodec, ...pixFmtArgs, ...speedArgs,
       "-b:v", String(videoBitrate),
-      "-pass", "1", "-passlogfile", "/tmp/ffpass",
-      "-an", "-f", "null", "-",
-    ], duration, "Analyzing video...");
-
-    await showCompressPopup(
-      `<h2>Compressing video (pass 2/2)...</h2>` +
-      `<p>${file.name}</p>` +
-      `<div style="background:var(--input-border);border-radius:8px;height:18px;margin:12px 0;overflow:hidden">` +
-        `<div id="compress-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s;border-radius:8px"></div>` +
-      `</div>` +
-      `<p id="compress-progress-pct" style="text-align:center;color:var(--text-muted);font-size:0.85rem">0%</p>`
-    );
-
-    await ffExecWithProgress([
-      "-hide_banner", "-y", "-i", inputName,
-      "-c:v", videoCodec, ...pixFmtArgs, ...speedArgs,
-      "-b:v", String(videoBitrate),
-      "-pass", "2", "-passlogfile", "/tmp/ffpass",
       ...audioArgs,
       outputName,
-    ], duration, "Encoding video...");
+    ], duration, "Compressing video (ABR)...");
 
     data = await ff.readFile(outputName);
     bytes = data instanceof Uint8Array ? new Uint8Array(data) : new TextEncoder().encode(data as string);
   } catch (e) {
-    console.warn(`Two-pass fallback failed for "${file.name}", using single-pass result:`, e);
+    console.warn(`ABR fallback failed for "${file.name}", using CRF result:`, e);
   }
 
-  // Clean up pass log files
-  for (const logFile of ["/tmp/ffpass-0.log", "/tmp/ffpass-0.log.mbtree"]) {
-    await ff.deleteFile(logFile).catch(() => {});
-  }
   await ff.deleteFile(inputName).catch(() => {});
   await ff.deleteFile(outputName).catch(() => {});
 
