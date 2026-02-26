@@ -129,7 +129,10 @@ let compressMode: "auto" | "lossy" = (() => {
   try { return localStorage.getItem("convert-compress-mode") === "lossy" ? "lossy" : "auto"; } catch { return "auto" as const; }
 })();
 let compressCodec: "h264" | "h265" = (() => {
-  try { return localStorage.getItem("convert-compress-codec") === "h265" ? "h265" : "h264"; } catch { return "h264" as const; }
+  try {
+    const v = localStorage.getItem("convert-compress-codec");
+    return v === "h265" ? v : "h264";
+  } catch { return "h264" as const; }
 })();
 /** Queue for mixed-category batch conversion */
 let conversionQueue: File[][] = [];
@@ -1210,17 +1213,28 @@ ui.compressPresetBtns.forEach(btn => {
 });
 
 // Codec selection (H.264 / H.265)
+const codecHints: Record<string, string> = {
+  h264: "",
+  h265: "H.265 produces ~50% smaller files but may not play on older devices. Falls back to H.264 if encoding stalls.",
+};
+function updateCodecHint() {
+  if (ui.codecHint) {
+    const hint = codecHints[compressCodec] ?? "";
+    ui.codecHint.textContent = hint;
+    ui.codecHint.classList.toggle("hidden", !hint);
+  }
+}
 ui.codecPresetBtns.forEach(btn => {
   const codec = btn.getAttribute("data-codec") ?? "h264";
   btn.classList.toggle("selected", codec === compressCodec);
   btn.addEventListener("click", () => {
     compressCodec = codec as "h264" | "h265";
     ui.codecPresetBtns.forEach(b => b.classList.toggle("selected", b.getAttribute("data-codec") === codec));
-    if (ui.codecHint) ui.codecHint.classList.toggle("hidden", codec !== "h265");
+    updateCodecHint();
     try { localStorage.setItem("convert-compress-codec", compressCodec); } catch {}
   });
 });
-if (ui.codecHint) ui.codecHint.classList.toggle("hidden", compressCodec !== "h265");
+updateCodecHint();
 
 // ──── Output Tray: Download All / Clear ────
 if (ui.downloadAllBtn) {

@@ -395,7 +395,7 @@ async function compressVideo(
   targetBytes: number,
   encoderSpeed: "fast" | "balanced" | "quality" = "balanced",
   crf?: number,
-  codec: "h264" | "h265" | "av1" = "h264"
+  codec: "h264" | "h265" = "h264"
 ): Promise<FileData> {
   const ff = await getFFmpeg();
   const ext = getExt(file.name);
@@ -404,14 +404,12 @@ async function compressVideo(
   const isWebM = ext === "webm";
 
   // Codec selection
-  const videoCodec = isWebM
-    ? (codec === "av1" ? "libaom-av1" : "libvpx-vp9")
-    : (codec === "av1" ? "libaom-av1" : codec === "h265" ? "libx265" : "libx264");
+  const videoCodec = isWebM ? "libvpx-vp9" : (codec === "h265" ? "libx265" : "libx264");
   const audioCodec = isWebM ? "libopus" : "aac";
   // libx265 in ffmpeg.wasm only supports 10-bit pixel format
   const pixFmtArgs: string[] = (!isWebM && codec === "h265") ? ["-pix_fmt", "yuv420p10le"] : [];
   // Stall detection: if progress stays at 0% for 15s, codec likely unsupported in this WASM build
-  const stallTimeout = (codec !== "h264") ? 15000 : -1;
+  const stallTimeout = (codec === "h265" && !isWebM) ? 15000 : -1;
 
   await ff.writeFile(inputName, new Uint8Array(file.bytes));
 
@@ -421,13 +419,11 @@ async function compressVideo(
   const hasAudio = probeLog.includes("Audio:");
 
   // Encoder speed arguments
-  const speedArgs: string[] = codec === "av1"
-    ? ["-cpu-used", "4"]  // AV1: 0=slowest/best, 8=fastest; 4 is reasonable for WASM
-    : isWebM
-      ? (encoderSpeed === "fast" ? ["-deadline", "realtime"]
-         : encoderSpeed === "quality" ? ["-deadline", "good", "-cpu-used", "0"]
-         : ["-deadline", "good", "-cpu-used", "2"])
-      : ["-preset", encoderSpeed === "fast" ? "fast" : encoderSpeed === "quality" ? "slow" : "medium"];
+  const speedArgs: string[] = isWebM
+    ? (encoderSpeed === "fast" ? ["-deadline", "realtime"]
+       : encoderSpeed === "quality" ? ["-deadline", "good", "-cpu-used", "0"]
+       : ["-deadline", "good", "-cpu-used", "2"])
+    : ["-preset", encoderSpeed === "fast" ? "fast" : encoderSpeed === "quality" ? "slow" : "medium"];
 
   // ── Quality / re-encode mode (CRF only, no target size) ──
   if (targetBytes === 0 && crf !== undefined) {
@@ -445,14 +441,13 @@ async function compressVideo(
     try {
       await ffExecWithProgress(args, duration > 0 ? duration : 0, "Re-encoding video...", stallTimeout);
     } catch (e) {
-      // If H.265/AV1 failed or stalled, reload FFmpeg and fall back to H.264
-      if (codec !== "h264") {
-        const label = codec === "av1" ? "AV1" : "H.265";
-        console.warn(`${label} encoding failed for "${file.name}", falling back to H.264:`, e);
+      // If H.265 failed or stalled, reload FFmpeg and fall back to H.264
+      if (codec === "h265" && !isWebM) {
+        console.warn(`H.265 encoding failed for "${file.name}", falling back to H.264:`, e);
         await showCompressPopup(
-          `<h2>${label} failed, falling back to H.264...</h2>` +
+          `<h2>H.265 failed, falling back to H.264...</h2>` +
           `<p>${file.name}</p>` +
-          `<p style="color:var(--text-muted);font-size:0.85rem">${label} is not supported in this browser build. Re-encoding with H.264 instead.</p>` +
+          `<p style="color:var(--text-muted);font-size:0.85rem">H.265 is not supported in this browser build. Re-encoding with H.264 instead.</p>` +
           `<div style="background:var(--input-border);border-radius:8px;height:18px;margin:12px 0;overflow:hidden">` +
             `<div id="compress-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s;border-radius:8px"></div>` +
           `</div>` +
@@ -513,11 +508,11 @@ async function compressVideo(
     // If H.265/AV1 failed or stalled, reload FFmpeg and fall back to H.264
     if (codec !== "h264") {
       const label = codec === "av1" ? "AV1" : "H.265";
-      console.warn(`${label} compression failed for "${file.name}", falling back to H.264:`, e);
+      console.warn(`H.265 compression failed for "${file.name}", falling back to H.264:`, e);
       await showCompressPopup(
-        `<h2>${label} failed, falling back to H.264...</h2>` +
+        `<h2>H.265 failed, falling back to H.264...</h2>` +
         `<p>${file.name}</p>` +
-        `<p style="color:var(--text-muted);font-size:0.85rem">${label} is not supported in this browser build. Compressing with H.264 instead.</p>` +
+        `<p style="color:var(--text-muted);font-size:0.85rem">H.265 is not supported in this browser build. Compressing with H.264 instead.</p>` +
         `<div style="background:var(--input-border);border-radius:8px;height:18px;margin:12px 0;overflow:hidden">` +
           `<div id="compress-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s;border-radius:8px"></div>` +
         `</div>` +
@@ -703,7 +698,7 @@ export async function applyFileCompression(
   mode: "auto" | "lossy",
   encoderSpeed: "fast" | "balanced" | "quality" = "balanced",
   crf?: number,
-  codec: "h264" | "h265" | "av1" = "h264"
+  codec: "h264" | "h265" = "h264"
 ): Promise<FileData[]> {
   const isReencode = targetBytes === 0 && crf !== undefined;
   const result: FileData[] = [];
