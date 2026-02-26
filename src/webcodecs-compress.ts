@@ -80,7 +80,8 @@ export async function compressVideoWebCodecs(
       const safeTarget = targetBytes * 0.97;
       const audioBits = hasAudio ? 96000 : 0;
       const totalBitrate = (safeTarget * 8) / duration;
-      videoBitrate = Math.max(Math.floor(totalBitrate - audioBits), 50000);
+      // Conservative factor: hardware encoders consistently overshoot
+      videoBitrate = Math.max(Math.floor((totalBitrate - audioBits) * 0.85), 50000);
     } else if (crf !== undefined) {
       // Map CRF to approximate bitrate based on input file stats
       const videoTrack = await input.getPrimaryVideoTrack();
@@ -106,7 +107,7 @@ export async function compressVideoWebCodecs(
       updatePopupHeading("Retrying with lower bitrate...");
       resetProgressBar();
 
-      const retryRatio = (targetBytes / result.byteLength) * 0.95;
+      const retryRatio = (targetBytes / result.byteLength) * 0.80;
       const retryBitrate = Math.max(Math.floor(videoBitrate * retryRatio), 50000);
 
       const retryOutput = new Output({
