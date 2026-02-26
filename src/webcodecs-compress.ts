@@ -104,10 +104,10 @@ export async function compressVideoWebCodecs(
         retryInput, retryOutput, videoCodec, retryBitrate, audioCodec, hasAudio, hwAccel
       );
 
-      if (retryResult && retryResult.byteLength < file.bytes.length) {
+      if (retryResult && retryResult.byteLength <= targetBytes) {
         return { name: file.name, bytes: new Uint8Array(retryResult) };
       }
-      return null; // Fall back to ffmpeg
+      return null; // Still over target, fall back to ffmpeg
     }
 
     return { name: file.name, bytes: new Uint8Array(result) };
