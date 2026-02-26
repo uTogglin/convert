@@ -1,6 +1,7 @@
 import type { FileData } from "./FormatHandler.ts";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import type { LogEvent } from "@ffmpeg/ffmpeg";
+import { compressVideoWebCodecs, isWebCodecsAvailable } from "./webcodecs-compress.ts";
 
 /** Yield to the browser so pending DOM updates get painted */
 const yieldToBrowser = () => new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
@@ -419,6 +420,14 @@ async function compressVideo(
   crf?: number,
   codec: "h264" | "h265" = "h264"
 ): Promise<FileData> {
+  // ── WebCodecs fast path (hardware-accelerated) ──
+  if (isWebCodecsAvailable()) {
+    const result = await compressVideoWebCodecs(file, targetBytes, encoderSpeed, crf, codec);
+    if (result !== null) return result;
+    console.info(`WebCodecs unavailable for "${file.name}", falling back to ffmpeg.wasm`);
+  }
+
+  // ── ffmpeg.wasm fallback ──
   const ff = await getFFmpeg();
   const ext = getExt(file.name);
   const inputName = "compress_input." + ext;

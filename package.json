@@ -67,6 +67,7 @@
     "@types/three": "^0.182.0",
     "imagetracer": "^0.2.2",
     "jszip": "^3.10.1",
+    "mediabunny": "^1.34.5",
     "meyda": "^5.6.3",
     "mime": "^4.1.0",
     "nbtify": "^2.2.0",
