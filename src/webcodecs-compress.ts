@@ -7,6 +7,21 @@ import {
 
 const SUPPORTED_EXTS = new Set(["mp4", "m4v", "mov", "webm", "mkv", "ts"]);
 
+function updatePopupHeading(text: string) {
+  const popup = document.getElementById("popup");
+  if (popup) {
+    const h2 = popup.querySelector("h2");
+    if (h2) h2.textContent = text;
+  }
+}
+
+function resetProgressBar() {
+  const bar = document.getElementById("compress-progress-bar");
+  const pctEl = document.getElementById("compress-progress-pct");
+  if (bar) bar.style.width = "0%";
+  if (pctEl) pctEl.textContent = "0%";
+}
+
 export function isWebCodecsAvailable(): boolean {
   return typeof VideoEncoder !== "undefined" && typeof VideoDecoder !== "undefined";
 }
@@ -88,6 +103,9 @@ export async function compressVideoWebCodecs(
 
     // If target size mode and overshot, retry at lower bitrate
     if (targetBytes > 0 && result.byteLength > targetBytes) {
+      updatePopupHeading("Retrying with lower bitrate...");
+      resetProgressBar();
+
       const retryRatio = (targetBytes / result.byteLength) * 0.95;
       const retryBitrate = Math.max(Math.floor(videoBitrate * retryRatio), 50000);
 

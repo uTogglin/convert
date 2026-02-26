@@ -425,6 +425,15 @@ async function compressVideo(
     const result = await compressVideoWebCodecs(file, targetBytes, encoderSpeed, crf, codec);
     if (result !== null) return result;
     console.info(`WebCodecs unavailable for "${file.name}", falling back to ffmpeg.wasm`);
+    await showCompressPopup(
+      `<h2>Falling back to software encoding...</h2>` +
+      `<p>${file.name}</p>` +
+      `<p style="color:var(--text-muted);font-size:0.85rem">Hardware encoder couldn't hit target size. Using software encoder for tighter control.</p>` +
+      `<div style="background:var(--input-border);border-radius:8px;height:18px;margin:12px 0;overflow:hidden">` +
+        `<div id="compress-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s;border-radius:8px"></div>` +
+      `</div>` +
+      `<p id="compress-progress-pct" style="text-align:center;color:var(--text-muted);font-size:0.85rem">0%</p>`
+    );
   }
 
   // ── ffmpeg.wasm fallback ──
@@ -522,19 +531,12 @@ async function compressVideo(
     ? ["-c:a", audioCodec, "-b:a", "96k"]
     : ["-an"];
 
-  // Adaptive CRF: pick a CRF that naturally aligns with the target bitrate
-  const ratio = file.bytes.length / targetBytes;
-  const adaptiveCrf = Math.min(40, Math.round(18 + (Math.log2(ratio) * 6)));
-
-  // Step 1: Single-pass adaptive CRF with maxrate safety net
-  const crfArgs: string[] = isWebM
-    ? ["-crf", String(adaptiveCrf), "-b:v", String(videoBitrate)]
-    : ["-crf", String(adaptiveCrf), "-maxrate", String(videoBitrate), "-bufsize", String(videoBitrate * 2)];
-
+  // Single-pass ABR: direct bitrate targeting for tight size control
   try {
     await ffExecWithProgress([
       "-hide_banner", "-y", "-i", inputName,
-      "-c:v", videoCodec, ...pixFmtArgs, ...speedArgs, ...crfArgs,
+      "-c:v", videoCodec, ...pixFmtArgs, ...speedArgs,
+      "-b:v", String(videoBitrate),
       ...audioArgs,
       outputName,
     ], duration, "Compressing video...", stallTimeout);
@@ -559,50 +561,17 @@ async function compressVideo(
     return file;
   }
 
-  let data = await ff.readFile(outputName);
-  let bytes = data instanceof Uint8Array ? new Uint8Array(data) : new TextEncoder().encode(data as string);
-
-  // If re-encode is larger than original, keep original
-  if (bytes.length >= file.bytes.length) {
-    await ff.deleteFile(inputName).catch(() => {});
-    await ff.deleteFile(outputName).catch(() => {});
-    return file;
-  }
-
-  // If result fits target, done
-  if (bytes.length <= targetBytes) {
-    await ff.deleteFile(inputName).catch(() => {});
-    await ff.deleteFile(outputName).catch(() => {});
-    return { name: file.name, bytes };
-  }
-
-  // Step 2: Single-pass ABR fallback for tighter size control
-  try {
-    await showCompressPopup(
-      `<h2>Compressing video (ABR pass)...</h2>` +
-      `<p>${file.name}</p>` +
-      `<div style="background:var(--input-border);border-radius:8px;height:18px;margin:12px 0;overflow:hidden">` +
-        `<div id="compress-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s;border-radius:8px"></div>` +
-      `</div>` +
-      `<p id="compress-progress-pct" style="text-align:center;color:var(--text-muted);font-size:0.85rem">0%</p>`
-    );
-
-    await ffExecWithProgress([
-      "-hide_banner", "-y", "-i", inputName,
-      "-c:v", videoCodec, ...pixFmtArgs, ...speedArgs,
-      "-b:v", String(videoBitrate),
-      ...audioArgs,
-      outputName,
-    ], duration, "Compressing video (ABR)...");
-
-    data = await ff.readFile(outputName);
-    bytes = data instanceof Uint8Array ? new Uint8Array(data) : new TextEncoder().encode(data as string);
-  } catch (e) {
-    console.warn(`ABR fallback failed for "${file.name}", using CRF result:`, e);
-  }
+  const data = await ff.readFile(outputName);
+  const bytes = data instanceof Uint8Array ? new Uint8Array(data) : new TextEncoder().encode(data as string);
 
   await ff.deleteFile(inputName).catch(() => {});
   await ff.deleteFile(outputName).catch(() => {});
+
+  // If re-encode is larger than original, keep original
+  if (bytes.length >= file.bytes.length) {
+    console.warn(`Re-encode of "${file.name}" is larger than original, keeping original.`);
+    return file;
+  }
 
   if (bytes.length > targetBytes) {
     console.warn(`Could not compress "${file.name}" to target size. Best: ${(bytes.length / 1024 / 1024).toFixed(1)} MB`);

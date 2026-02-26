@@ -23,8 +23,12 @@ export default defineConfig({
           dest: "wasm"
         },
         {
-          src: "node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.*",
+          src: "node_modules/@ffmpeg/core-mt/dist/esm/ffmpeg-core.*",
           dest: "wasm"
+        },
+        {
+          src: "node_modules/coi-serviceworker/coi-serviceworker.min.js",
+          dest: "."
         },
         {
           src: "node_modules/@imagemagick/magick-wasm/dist/magick.wasm",
