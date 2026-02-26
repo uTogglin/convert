@@ -527,9 +527,8 @@ async function compressVideo(
       outputName,
     ], duration, "Compressing video...", stallTimeout);
   } catch (e) {
-    // If H.265/AV1 failed or stalled, reload FFmpeg and fall back to H.264
-    if (codec !== "h264") {
-      const label = codec === "av1" ? "AV1" : "H.265";
+    // If H.265 failed or stalled, reload FFmpeg and fall back to H.264
+    if (codec === "h265" && !isWebM) {
       console.warn(`H.265 compression failed for "${file.name}", falling back to H.264:`, e);
       await showCompressPopup(
         `<h2>H.265 failed, falling back to H.264...</h2>` +
