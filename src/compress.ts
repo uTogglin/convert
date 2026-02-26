@@ -6,23 +6,35 @@ import { compressVideoWebCodecs, isWebCodecsAvailable } from "./webcodecs-compre
 /** Yield to the browser so pending DOM updates get painted */
 const yieldToBrowser = () => new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
 
-// ── Lazy FFmpeg instance for compression ──
+// ── Lazy FFmpeg instances ──
 
 let compressFFmpeg: FFmpeg | null = null;
 let ffmpegReady: Promise<void> | null = null;
+let mtFFmpeg: FFmpeg | null = null;
+let mtReady: Promise<void> | null = null;
+let useMT = false;
 
 async function getFFmpeg(): Promise<FFmpeg> {
-  if (!compressFFmpeg) {
-    compressFFmpeg = new FFmpeg();
+  if (useMT) {
+    if (!mtFFmpeg) mtFFmpeg = new FFmpeg();
+    if (!mtReady) mtReady = mtFFmpeg.load({ coreURL: "/wasm/mt/ffmpeg-core.js" }).then(() => {});
+    await mtReady;
+    return mtFFmpeg;
   }
-  if (!ffmpegReady) {
-    ffmpegReady = compressFFmpeg.load({ coreURL: "/wasm/ffmpeg-core.js" }).then(() => {});
-  }
+  if (!compressFFmpeg) compressFFmpeg = new FFmpeg();
+  if (!ffmpegReady) ffmpegReady = compressFFmpeg.load({ coreURL: "/wasm/ffmpeg-core.js" }).then(() => {});
   await ffmpegReady;
   return compressFFmpeg;
 }
 
 async function reloadFFmpeg(): Promise<FFmpeg> {
+  if (useMT) {
+    if (mtFFmpeg) mtFFmpeg.terminate();
+    mtFFmpeg = new FFmpeg();
+    mtReady = mtFFmpeg.load({ coreURL: "/wasm/mt/ffmpeg-core.js" }).then(() => {});
+    await mtReady;
+    return mtFFmpeg;
+  }
   if (compressFFmpeg) compressFFmpeg.terminate();
   compressFFmpeg = new FFmpeg();
   ffmpegReady = compressFFmpeg.load({ coreURL: "/wasm/ffmpeg-core.js" }).then(() => {});
@@ -436,7 +448,9 @@ async function compressVideo(
     );
   }
 
-  // ── ffmpeg.wasm fallback ──
+  // ── ffmpeg.wasm fallback (multi-threaded) ──
+  useMT = true;
+  try {
   const ff = await getFFmpeg();
   const ext = getExt(file.name);
   const inputName = "compress_input." + ext;
@@ -578,6 +592,9 @@ async function compressVideo(
   }
 
   return { name: file.name, bytes };
+  } finally {
+    useMT = false;
+  }
 }
 
 // ── Audio compression ──
