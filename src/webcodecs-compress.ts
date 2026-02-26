@@ -156,5 +156,5 @@ async function attemptConversion(
   };
 
   await conversion.execute();
-  return (output.target as BufferTarget).result;
+  return (output.target as BufferTarget).buffer;
 }
