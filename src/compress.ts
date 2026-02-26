@@ -503,9 +503,9 @@ async function compressVideo(
     return file;
   }
 
-  // Calculate target bitrate (95% safety margin for container overhead)
-  const safeTarget = targetBytes * 0.95;
-  const audioBits = hasAudio ? 128000 : 0;
+  // Calculate target bitrate (3% safety margin for container overhead)
+  const safeTarget = targetBytes * 0.97;
+  const audioBits = hasAudio ? 96000 : 0;
   const totalBitrate = (safeTarget * 8) / duration;
   const videoBitrate = Math.max(Math.floor(totalBitrate - audioBits), 50000);
 
