@@ -1669,6 +1669,26 @@ async function applyCompression(files: FileData[]): Promise<FileData[]> {
   return await applyFileCompression(files, targetBytes, compressMode, "quality", 23, compressCodec);
 }
 
+const videoCompressionExts = new Set([
+  "mp4", "webm", "avi", "mov", "mkv", "flv", "wmv", "ogv", "m4v", "3gp", "ts", "mts",
+]);
+
+function isVideoFile(name: string): boolean {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  return videoCompressionExts.has(ext);
+}
+
+function getVideoCompressionHtml(inputFiles: File[], outputFiles: FileData[]): string {
+  const compressionActive = compressEnabled && !(skipReencode && compressTargetMB <= 0);
+  if (!compressionActive) return "";
+  const videoInputs = inputFiles.filter(f => isVideoFile(f.name));
+  const videoOutputs = outputFiles.filter(f => isVideoFile(f.name));
+  if (videoInputs.length === 0 || videoOutputs.length === 0) return "";
+  const before = videoInputs.reduce((s, f) => s + f.size, 0);
+  const after = videoOutputs.reduce((s, f) => s + f.bytes.length, 0);
+  return `<p>Compression: ${formatFileSize(before)} → ${formatFileSize(after)}</p>`;
+}
+
 /** Update the convert button to show "Process" mode when processing settings are active but no output format is selected */
 function updateProcessButton() {
   const hasFiles = selectedFiles.length > 0;
@@ -1940,9 +1960,11 @@ ui.convertButton.onclick = async function () {
       }
 
       const totalSize = fileData.reduce((s, f) => s + f.bytes.length, 0);
+      const compressionHtml = getVideoCompressionHtml(inputFiles, fileData);
       window.showPopup(
         `<h2>Processed ${fileData.length} file${fileData.length !== 1 ? "s" : ""}!</h2>` +
         `<p>Total size: ${formatFileSize(totalSize)}</p>` +
+        compressionHtml +
         `<button onclick="window.hidePopup()">OK</button>`
       );
     } catch (e) {
@@ -2025,9 +2047,11 @@ ui.convertButton.onclick = async function () {
       }
 
       const totalSize = processedOutputFiles.reduce((s, f) => s + f.bytes.length, 0);
+      const compressionHtml = getVideoCompressionHtml(inputFiles, processedOutputFiles);
       window.showPopup(
         `<h2>Converted ${processedOutputFiles.length} file${processedOutputFiles.length !== 1 ? "s" : ""} to ${outputFormat.format}!</h2>` +
         `<p>Total size: ${formatFileSize(totalSize)}</p>` +
+        compressionHtml +
         (processedOutputFiles.length > 1 && archiveMultiOutput ? `<p>Results delivered as a ZIP archive.</p>` : ``) +
         `<button onclick="window.hidePopup()">OK</button>`
       );
@@ -2125,9 +2149,11 @@ ui.convertButton.onclick = async function () {
       }
 
       const singleTotalSize = processedSingleFiles.reduce((s, f) => s + f.bytes.length, 0);
+      const compressionHtml = getVideoCompressionHtml(inputFiles, processedSingleFiles);
       window.showPopup(
         `<h2>Converted ${inputOption.format.format} to ${outputOption.format.format}!</h2>` +
         `<p>Size: ${formatFileSize(singleTotalSize)}</p>` +
+        compressionHtml +
         `<p>Path used: <b>${output.path.map(c => c.format.format).join(" → ")}</b>.</p>\n` +
         `<button onclick="window.hidePopup()">OK</button>`
       );
