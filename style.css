@@ -1503,6 +1503,7 @@ button.selected {
 body[data-tool="image"] #file-area { display: none !important; }
 body[data-tool="image"] #archive-panel { display: none !important; }
 body[data-tool="image"] #output-tray { display: none !important; }
+body[data-tool="image"] #convert-button { display: none !important; }
 
 /* ── Image page header ── */
 .img-page-header {
@@ -1766,7 +1767,7 @@ body[data-tool="image"] #output-tray { display: none !important; }
   color: var(--accent);
 }
 
-/* Download button (below settings in sidebar) */
+/* Action button (Process / Download) in sidebar */
 .img-download-btn {
   width: 100%;
   padding: 12px 24px;

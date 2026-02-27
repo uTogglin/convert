@@ -2387,6 +2387,45 @@ wireInlineImageSettings();
 /** Update the process button state for image tools (uses the shared convert button) */
 function imgUpdateProcessButton() {
   updateProcessButton();
+  imgUpdateActionButton();
+}
+
+/** Update the dual Process/Download action button based on current image state */
+function imgUpdateActionButton() {
+  if (!ui.imgDownloadBtn) return;
+  const hasFiles = imgToolFiles.length > 0;
+  const currentHasProcessed = imgProcessedData.has(imgActiveIndex);
+
+  if (!hasFiles) {
+    ui.imgDownloadBtn.textContent = "Process";
+    ui.imgDownloadBtn.classList.add("disabled");
+    return;
+  }
+
+  if (currentHasProcessed) {
+    // Current image is processed — offer download
+    ui.imgDownloadBtn.textContent = imgProcessedData.size > 1 ? "Download All" : "Download";
+    ui.imgDownloadBtn.classList.remove("disabled");
+  } else {
+    // Current image needs processing — check if processing is possible
+    const hasImageFiles = imgToolFiles.some(f => {
+      const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
+      return rescaleExts.has(ext) || bgRemovalExts.has(ext);
+    });
+    const rescaleReady = rescaleEnabled && (rescaleWidth > 0 || rescaleHeight > 0);
+    const hasImageProcessing = rescaleReady || removeBg;
+
+    if (hasImageFiles && hasImageProcessing) {
+      const labels: string[] = [];
+      if (rescaleReady) labels.push("Resize");
+      if (removeBg) labels.push("Remove BG");
+      ui.imgDownloadBtn.textContent = labels.join(" & ") || "Process";
+      ui.imgDownloadBtn.classList.remove("disabled");
+    } else {
+      ui.imgDownloadBtn.textContent = "Process";
+      ui.imgDownloadBtn.classList.add("disabled");
+    }
+  }
 }
 
 /** Load files into the image tools workspace */
@@ -2417,7 +2456,6 @@ function imgLoadFiles(files: File[]) {
   imgShowAfter = false;
   ui.imgCompareSwitch?.classList.remove("active");
   imgUpdateCompareLabels();
-  ui.imgDownloadBtn?.classList.add("disabled");
 
   imgRenderFilmstrip();
   imgShowImage(imgToolFiles.length > 1 ? imgToolFiles.length - 1 : 0);
@@ -2445,6 +2483,9 @@ function imgShowImage(index: number) {
   // Update filmstrip active state
   const thumbs = ui.imgFilmstripGrid?.querySelectorAll(".img-filmstrip-thumb");
   thumbs?.forEach((t, i) => t.classList.toggle("active", i === index));
+
+  // Update action button (Process vs Download) for this image
+  imgUpdateActionButton();
 }
 
 /** Render filmstrip thumbnails */
@@ -2493,9 +2534,9 @@ function imgResetState() {
   if (ui.imgPreview) { ui.imgPreview.classList.add("hidden"); ui.imgPreview.src = ""; }
   if (ui.imgWorkspace) ui.imgWorkspace.classList.add("hidden");
   if (ui.imgCompareSwitch) ui.imgCompareSwitch.classList.remove("active");
-  if (ui.imgDownloadBtn) ui.imgDownloadBtn.classList.add("disabled");
   if (ui.imgFilmstripGrid) ui.imgFilmstripGrid.innerHTML = "";
   imgUpdateCompareLabels();
+  imgUpdateActionButton();
 }
 
 // Canvas click → trigger file input (only in empty state)
@@ -2541,24 +2582,30 @@ ui.imgCompareSwitch?.addEventListener("click", () => {
   imgShowImage(imgActiveIndex);
 });
 
-// Download button
+// Action button: Process (if unprocessed) or Download (if processed)
 ui.imgDownloadBtn?.addEventListener("click", () => {
-  if (imgProcessedData.size === 0) return;
-  if (imgProcessedData.size === 1) {
-    // Single image: download it
-    const data = imgProcessedData.values().next().value as FileData;
-    const blob = new Blob([data.bytes as BlobPart], { type: "application/octet-stream" });
-    const url = URL.createObjectURL(blob);
-    triggerDownload(url, data.name);
-    URL.revokeObjectURL(url);
-  } else {
-    // Multiple images: download all
-    for (const [, data] of imgProcessedData) {
+  if (ui.imgDownloadBtn.classList.contains("disabled")) return;
+  const currentHasProcessed = imgProcessedData.has(imgActiveIndex);
+
+  if (currentHasProcessed) {
+    // Download mode
+    if (imgProcessedData.size === 1) {
+      const data = imgProcessedData.values().next().value as FileData;
       const blob = new Blob([data.bytes as BlobPart], { type: "application/octet-stream" });
       const url = URL.createObjectURL(blob);
       triggerDownload(url, data.name);
       URL.revokeObjectURL(url);
+    } else {
+      for (const [, data] of imgProcessedData) {
+        const blob = new Blob([data.bytes as BlobPart], { type: "application/octet-stream" });
+        const url = URL.createObjectURL(blob);
+        triggerDownload(url, data.name);
+        URL.revokeObjectURL(url);
+      }
     }
+  } else {
+    // Process mode — trigger the shared convert button logic
+    ui.convertButton.click();
   }
 });
 
@@ -2605,9 +2652,6 @@ ui.convertButton.onclick = async function () {
         ui.imgCompareSwitch?.classList.add("active");
         imgUpdateCompareLabels();
         imgShowImage(imgActiveIndex);
-
-        // Enable download button
-        ui.imgDownloadBtn?.classList.remove("disabled");
 
         const totalSize = fileData.reduce((s, f) => s + f.bytes.length, 0);
         window.showPopup(
