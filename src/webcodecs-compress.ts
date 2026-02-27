@@ -306,6 +306,7 @@ async function attemptConversion(
 
   // If audio was expected but got discarded, bail out so ffmpeg can handle it
   if (opts.hasAudio && conversion.discardedTracks.some(t => t.track.isAudioTrack())) {
+    try { input.dispose(); } catch { /* ignore */ }
     return null;
   }
 
@@ -313,7 +314,10 @@ async function attemptConversion(
     const hasCodecIssue = conversion.discardedTracks.some(
       t => t.reason === "no_encodable_target_codec" || t.reason === "undecodable_source_codec"
     );
-    if (hasCodecIssue) return null;
+    if (hasCodecIssue) {
+      try { input.dispose(); } catch { /* ignore */ }
+      return null;
+    }
   }
 
   conversion.onProgress = (progress: number) => {
