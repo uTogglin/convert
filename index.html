@@ -325,15 +325,15 @@
 
   <!-- Image tools page -->
   <section id="image-page" class="tool-page hidden">
-    <div class="tool-page-header">
-      <h2>Image Tools</h2>
-      <p>Upload images to remove backgrounds, rescale, and strip metadata.</p>
-    </div>
-
     <!-- Main layout: canvas center + settings right -->
     <div id="img-layout">
-      <!-- Canvas column: drop zone / preview + filmstrip + controls -->
+      <!-- Canvas column: title + canvas + filmstrip + before/after -->
       <div id="img-canvas-col">
+        <div class="img-col-header">
+          <h2>Image Tools</h2>
+          <p>Upload images to remove backgrounds, rescale, and strip metadata.</p>
+        </div>
+
         <div id="img-canvas">
           <div id="img-drop-prompt">
             <svg class="img-drop-icon" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -347,56 +347,56 @@
           <img id="img-preview" class="hidden" alt="Preview">
         </div>
 
-        <!-- Filmstrip + controls (shown when image loaded) -->
+        <!-- Filmstrip + before/after (shown when image loaded) -->
         <div id="img-workspace" class="hidden">
           <div class="img-filmstrip">
             <div id="img-filmstrip-grid"></div>
             <button id="img-add-more" class="img-filmstrip-add" title="Add more images">+</button>
           </div>
-          <div class="img-controls">
-            <div class="img-compare-toggle">
-              <span class="img-compare-label" data-side="before">Before</span>
-              <button id="img-compare-switch" class="sm-switch" role="switch"></button>
-              <span class="img-compare-label" data-side="after">After</span>
-            </div>
-            <button id="img-download-btn" class="img-download-btn disabled">Download</button>
+          <div class="img-compare-toggle">
+            <span class="img-compare-label" data-side="before">Before</span>
+            <button id="img-compare-switch" class="img-toggle-switch" role="switch"></button>
+            <span class="img-compare-label" data-side="after">After</span>
           </div>
         </div>
       </div>
 
-      <!-- Settings sidebar (right) -->
-      <aside class="img-settings">
-        <h4 class="img-settings-title">Settings</h4>
-        <div class="img-settings-group">
-          <span class="sm-label">Background removal</span>
-          <label class="sm-switch-row">
-            <span class="sm-switch-label">Remove background</span>
-            <button id="img-remove-bg-toggle" class="sm-switch" role="switch"></button>
-          </label>
-          <button id="img-bg-mode-toggle" class="sm-btn hidden">Mode: Local</button>
-          <label class="sm-switch-row hidden" id="img-bg-correction-row">
-            <span class="sm-switch-label">Correction</span>
-            <button id="img-bg-correction-toggle" class="sm-switch" role="switch"></button>
-          </label>
-          <div id="img-bg-api-key-row" class="hidden">
-            <input type="password" id="img-bg-api-key" placeholder="remove.bg API key" autocomplete="off">
-          </div>
-        </div>
-        <div class="img-settings-group">
-          <span class="sm-label">Rescale</span>
-          <label class="sm-switch-row">
-            <span class="sm-switch-label">Rescale images</span>
-            <button id="img-rescale-toggle" class="sm-switch" role="switch"></button>
-          </label>
-          <div id="img-rescale-options" class="hidden">
-            <div class="sm-size-row">
-              <input type="number" id="img-rescale-width" placeholder="Width" min="1">
-              <span class="sm-unit">&times;</span>
-              <input type="number" id="img-rescale-height" placeholder="Height" min="1">
+      <!-- Settings sidebar (right) + download below -->
+      <aside class="img-sidebar">
+        <div class="img-settings">
+          <h4 class="img-settings-title">Settings</h4>
+          <div class="img-settings-group">
+            <span class="sm-label">Background removal</span>
+            <label class="sm-switch-row">
+              <span class="sm-switch-label">Remove background</span>
+              <button id="img-remove-bg-toggle" class="sm-switch" role="switch"></button>
+            </label>
+            <button id="img-bg-mode-toggle" class="sm-btn hidden">Mode: Local</button>
+            <label class="sm-switch-row hidden" id="img-bg-correction-row">
+              <span class="sm-switch-label">Correction</span>
+              <button id="img-bg-correction-toggle" class="sm-switch" role="switch"></button>
+            </label>
+            <div id="img-bg-api-key-row" class="hidden">
+              <input type="password" id="img-bg-api-key" placeholder="remove.bg API key" autocomplete="off">
             </div>
-            <label class="sm-check"><input type="checkbox" id="img-rescale-lock-ratio" checked> Lock aspect ratio</label>
+          </div>
+          <div class="img-settings-group">
+            <span class="sm-label">Rescale</span>
+            <label class="sm-switch-row">
+              <span class="sm-switch-label">Rescale images</span>
+              <button id="img-rescale-toggle" class="sm-switch" role="switch"></button>
+            </label>
+            <div id="img-rescale-options" class="hidden">
+              <div class="sm-size-row">
+                <input type="number" id="img-rescale-width" placeholder="Width" min="1">
+                <span class="sm-unit">&times;</span>
+                <input type="number" id="img-rescale-height" placeholder="Height" min="1">
+              </div>
+              <label class="sm-check"><input type="checkbox" id="img-rescale-lock-ratio" checked> Lock aspect ratio</label>
+            </div>
           </div>
         </div>
+        <button id="img-download-btn" class="img-download-btn disabled">Download</button>
       </aside>
     </div>
 
