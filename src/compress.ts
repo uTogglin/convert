@@ -1,7 +1,7 @@
 import type { FileData } from "./FormatHandler.ts";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import type { LogEvent } from "@ffmpeg/ffmpeg";
-import { compressVideoWebCodecs, isWebCodecsAvailable } from "./webcodecs-compress.ts";
+import { compressVideoWebCodecs, compressVideoVP9, isWebCodecsAvailable } from "./webcodecs-compress.ts";
 
 /** Yield to the browser so pending DOM updates get painted */
 const yieldToBrowser = () => new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
@@ -571,6 +571,20 @@ async function compressVideo(
   }
 
   if (bytes.length > targetBytes) {
+    // ffmpeg couldn't hit target — try VP9 as last resort (changes format to WebM)
+    if (targetBytes > 0 && isWebCodecsAvailable()) {
+      await showCompressPopup(
+        `<h2>Trying VP9 codec (last resort)...</h2>` +
+        `<p>${file.name}</p>` +
+        `<p style="color:var(--text-muted);font-size:0.85rem">Original codec couldn't hit target. Trying VP9 — output will be WebM.</p>` +
+        `<div style="background:var(--input-border);border-radius:8px;height:18px;margin:12px 0;overflow:hidden">` +
+          `<div id="compress-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s;border-radius:8px"></div>` +
+        `</div>` +
+        `<p id="compress-progress-pct" style="text-align:center;color:var(--text-muted);font-size:0.85rem">0%</p>`
+      );
+      const vp9Result = await compressVideoVP9(file, targetBytes);
+      if (vp9Result) return vp9Result;
+    }
     console.warn(`Could not compress "${file.name}" to target size. Best: ${(bytes.length / 1024 / 1024).toFixed(1)} MB`);
   }
 
