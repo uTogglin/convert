@@ -199,7 +199,8 @@ const ui = {
   createArchiveBtn: document.querySelector("#create-archive-btn") as HTMLButtonElement,
   themeToggle: document.querySelector("#theme-toggle") as HTMLButtonElement,
   settingsToggle: document.querySelector("#settings-toggle") as HTMLButtonElement,
-  settingsDrawer: document.querySelector("#settings-drawer") as HTMLDivElement,
+  settingsModal: document.querySelector("#settings-modal") as HTMLDivElement,
+  settingsOverlay: document.querySelector("#settings-overlay") as HTMLDivElement,
   accentColors: document.querySelectorAll(".color-dot") as NodeListOf<HTMLButtonElement>,
   customAccent: document.querySelector("#custom-accent") as HTMLInputElement,
   autoDownloadToggle: document.querySelector("#auto-download-toggle") as HTMLButtonElement,
@@ -245,7 +246,6 @@ function showHomePage() {
   document.body.removeAttribute("data-tool");
   ui.homePage.classList.remove("hidden");
   ui.backToHome.classList.add("hidden");
-  ui.settingsDrawer.classList.add("hidden");
   compressPage.classList.add("hidden");
   imagePage.classList.add("hidden");
 }
@@ -268,12 +268,10 @@ function showToolView(tool: "convert" | "compress" | "image") {
       try { localStorage.setItem("convert-compress", "true"); } catch {}
       ui.compressToggle.textContent = "Compress: On";
       ui.compressToggle.classList.add("active");
-      ui.compressOptions.style.display = "";
+      ui.compressOptions.classList.remove("hidden");
     }
-    syncCompressPageFromState();
   } else if (tool === "image") {
     imagePage.classList.remove("hidden");
-    syncImagePageFromState();
   }
   updateProcessButton();
 }
@@ -295,182 +293,48 @@ for (const card of document.querySelectorAll<HTMLButtonElement>(".home-card")) {
 // Clicking logo goes home
 document.querySelector("#logo")?.addEventListener("click", showHomePage);
 
-// ── Compress page controls ──────────────────────────────────────────────────
-const tpCodecBtns = document.querySelectorAll<HTMLButtonElement>("#compress-page .tool-pill[data-codec]");
-const tpSpeedBtns = document.querySelectorAll<HTMLButtonElement>("#compress-page .tool-pill[data-speed]");
-const tpWebmToggle = document.querySelector("#tp-webm-toggle") as HTMLButtonElement;
-const tpWebmHint = document.querySelector("#tp-webm-hint") as HTMLElement;
-const tpTargetMb = document.querySelector("#tp-target-mb") as HTMLInputElement;
-const tpSizePresets = document.querySelectorAll<HTMLButtonElement>(".tp-size-preset");
+// ── Settings modal ──────────────────────────────────────────────────────────
+const smNavBtns = document.querySelectorAll<HTMLButtonElement>(".sm-nav-btn");
+const smPanels = document.querySelectorAll<HTMLDivElement>(".sm-panel");
 
-function syncCompressPageFromState() {
-  tpCodecBtns.forEach(b => b.classList.toggle("selected", b.dataset.codec === compressCodec));
-  tpSpeedBtns.forEach(b => b.classList.toggle("selected", b.dataset.speed === compressSpeed));
-  tpWebmToggle.textContent = `WebM mode: ${compressWebmMode ? "On" : "Off"}`;
-  tpWebmToggle.classList.toggle("active", compressWebmMode);
-  tpWebmHint.style.display = compressWebmMode ? "" : "none";
-  tpTargetMb.value = compressTargetMB > 0 ? String(compressTargetMB) : "";
-  tpSizePresets.forEach(b => {
-    b.classList.toggle("selected", compressTargetMB > 0 && String(compressTargetMB) === b.dataset.size);
-  });
+function openSettings(panel?: string) {
+  if (panel) switchSettingsPanel(panel);
+  ui.settingsModal.classList.remove("hidden");
+  ui.settingsOverlay.classList.remove("hidden");
 }
 
-for (const btn of tpCodecBtns) {
+function closeSettings() {
+  ui.settingsModal.classList.add("hidden");
+  ui.settingsOverlay.classList.add("hidden");
+}
+
+function switchSettingsPanel(panelName: string) {
+  smNavBtns.forEach(b => b.classList.toggle("active", b.dataset.panel === panelName));
+  smPanels.forEach(p => p.classList.toggle("active", p.dataset.panel === panelName));
+}
+
+// Nav button clicks
+for (const btn of smNavBtns) {
   btn.addEventListener("click", () => {
-    compressCodec = btn.dataset.codec as "h264" | "h265";
-    try { localStorage.setItem("convert-compress-codec", compressCodec); } catch {}
-    tpCodecBtns.forEach(b => b.classList.toggle("selected", b === btn));
-    // Sync drawer
-    ui.codecPresetBtns.forEach(b => b.classList.toggle("selected", b.dataset.codec === compressCodec));
-    ui.codecHint.classList.toggle("hidden", compressCodec !== "h265");
+    if (btn.dataset.panel) switchSettingsPanel(btn.dataset.panel);
   });
 }
 
-for (const btn of tpSpeedBtns) {
-  btn.addEventListener("click", () => {
-    compressSpeed = btn.dataset.speed as "fast" | "balanced" | "quality";
-    try { localStorage.setItem("convert-compress-speed", compressSpeed); } catch {}
-    tpSpeedBtns.forEach(b => b.classList.toggle("selected", b === btn));
-    // Sync drawer
-    ui.speedPresetBtns.forEach(b => b.classList.toggle("selected", b.dataset.speed === compressSpeed));
+// Close on overlay click or Escape
+ui.settingsOverlay.addEventListener("click", closeSettings);
+window.addEventListener("keydown", e => {
+  if (e.key === "Escape" && !ui.settingsModal.classList.contains("hidden")) {
+    closeSettings();
+  }
+});
+
+// "Configure settings" links on tool pages
+for (const link of document.querySelectorAll<HTMLButtonElement>("[data-open-panel]")) {
+  link.addEventListener("click", (e) => {
+    e.preventDefault();
+    openSettings(link.dataset.openPanel!);
   });
 }
-
-tpWebmToggle.addEventListener("click", () => {
-  compressWebmMode = !compressWebmMode;
-  try { localStorage.setItem("convert-compress-webm", String(compressWebmMode)); } catch {}
-  tpWebmToggle.textContent = `WebM mode: ${compressWebmMode ? "On" : "Off"}`;
-  tpWebmToggle.classList.toggle("active", compressWebmMode);
-  tpWebmHint.style.display = compressWebmMode ? "" : "none";
-  // Sync drawer
-  ui.webmModeToggle.textContent = `WebM mode: ${compressWebmMode ? "On" : "Off"}`;
-  ui.webmModeToggle.classList.toggle("active", compressWebmMode);
-  ui.webmHint.classList.toggle("hidden", !compressWebmMode);
-});
-
-tpTargetMb.addEventListener("input", () => {
-  compressTargetMB = parseFloat(tpTargetMb.value) || 0;
-  try { localStorage.setItem("convert-compress-target", String(compressTargetMB)); } catch {}
-  ui.compressTargetInput.value = tpTargetMb.value;
-  tpSizePresets.forEach(b => {
-    b.classList.toggle("selected", compressTargetMB > 0 && String(compressTargetMB) === b.dataset.size);
-  });
-});
-
-for (const btn of tpSizePresets) {
-  btn.addEventListener("click", () => {
-    const size = btn.dataset.size!;
-    compressTargetMB = parseFloat(size);
-    try { localStorage.setItem("convert-compress-target", size); } catch {}
-    tpTargetMb.value = size;
-    ui.compressTargetInput.value = size;
-    tpSizePresets.forEach(b => b.classList.toggle("selected", b === btn));
-  });
-}
-
-// ── Image page controls ─────────────────────────────────────────────────────
-const tpBgToggle = document.querySelector("#tp-bg-toggle") as HTMLButtonElement;
-const tpBgOptions = document.querySelector("#tp-bg-options") as HTMLDivElement;
-const tpBgMode = document.querySelector("#tp-bg-mode") as HTMLButtonElement;
-const tpBgCorrection = document.querySelector("#tp-bg-correction") as HTMLButtonElement;
-const tpBgApiRow = document.querySelector("#tp-bg-api-row") as HTMLDivElement;
-const tpBgApiKey = document.querySelector("#tp-bg-api-key") as HTMLInputElement;
-const tpRescaleToggle = document.querySelector("#tp-rescale-toggle") as HTMLButtonElement;
-const tpRescaleOptions = document.querySelector("#tp-rescale-options") as HTMLDivElement;
-const tpRescaleWidth = document.querySelector("#tp-rescale-width") as HTMLInputElement;
-const tpRescaleHeight = document.querySelector("#tp-rescale-height") as HTMLInputElement;
-const tpRescaleLock = document.querySelector("#tp-rescale-lock") as HTMLInputElement;
-
-function syncImagePageFromState() {
-  tpBgToggle.textContent = removeBg ? "On" : "Off";
-  tpBgToggle.classList.toggle("active", removeBg);
-  tpBgOptions.style.display = removeBg ? "" : "none";
-  tpBgMode.textContent = `Mode: ${bgMode === "api" ? "API" : "Local"}`;
-  tpBgMode.classList.toggle("active", bgMode === "api");
-  tpBgCorrection.textContent = `Correction: ${bgCorrection ? "On" : "Off"}`;
-  tpBgCorrection.classList.toggle("active", bgCorrection);
-  tpBgApiRow.style.display = bgMode === "api" ? "" : "none";
-  tpBgApiKey.value = bgApiKey;
-
-  tpRescaleToggle.textContent = rescaleEnabled ? "On" : "Off";
-  tpRescaleToggle.classList.toggle("active", rescaleEnabled);
-  tpRescaleOptions.style.display = rescaleEnabled ? "" : "none";
-  tpRescaleWidth.value = rescaleWidth > 0 ? String(rescaleWidth) : "";
-  tpRescaleHeight.value = rescaleHeight > 0 ? String(rescaleHeight) : "";
-  tpRescaleLock.checked = rescaleLockRatio;
-}
-
-tpBgToggle.addEventListener("click", () => {
-  removeBg = !removeBg;
-  try { localStorage.setItem("convert-remove-bg", String(removeBg)); } catch {}
-  tpBgToggle.textContent = removeBg ? "On" : "Off";
-  tpBgToggle.classList.toggle("active", removeBg);
-  tpBgOptions.style.display = removeBg ? "" : "none";
-  // Sync drawer
-  ui.removeBgToggle.textContent = `Remove background: ${removeBg ? "On" : "Off"}`;
-  ui.removeBgToggle.classList.toggle("active", removeBg);
-  updateProcessButton();
-});
-
-tpBgMode.addEventListener("click", () => {
-  bgMode = bgMode === "local" ? "api" : "local";
-  try { localStorage.setItem("convert-bg-mode", bgMode); } catch {}
-  tpBgMode.textContent = `Mode: ${bgMode === "api" ? "API" : "Local"}`;
-  tpBgMode.classList.toggle("active", bgMode === "api");
-  tpBgApiRow.style.display = bgMode === "api" ? "" : "none";
-  // Sync drawer
-  ui.bgModeToggle.textContent = `Mode: ${bgMode === "api" ? "API" : "Local"}`;
-  ui.bgModeToggle.classList.toggle("active", bgMode === "api");
-});
-
-tpBgCorrection.addEventListener("click", () => {
-  bgCorrection = !bgCorrection;
-  try { localStorage.setItem("convert-bg-correction", String(bgCorrection)); } catch {}
-  tpBgCorrection.textContent = `Correction: ${bgCorrection ? "On" : "Off"}`;
-  tpBgCorrection.classList.toggle("active", bgCorrection);
-  // Sync drawer
-  ui.bgCorrectionToggle.textContent = `Correction: ${bgCorrection ? "On" : "Off"}`;
-  ui.bgCorrectionToggle.classList.toggle("active", bgCorrection);
-});
-
-tpBgApiKey.addEventListener("input", () => {
-  bgApiKey = tpBgApiKey.value;
-  try { localStorage.setItem("convert-bg-api-key", bgApiKey); } catch {}
-  ui.bgApiKeyInput.value = bgApiKey;
-});
-
-tpRescaleToggle.addEventListener("click", () => {
-  rescaleEnabled = !rescaleEnabled;
-  try { localStorage.setItem("convert-rescale", String(rescaleEnabled)); } catch {}
-  tpRescaleToggle.textContent = rescaleEnabled ? "On" : "Off";
-  tpRescaleToggle.classList.toggle("active", rescaleEnabled);
-  tpRescaleOptions.style.display = rescaleEnabled ? "" : "none";
-  // Sync drawer
-  ui.rescaleToggle.textContent = `Rescale images: ${rescaleEnabled ? "On" : "Off"}`;
-  ui.rescaleToggle.classList.toggle("active", rescaleEnabled);
-  ui.rescaleOptions.style.display = rescaleEnabled ? "" : "none";
-  updateProcessButton();
-});
-
-tpRescaleWidth.addEventListener("input", () => {
-  rescaleWidth = parseInt(tpRescaleWidth.value) || 0;
-  try { localStorage.setItem("convert-rescale-width", String(rescaleWidth)); } catch {}
-  ui.rescaleWidthInput.value = tpRescaleWidth.value;
-  updateProcessButton();
-});
-
-tpRescaleHeight.addEventListener("input", () => {
-  rescaleHeight = parseInt(tpRescaleHeight.value) || 0;
-  try { localStorage.setItem("convert-rescale-height", String(rescaleHeight)); } catch {}
-  ui.rescaleHeightInput.value = tpRescaleHeight.value;
-  updateProcessButton();
-});
-
-tpRescaleLock.addEventListener("change", () => {
-  rescaleLockRatio = tpRescaleLock.checked;
-  try { localStorage.setItem("convert-rescale-lock", String(rescaleLockRatio)); } catch {}
-  ui.rescaleLockInput.checked = rescaleLockRatio;
-});
 
 /** Active category filter for input and output lists */
 let inputCategoryFilter = "all";
@@ -1153,13 +1017,19 @@ if (ui.themeToggle) {
   });
 }
 
-// ──── Settings Drawer Toggle ────
-if (ui.settingsToggle && ui.settingsDrawer) {
+// ──── Settings Modal Toggle ────
+if (ui.settingsToggle) {
   ui.settingsToggle.addEventListener("click", () => {
-    ui.settingsDrawer.classList.toggle("hidden");
-    if (!ui.settingsDrawer.classList.contains("hidden")) {
+    if (ui.settingsModal.classList.contains("hidden")) {
+      // Auto-select panel matching current tool page
+      const panel = activeTool === "compress" ? "compress"
+                  : activeTool === "image" ? "image"
+                  : undefined;
+      openSettings(panel);
       const list = document.getElementById("app-log-list");
       if (list) _renderAppLogInto(list);
+    } else {
+      closeSettings();
     }
   });
 }

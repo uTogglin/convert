@@ -96,109 +96,166 @@
     </div>
   </section>
 
-  <!-- Settings drawer -->
-  <div id="settings-drawer" class="hidden">
-    <div class="settings-section">
-      <h3>Accent Color</h3>
-      <div id="accent-colors">
-        <button class="color-dot active" data-color="#6C5CE7" style="background:#6C5CE7" title="Purple"></button>
-        <button class="color-dot" data-color="#0984E3" style="background:#0984E3" title="Blue"></button>
-        <button class="color-dot" data-color="#00B894" style="background:#00B894" title="Green"></button>
-        <button class="color-dot" data-color="#E17055" style="background:#E17055" title="Coral"></button>
-        <button class="color-dot" data-color="#FDCB6E" style="background:#FDCB6E" title="Yellow"></button>
-        <button class="color-dot" data-color="#E84393" style="background:#E84393" title="Pink"></button>
-        <button class="color-dot" data-color="#FF6B6B" style="background:#FF6B6B" title="Red"></button>
-        <button class="color-dot" data-color="#1C77FF" style="background:#1C77FF" title="Classic Blue"></button>
-      </div>
-      <div class="custom-slots-row">
-        <span class="custom-slots-label">Custom</span>
-        <button class="color-dot custom-slot" id="custom-slot-1" data-slot="1" title="Custom slot 1"></button>
-        <button class="color-dot custom-slot" id="custom-slot-2" data-slot="2" title="Custom slot 2"></button>
-        <button class="color-dot custom-slot" id="custom-slot-3" data-slot="3" title="Custom slot 3"></button>
-      </div>
-      <div id="custom-color-row">
-        <input type="color" id="custom-accent" value="#6C5CE7">
-        <button id="save-custom-color" title="Save current color to a slot">Save</button>
-      </div>
-    </div>
-    <div class="settings-section">
-      <h3>Toggles</h3>
-      <button id="mode-button">Advanced mode</button>
-      <hr class="settings-divider">
-      <button id="auto-download-toggle">Auto-download: On</button>
-      <button id="archive-multi-toggle">Multi-file output: Archive</button>
-      <hr class="settings-divider">
-      <button id="remove-bg-toggle">Remove background: Off</button>
-      <button id="bg-mode-toggle" class="hidden">Mode: Local</button>
-      <button id="bg-correction-toggle" class="hidden">Correction: Off</button>
-      <div id="bg-api-key-row" class="hidden">
-        <input type="password" id="bg-api-key" placeholder="remove.bg API key" autocomplete="off">
-        <p class="settings-hint">Get a free key at <a href="https://www.remove.bg/api" target="_blank" rel="noopener">remove.bg/api</a>. Images are sent to remove.bg servers.</p>
-      </div>
-      <hr class="settings-divider">
-      <button id="rescale-toggle">Rescale images: Off</button>
-      <div id="rescale-options" class="hidden">
-        <div class="rescale-inputs">
-          <input type="number" id="rescale-width" placeholder="Width" min="1">
-          <span class="rescale-x">&times;</span>
-          <input type="number" id="rescale-height" placeholder="Height" min="1">
+  <!-- Settings modal -->
+  <div id="settings-overlay" class="hidden"></div>
+  <div id="settings-modal" class="hidden">
+    <aside class="sm-sidebar">
+      <h2 class="sm-title">Settings</h2>
+      <nav class="sm-nav">
+        <button class="sm-nav-btn active" data-panel="convert">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line></svg>
+          Convert
+        </button>
+        <button class="sm-nav-btn" data-panel="compress">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="6" y1="10" x2="18" y2="10"></line><line x1="8" y1="14" x2="16" y2="14"></line><line x1="10" y1="18" x2="14" y2="18"></line></svg>
+          Compress
+        </button>
+        <button class="sm-nav-btn" data-panel="image">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+          Image Tools
+        </button>
+        <button class="sm-nav-btn" data-panel="appearance">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="2.5"></circle><circle cx="17.5" cy="10.5" r="2.5"></circle><circle cx="8.5" cy="7.5" r="2.5"></circle><circle cx="6.5" cy="12.5" r="2.5"></circle><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12a10 10 0 0 0 6 9.18"></path></svg>
+          Appearance
+        </button>
+        <button class="sm-nav-btn" data-panel="logs">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+          Logs <span id="log-badge" class="log-badge hidden">0</span>
+        </button>
+      </nav>
+    </aside>
+    <main class="sm-content">
+
+      <!-- Convert panel -->
+      <div class="sm-panel active" data-panel="convert">
+        <h3 class="sm-panel-title">Convert</h3>
+        <div class="sm-group">
+          <span class="sm-label">Mode</span>
+          <button id="mode-button" class="sm-btn">Advanced mode</button>
         </div>
-        <label class="rescale-lock"><input type="checkbox" id="rescale-lock-ratio" checked> Lock aspect ratio</label>
+        <div class="sm-group">
+          <span class="sm-label">Output</span>
+          <button id="auto-download-toggle" class="sm-btn">Auto-download: On</button>
+          <button id="archive-multi-toggle" class="sm-btn">Multi-file output: Archive</button>
+        </div>
+        <div class="sm-group">
+          <span class="sm-label">Privacy</span>
+          <button id="privacy-toggle" class="sm-btn">Privacy mode: Off</button>
+        </div>
       </div>
-      <button id="privacy-toggle">Privacy mode: Off</button>
-    </div>
-    <div class="settings-section">
-      <h3>Compression</h3>
-      <button id="compress-toggle">Compress: Off</button>
-      <div id="compress-options" class="hidden">
-        <div class="compress-grid">
-          <div class="compress-grid-left">
-            <p class="settings-hint">Re-encodes video at best quality. Set a target size to also constrain file size.</p>
-            <div class="compress-presets">
-              <span class="compress-presets-label">Codec</span>
-              <div class="compress-preset-grid">
-                <button class="codec-preset-btn selected" data-codec="h264">H.264<span class="compress-preset-note">Compatible</span></button>
-                <button class="codec-preset-btn" data-codec="h265">H.265<span class="compress-preset-note">Smaller files</span></button>
-              </div>
+
+      <!-- Compress panel -->
+      <div class="sm-panel" data-panel="compress">
+        <h3 class="sm-panel-title">Compress</h3>
+        <div class="sm-group">
+          <button id="compress-toggle" class="sm-btn">Compress: Off</button>
+          <p class="sm-hint">Re-encodes video at best quality. Set a target size to constrain file size.</p>
+        </div>
+        <div id="compress-options" class="hidden">
+          <div class="sm-group">
+            <span class="sm-label">Codec</span>
+            <div class="sm-pill-row">
+              <button class="codec-preset-btn selected" data-codec="h264">H.264<span class="sm-pill-note">Compatible</span></button>
+              <button class="codec-preset-btn" data-codec="h265">H.265<span class="sm-pill-note">Smaller files</span></button>
             </div>
-            <p id="codec-hint" class="settings-hint hidden">H.265 produces ~50% smaller files but may not play on older devices. Falls back to H.264 if encoding stalls.</p>
-            <div class="compress-presets">
-              <span class="compress-presets-label">Speed</span>
-              <div class="compress-preset-grid">
-                <button class="speed-preset-btn" data-speed="fast">Fast<span class="compress-preset-note">Fastest</span></button>
-                <button class="speed-preset-btn selected" data-speed="balanced">Balanced<span class="compress-preset-note">Default</span></button>
-                <button class="speed-preset-btn" data-speed="quality">Quality<span class="compress-preset-note">Slowest</span></button>
-              </div>
+            <p id="codec-hint" class="sm-hint hidden">H.265 produces ~50% smaller files but may not play on older devices.</p>
+          </div>
+          <div class="sm-group">
+            <span class="sm-label">Speed</span>
+            <div class="sm-pill-row">
+              <button class="speed-preset-btn" data-speed="fast">Fast<span class="sm-pill-note">Fastest</span></button>
+              <button class="speed-preset-btn selected" data-speed="balanced">Balanced<span class="sm-pill-note">Default</span></button>
+              <button class="speed-preset-btn" data-speed="quality">Quality<span class="sm-pill-note">Slowest</span></button>
             </div>
           </div>
-          <div class="compress-grid-right">
-            <button id="webm-mode-toggle">WebM mode: Off</button>
-            <p id="webm-hint" class="settings-hint hidden">Tries VP9 first for faster, smaller files. Output will be .webm.</p>
-            <div class="compress-size-row">
+          <div class="sm-group">
+            <span class="sm-label">Output format</span>
+            <button id="webm-mode-toggle" class="sm-btn">WebM mode: Off</button>
+            <p id="webm-hint" class="sm-hint hidden">Tries VP9 first for faster, smaller files. Output will be .webm.</p>
+          </div>
+          <div class="sm-group">
+            <span class="sm-label">Target size</span>
+            <div class="sm-size-row">
               <input type="number" id="compress-target-mb" placeholder="Target MB (optional)" min="0.1" step="0.1">
-              <span class="compress-unit">MB</span>
+              <span class="sm-unit">MB</span>
             </div>
-            <div class="compress-presets">
-              <span class="compress-presets-label">Discord</span>
-              <div class="compress-preset-grid">
-                <button class="compress-preset-btn" data-size="10">10 MB<span class="compress-preset-note">Free</span></button>
-                <button class="compress-preset-btn" data-size="50">50 MB<span class="compress-preset-note">Basic</span></button>
-                <button class="compress-preset-btn" data-size="500">500 MB<span class="compress-preset-note">Nitro</span></button>
-              </div>
+            <div class="sm-pill-row">
+              <button class="compress-preset-btn" data-size="10">10 MB<span class="sm-pill-note">Free</span></button>
+              <button class="compress-preset-btn" data-size="50">50 MB<span class="sm-pill-note">Basic</span></button>
+              <button class="compress-preset-btn" data-size="500">500 MB<span class="sm-pill-note">Nitro</span></button>
             </div>
+            <span class="sm-pill-label">Discord presets</span>
           </div>
         </div>
       </div>
-    </div>
-    <div class="settings-section">
-      <h3>Error Log <span id="log-badge" class="log-badge hidden">0</span></h3>
-      <p class="settings-hint">Captured <code>console.error</code> and <code>console.warn</code> messages.</p>
-      <div id="app-log-list" class="app-log-list"><p class="app-log-empty">No errors or warnings captured yet.</p></div>
-      <div class="app-log-actions">
-        <button id="copy-log-btn">Copy log</button>
-        <button id="clear-log-btn">Clear log</button>
+
+      <!-- Image Tools panel -->
+      <div class="sm-panel" data-panel="image">
+        <h3 class="sm-panel-title">Image Tools</h3>
+        <div class="sm-group">
+          <span class="sm-label">Background removal</span>
+          <button id="remove-bg-toggle" class="sm-btn">Remove background: Off</button>
+          <button id="bg-mode-toggle" class="sm-btn hidden">Mode: Local</button>
+          <button id="bg-correction-toggle" class="sm-btn hidden">Correction: Off</button>
+          <div id="bg-api-key-row" class="hidden">
+            <input type="password" id="bg-api-key" placeholder="remove.bg API key" autocomplete="off">
+            <p class="sm-hint">Get a free key at <a href="https://www.remove.bg/api" target="_blank" rel="noopener">remove.bg/api</a>. Images are sent to remove.bg servers.</p>
+          </div>
+        </div>
+        <div class="sm-group">
+          <span class="sm-label">Rescale</span>
+          <button id="rescale-toggle" class="sm-btn">Rescale images: Off</button>
+          <div id="rescale-options" class="hidden">
+            <div class="sm-size-row">
+              <input type="number" id="rescale-width" placeholder="Width" min="1">
+              <span class="sm-unit">&times;</span>
+              <input type="number" id="rescale-height" placeholder="Height" min="1">
+            </div>
+            <label class="sm-check"><input type="checkbox" id="rescale-lock-ratio" checked> Lock aspect ratio</label>
+          </div>
+        </div>
       </div>
-    </div>
+
+      <!-- Appearance panel -->
+      <div class="sm-panel" data-panel="appearance">
+        <h3 class="sm-panel-title">Appearance</h3>
+        <div class="sm-group">
+          <span class="sm-label">Accent color</span>
+          <div id="accent-colors">
+            <button class="color-dot active" data-color="#6C5CE7" style="background:#6C5CE7" title="Purple"></button>
+            <button class="color-dot" data-color="#0984E3" style="background:#0984E3" title="Blue"></button>
+            <button class="color-dot" data-color="#00B894" style="background:#00B894" title="Green"></button>
+            <button class="color-dot" data-color="#E17055" style="background:#E17055" title="Coral"></button>
+            <button class="color-dot" data-color="#FDCB6E" style="background:#FDCB6E" title="Yellow"></button>
+            <button class="color-dot" data-color="#E84393" style="background:#E84393" title="Pink"></button>
+            <button class="color-dot" data-color="#FF6B6B" style="background:#FF6B6B" title="Red"></button>
+            <button class="color-dot" data-color="#1C77FF" style="background:#1C77FF" title="Classic Blue"></button>
+          </div>
+          <div class="custom-slots-row">
+            <span class="custom-slots-label">Custom</span>
+            <button class="color-dot custom-slot" id="custom-slot-1" data-slot="1" title="Custom slot 1"></button>
+            <button class="color-dot custom-slot" id="custom-slot-2" data-slot="2" title="Custom slot 2"></button>
+            <button class="color-dot custom-slot" id="custom-slot-3" data-slot="3" title="Custom slot 3"></button>
+          </div>
+          <div id="custom-color-row">
+            <input type="color" id="custom-accent" value="#6C5CE7">
+            <button id="save-custom-color" title="Save current color to a slot">Save</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Logs panel -->
+      <div class="sm-panel" data-panel="logs">
+        <h3 class="sm-panel-title">Error Log</h3>
+        <p class="sm-hint">Captured <code>console.error</code> and <code>console.warn</code> messages.</p>
+        <div id="app-log-list" class="app-log-list"><p class="app-log-empty">No errors or warnings captured yet.</p></div>
+        <div class="app-log-actions">
+          <button id="copy-log-btn">Copy log</button>
+          <button id="clear-log-btn">Clear log</button>
+        </div>
+      </div>
+
+    </main>
   </div>
 
   <div id="file-area">
@@ -233,42 +290,7 @@
   <section id="compress-page" class="tool-page hidden">
     <div class="tool-page-header">
       <h2>Compress Video</h2>
-      <p>Re-encode your videos for smaller file sizes. Everything runs locally in your browser.</p>
-    </div>
-    <div class="tool-page-body">
-      <div class="tool-card">
-        <h3>Codec</h3>
-        <div class="tool-pill-row">
-          <button class="tool-pill selected" id="tp-codec-h264" data-codec="h264">H.264<span class="tool-pill-note">Compatible</span></button>
-          <button class="tool-pill" id="tp-codec-h265" data-codec="h265">H.265<span class="tool-pill-note">Smaller files</span></button>
-        </div>
-      </div>
-      <div class="tool-card">
-        <h3>Speed</h3>
-        <div class="tool-pill-row">
-          <button class="tool-pill" id="tp-speed-fast" data-speed="fast">Fast<span class="tool-pill-note">Fastest</span></button>
-          <button class="tool-pill selected" id="tp-speed-balanced" data-speed="balanced">Balanced<span class="tool-pill-note">Default</span></button>
-          <button class="tool-pill" id="tp-speed-quality" data-speed="quality">Quality<span class="tool-pill-note">Slowest</span></button>
-        </div>
-      </div>
-      <div class="tool-card">
-        <h3>Output</h3>
-        <button class="tool-toggle" id="tp-webm-toggle">WebM mode: Off</button>
-        <p class="tool-hint" id="tp-webm-hint" style="display:none">Tries VP9 first for faster, smaller files. Output will be .webm.</p>
-      </div>
-      <div class="tool-card">
-        <h3>Target Size</h3>
-        <div class="tool-size-row">
-          <input type="number" id="tp-target-mb" placeholder="Optional" min="0.1" step="0.1">
-          <span class="tool-unit">MB</span>
-        </div>
-        <div class="tool-pill-row" style="margin-top:10px">
-          <button class="tool-pill tp-size-preset" data-size="10">10 MB<span class="tool-pill-note">Free</span></button>
-          <button class="tool-pill tp-size-preset" data-size="50">50 MB<span class="tool-pill-note">Basic</span></button>
-          <button class="tool-pill tp-size-preset" data-size="500">500 MB<span class="tool-pill-note">Nitro</span></button>
-        </div>
-        <span class="tool-pill-label">Discord presets</span>
-      </div>
+      <p>Upload your videos and hit compress. <button class="tool-page-settings-link" data-open-panel="compress">Configure settings</button></p>
     </div>
   </section>
 
@@ -276,33 +298,7 @@
   <section id="image-page" class="tool-page hidden">
     <div class="tool-page-header">
       <h2>Image Tools</h2>
-      <p>Remove backgrounds and rescale your images. All processing happens locally.</p>
-    </div>
-    <div class="tool-page-body">
-      <div class="tool-card">
-        <h3>Remove Background</h3>
-        <button class="tool-toggle" id="tp-bg-toggle">Off</button>
-        <div id="tp-bg-options" style="display:none">
-          <button class="tool-toggle" id="tp-bg-mode">Mode: Local</button>
-          <button class="tool-toggle" id="tp-bg-correction">Correction: Off</button>
-          <div id="tp-bg-api-row" style="display:none">
-            <input type="password" id="tp-bg-api-key" placeholder="remove.bg API key" autocomplete="off">
-            <p class="tool-hint">Get a free key at <a href="https://www.remove.bg/api" target="_blank" rel="noopener">remove.bg/api</a>.</p>
-          </div>
-        </div>
-      </div>
-      <div class="tool-card">
-        <h3>Rescale</h3>
-        <button class="tool-toggle" id="tp-rescale-toggle">Off</button>
-        <div id="tp-rescale-options" style="display:none">
-          <div class="tool-size-row">
-            <input type="number" id="tp-rescale-width" placeholder="Width" min="1">
-            <span class="tool-unit">&times;</span>
-            <input type="number" id="tp-rescale-height" placeholder="Height" min="1">
-          </div>
-          <label class="tool-check"><input type="checkbox" id="tp-rescale-lock" checked> Lock aspect ratio</label>
-        </div>
-      </div>
+      <p>Upload your images and hit process. <button class="tool-page-settings-link" data-open-panel="image">Configure settings</button></p>
     </div>
   </section>
 
