@@ -90,6 +90,11 @@ export async function compressVideoWebCodecs(
     const audioTrack = await input.getPrimaryAudioTrack();
     const hasAudio = audioTrack !== null;
 
+    // Probe original framerate for subtle fps drop in later strategies
+    const videoTrack = await input.getPrimaryVideoTrack();
+    const originalFps = videoTrack?.frameRate ?? 0;
+    const reducedFps = originalFps > 4 ? originalFps - 2 : 0; // e.g. 60→58, 30→28
+
     // Video codec selection
     const videoCodec = isWebM ? "vp9" : codec === "h265" ? "hevc" : "avc";
     const audioCodec = isWebM ? "opus" : "aac";
@@ -195,7 +200,7 @@ export async function compressVideoWebCodecs(
       track(res, br, file.name);
     }
 
-    // Strategy 2: Software encoder + lower audio (64kbps)
+    // Strategy 2: Software encoder + lower audio (64kbps) + subtle fps drop
     {
       updatePopupHeading("Trying lower audio bitrate...");
       resetProgressBar();
@@ -203,6 +208,7 @@ export async function compressVideoWebCodecs(
       const res = await attemptConversion(makeInput(), makeOutput(), {
         videoCodec, videoBitrate: br, audioCodec, hasAudio,
         hwAccel: "prefer-software", audioBitrate: 64000,
+        ...(reducedFps > 0 ? { frameRate: reducedFps } : {}),
       });
       if (res && res.byteLength <= targetBytes) return { name: file.name, bytes: new Uint8Array(res) };
       track(res, br, file.name);
