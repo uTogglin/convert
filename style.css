@@ -1611,6 +1611,7 @@ body[data-tool="image"] #convert-button { display: none !important; }
 }
 .img-settings-group { margin-bottom: 14px; }
 .img-settings-group:last-child { margin-bottom: 0; }
+.img-settings .hidden { display: none; }
 
 /* ── Below canvas: filmstrip, remove bg, before/after (centered) ── */
 #img-workspace {
