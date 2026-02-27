@@ -386,7 +386,8 @@ export async function compressVideoVP9(
 }
 
 /**
- * Fast video-to-video re-encode via WebCodecs (hardware-accelerated).
+ * Fast video-to-video re-encode via WebCodecs.
+ * Tries every viable codec + acceleration combo before giving up (FFmpeg fallback).
  * Re-encodes at the original bitrate — no quality loss, just a container/codec change.
  */
 export async function reencodeVideo(
@@ -398,48 +399,82 @@ export async function reencodeVideo(
   const ext = (file.name.split(".").pop() ?? "").toLowerCase();
   if (!SUPPORTED_EXTS.has(ext)) return null;
 
-  // Pick codecs based on target format
-  const videoCodec = targetFormat === "webm" ? "vp9" : "avc";
-  const audioCodec = targetFormat === "webm" ? "opus" : "aac";
+  // Build ordered list of codec strategies per target container
+  // WebM only supports VP9+Opus; MP4/MKV support AVC+AAC (and MKV also VP9+Opus)
+  type Strategy = { videoCodec: "vp9" | "avc"; audioCodec: "opus" | "aac"; hwAccel: "prefer-hardware" | "prefer-software" };
+  const strategies: Strategy[] = [];
 
-  if (!await isCodecEncodingSupported(videoCodec as "vp9" | "avc")) return null;
+  if (targetFormat === "webm") {
+    strategies.push(
+      { videoCodec: "vp9", audioCodec: "opus", hwAccel: "prefer-hardware" },
+      { videoCodec: "vp9", audioCodec: "opus", hwAccel: "prefer-software" },
+    );
+  } else if (targetFormat === "mkv") {
+    strategies.push(
+      { videoCodec: "avc", audioCodec: "aac", hwAccel: "prefer-hardware" },
+      { videoCodec: "avc", audioCodec: "aac", hwAccel: "prefer-software" },
+      { videoCodec: "vp9", audioCodec: "opus", hwAccel: "prefer-hardware" },
+      { videoCodec: "vp9", audioCodec: "opus", hwAccel: "prefer-software" },
+    );
+  } else {
+    // mp4
+    strategies.push(
+      { videoCodec: "avc", audioCodec: "aac", hwAccel: "prefer-hardware" },
+      { videoCodec: "avc", audioCodec: "aac", hwAccel: "prefer-software" },
+    );
+  }
 
   try {
-    const input = new Input({ formats: ALL_FORMATS, source: new BufferSource(file.bytes) });
-    const duration = await input.computeDuration();
+    // Probe file once — reused across all attempts
+    const probeInput = new Input({ formats: ALL_FORMATS, source: new BufferSource(file.bytes) });
+    const duration = await probeInput.computeDuration();
     if (!duration || duration <= 0) return null;
 
-    const hasAudio = (await input.getPrimaryAudioTrack()) !== null;
-    if (hasAudio && !await canEncodeAudio(audioCodec as "aac" | "opus")) return null;
+    const hasAudio = (await probeInput.getPrimaryAudioTrack()) !== null;
 
     // Match original bitrate (no quality loss)
     const audioBitsEstimate = hasAudio ? (128000 / 8) * duration : 0;
     const originalVideoBitrate = ((file.bytes.length - audioBitsEstimate) * 8) / duration;
     const videoBitrate = Math.max(Math.floor(originalVideoBitrate), 100000);
 
-    const outputFormat = targetFormat === "webm" ? new WebMOutputFormat()
-                       : targetFormat === "mkv" ? new MkvOutputFormat()
-                       : new Mp4OutputFormat();
-    const output = new Output({ format: outputFormat, target: new BufferTarget() });
-
     const outputExt = targetFormat === "webm" ? "webm" : targetFormat === "mkv" ? "mkv" : "mp4";
     const outputName = file.name.replace(/\.[^.]+$/, "." + outputExt);
 
-    updatePopupHeading("Re-encoding video...");
-    resetProgressBar();
+    for (const strat of strategies) {
+      // Skip strategies whose codecs the browser can't encode
+      if (!await isCodecEncodingSupported(strat.videoCodec)) continue;
+      if (hasAudio && !await canEncodeAudio(strat.audioCodec)) continue;
 
-    const res = await attemptConversion(
-      input, output,
-      {
-        videoCodec, videoBitrate, audioCodec, hasAudio,
-        hwAccel: "prefer-hardware", audioBitrate: 128000,
-      },
-    );
+      const label = `${strat.videoCodec}/${strat.hwAccel.replace("prefer-", "")}`;
+      console.info(`[reencode] trying ${label} for ${ext}→${targetFormat} (${Math.round(videoBitrate / 1000)}kbps)`);
+      updatePopupHeading(`Re-encoding video (${label})...`);
+      resetProgressBar();
 
-    if (!res) return null;
-    return { name: outputName, bytes: new Uint8Array(res) };
+      try {
+        const input = new Input({ formats: ALL_FORMATS, source: new BufferSource(file.bytes) });
+        const fmt = targetFormat === "webm" ? new WebMOutputFormat()
+                  : targetFormat === "mkv" ? new MkvOutputFormat()
+                  : new Mp4OutputFormat();
+        const output = new Output({ format: fmt, target: new BufferTarget() });
+
+        const res = await attemptConversion(input, output, {
+          videoCodec: strat.videoCodec, videoBitrate, audioCodec: strat.audioCodec,
+          hasAudio, hwAccel: strat.hwAccel, audioBitrate: 128000,
+        });
+
+        if (res) {
+          console.info(`[reencode] success with ${label}: ${file.name} → ${outputName} (${(res.byteLength / 1048576).toFixed(1)}MB)`);
+          return { name: outputName, bytes: new Uint8Array(res) };
+        }
+      } catch (e) {
+        console.warn(`[reencode] ${label} failed:`, e);
+      }
+    }
+
+    console.warn("[reencode] all strategies exhausted");
+    return null;
   } catch (e) {
-    console.warn(`WebCodecs re-encode failed for "${file.name}":`, e);
+    console.warn(`[reencode] probe failed for "${file.name}":`, e);
     return null;
   }
 }

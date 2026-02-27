@@ -1403,7 +1403,7 @@ window.tryConvertByTraversing = async function (
       if (allOk && results.length > 0) {
         return { files: results, path: [from, to] };
       }
-    } catch { /* fall through to graph search */ }
+    } catch (e) { console.warn("[fast-path] error, falling back to graph search:", e); }
   }
 
   // Live listener: update popup with the path currently being explored
