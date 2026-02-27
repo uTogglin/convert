@@ -228,7 +228,55 @@ const ui = {
   outputTrayGrid: document.querySelector("#output-tray-grid") as HTMLDivElement,
   downloadAllBtn: document.querySelector("#download-all-btn") as HTMLButtonElement,
   clearOutputBtn: document.querySelector("#clear-output-btn") as HTMLButtonElement,
+  homePage: document.querySelector("#home-page") as HTMLElement,
+  backToHome: document.querySelector("#back-to-home") as HTMLButtonElement,
 };
+
+// ── Home page / tool navigation ──────────────────────────────────────────────
+/** Which tool view is active, or null when on the home page */
+let activeTool: "convert" | "compress" | "image" | null = null;
+
+function showHomePage() {
+  activeTool = null;
+  document.body.classList.add("tool-view-hidden");
+  ui.homePage.classList.remove("hidden");
+  ui.backToHome.classList.add("hidden");
+  // Close settings drawer when returning home
+  ui.settingsDrawer.classList.add("hidden");
+}
+
+function showToolView(tool: "convert" | "compress" | "image") {
+  activeTool = tool;
+  document.body.classList.remove("tool-view-hidden");
+  ui.homePage.classList.add("hidden");
+  ui.backToHome.classList.remove("hidden");
+
+  if (tool === "compress") {
+    // Auto-enable compression and open settings
+    if (!compressEnabled) ui.compressToggle.click();
+    ui.settingsDrawer.classList.remove("hidden");
+  } else if (tool === "image") {
+    // Open settings so image tools are visible
+    ui.settingsDrawer.classList.remove("hidden");
+  }
+}
+
+// Start on the home page
+document.body.classList.add("tool-view-hidden");
+
+// Back button
+ui.backToHome.addEventListener("click", showHomePage);
+
+// Home card clicks
+for (const card of document.querySelectorAll<HTMLButtonElement>(".home-card")) {
+  card.addEventListener("click", () => {
+    const tool = card.dataset.tool as "convert" | "compress" | "image";
+    if (tool) showToolView(tool);
+  });
+}
+
+// Clicking logo goes home
+document.querySelector("#logo")?.addEventListener("click", showHomePage);
 
 /** Active category filter for input and output lists */
 let inputCategoryFilter = "all";

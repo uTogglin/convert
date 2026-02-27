@@ -83,6 +83,153 @@ body {
 #file-input { display: none; }
 
 /* =========================================
+   1a. HOME PAGE
+   ========================================= */
+#home-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 61px);
+  padding: 48px 24px;
+}
+#home-page.hidden { display: none; }
+
+.home-hero {
+  text-align: center;
+  margin-bottom: 48px;
+}
+.home-title {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0 0 12px;
+  letter-spacing: -0.5px;
+}
+.home-subtitle {
+  font-size: 1rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  max-width: 900px;
+  width: 100%;
+}
+
+.home-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 32px 28px;
+  background: var(--surface-color);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.22s ease;
+  text-align: left;
+  font-family: inherit;
+  color: var(--text-main);
+  overflow: hidden;
+}
+.home-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+.home-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.25);
+}
+.home-card:hover::before {
+  opacity: 1;
+}
+
+.home-card-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: var(--accent-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  transition: all 0.22s ease;
+}
+.home-card:hover .home-card-icon {
+  background: var(--accent);
+  color: white;
+}
+
+.home-card h3 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin: 4px 0 0;
+}
+.home-card p {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+.home-card-tag {
+  display: inline-block;
+  margin-top: auto;
+  padding: 4px 12px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border-radius: 50px;
+}
+
+/* ── Back button ── */
+#back-to-home {
+  min-width: 36px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  background: var(--card-bg);
+  color: var(--text-main);
+  cursor: pointer;
+  transition: all var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 8px;
+}
+#back-to-home:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+#back-to-home.hidden { display: none; }
+
+/* ── Tool view (converter UI) hidden by default ── */
+.tool-view-hidden #file-area,
+.tool-view-hidden #settings-drawer,
+.tool-view-hidden #archive-panel,
+.tool-view-hidden #output-tray,
+.tool-view-hidden #format-containers,
+.tool-view-hidden #convert-button {
+  display: none !important;
+}
+
+/* =========================================
    1b. TOP BAR
    ========================================= */
 #top-bar {
@@ -102,8 +249,10 @@ body {
   font-weight: 700;
   margin: 0;
   letter-spacing: -0.5px;
+  cursor: pointer;
 }
 #logo .accent { color: var(--accent); }
+#top-bar-left { display: flex; align-items: center; }
 #top-bar-right { display: flex; gap: 8px; }
 #top-bar-right button {
   min-width: 36px;
@@ -1171,4 +1320,7 @@ button.selected {
   #file-area { margin: 12px; padding: 32px 16px; }
   #output-tray { margin: 0 12px 12px; }
   #convert-button { width: 90%; bottom: 20px; }
+  .home-grid { grid-template-columns: 1fr; max-width: 400px; }
+  #home-page { padding: 32px 16px; min-height: calc(100vh - 61px); }
+  .home-title { font-size: 1.5rem; }
 }
