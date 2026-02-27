@@ -325,61 +325,31 @@
 
   <!-- Image tools page -->
   <section id="image-page" class="tool-page hidden">
-    <!-- Main layout: canvas center + settings right -->
+    <!-- Title -->
+    <div class="img-page-header">
+      <h2>Image Tools</h2>
+      <p>Upload images to remove backgrounds, rescale, and strip metadata.</p>
+    </div>
+
+    <!-- Canvas + settings side by side, centered -->
     <div id="img-layout">
-      <!-- Canvas column: title + canvas + filmstrip + before/after -->
-      <div id="img-canvas-col">
-        <div class="img-col-header">
-          <h2>Image Tools</h2>
-          <p>Upload images to remove backgrounds, rescale, and strip metadata.</p>
+      <div id="img-canvas">
+        <div id="img-drop-prompt">
+          <svg class="img-drop-icon" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+            <polyline points="21 15 16 10 5 21"></polyline>
+          </svg>
+          <span class="img-drop-text">Drop image here</span>
+          <span class="img-drop-sub">or click to browse</span>
         </div>
-
-        <div id="img-canvas">
-          <div id="img-drop-prompt">
-            <svg class="img-drop-icon" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-              <circle cx="8.5" cy="8.5" r="1.5"></circle>
-              <polyline points="21 15 16 10 5 21"></polyline>
-            </svg>
-            <span class="img-drop-text">Drop image here</span>
-            <span class="img-drop-sub">or click to browse</span>
-          </div>
-          <img id="img-preview" class="hidden" alt="Preview">
-        </div>
-
-        <!-- Filmstrip + before/after (shown when image loaded) -->
-        <div id="img-workspace" class="hidden">
-          <div class="img-filmstrip">
-            <div id="img-filmstrip-grid"></div>
-            <button id="img-add-more" class="img-filmstrip-add" title="Add more images">+</button>
-          </div>
-          <div class="img-compare-toggle">
-            <span class="img-compare-label" data-side="before">Before</span>
-            <button id="img-compare-switch" class="img-toggle-switch" role="switch"></button>
-            <span class="img-compare-label" data-side="after">After</span>
-          </div>
-        </div>
+        <img id="img-preview" class="hidden" alt="Preview">
       </div>
 
-      <!-- Settings sidebar (right) + download below -->
+      <!-- Settings + download (right of canvas) -->
       <aside class="img-sidebar">
         <div class="img-settings">
           <h4 class="img-settings-title">Settings</h4>
-          <div class="img-settings-group">
-            <span class="sm-label">Background removal</span>
-            <label class="sm-switch-row">
-              <span class="sm-switch-label">Remove background</span>
-              <button id="img-remove-bg-toggle" class="sm-switch" role="switch"></button>
-            </label>
-            <button id="img-bg-mode-toggle" class="sm-btn hidden">Mode: Local</button>
-            <label class="sm-switch-row hidden" id="img-bg-correction-row">
-              <span class="sm-switch-label">Correction</span>
-              <button id="img-bg-correction-toggle" class="sm-switch" role="switch"></button>
-            </label>
-            <div id="img-bg-api-key-row" class="hidden">
-              <input type="password" id="img-bg-api-key" placeholder="remove.bg API key" autocomplete="off">
-            </div>
-          </div>
           <div class="img-settings-group">
             <span class="sm-label">Rescale</span>
             <label class="sm-switch-row">
@@ -395,9 +365,39 @@
               <label class="sm-check"><input type="checkbox" id="img-rescale-lock-ratio" checked> Lock aspect ratio</label>
             </div>
           </div>
+          <div class="img-settings-group">
+            <span class="sm-label">Background removal mode</span>
+            <button id="img-bg-mode-toggle" class="sm-btn hidden">Mode: Local</button>
+            <label class="sm-switch-row hidden" id="img-bg-correction-row">
+              <span class="sm-switch-label">Correction</span>
+              <button id="img-bg-correction-toggle" class="sm-switch" role="switch"></button>
+            </label>
+            <div id="img-bg-api-key-row" class="hidden">
+              <input type="password" id="img-bg-api-key" placeholder="remove.bg API key" autocomplete="off">
+            </div>
+          </div>
         </div>
         <button id="img-download-btn" class="img-download-btn disabled">Download</button>
       </aside>
+    </div>
+
+    <!-- Below canvas: filmstrip, remove bg toggle, before/after (centered under canvas) -->
+    <div id="img-workspace" class="hidden">
+      <div class="img-filmstrip">
+        <div id="img-filmstrip-grid"></div>
+        <button id="img-add-more" class="img-filmstrip-add" title="Add more images">+</button>
+      </div>
+      <div class="img-below-controls">
+        <label class="img-removebg-row">
+          <span>Remove Background</span>
+          <button id="img-remove-bg-toggle" class="sm-switch" role="switch"></button>
+        </label>
+        <div class="img-compare-toggle">
+          <span class="img-compare-label" data-side="before">Before</span>
+          <button id="img-compare-switch" class="img-toggle-switch" role="switch"></button>
+          <span class="img-compare-label" data-side="after">After</span>
+        </div>
+      </div>
     </div>
 
     <!-- Hidden file input for image tools -->
