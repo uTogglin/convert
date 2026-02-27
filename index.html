@@ -67,16 +67,12 @@
       </div>
     </div>
     <div class="settings-section">
-      <h3>Mode</h3>
+      <h3>Toggles</h3>
       <button id="mode-button">Advanced mode</button>
-    </div>
-    <div class="settings-section">
-      <h3>Downloads</h3>
+      <hr class="settings-divider">
       <button id="auto-download-toggle">Auto-download: On</button>
       <button id="archive-multi-toggle">Multi-file output: Archive</button>
-    </div>
-    <div class="settings-section">
-      <h3>Processing</h3>
+      <hr class="settings-divider">
       <button id="remove-bg-toggle">Remove background: Off</button>
       <button id="bg-mode-toggle" class="hidden">Mode: Local</button>
       <button id="bg-correction-toggle" class="hidden">Correction: Off</button>
@@ -84,9 +80,7 @@
         <input type="password" id="bg-api-key" placeholder="remove.bg API key" autocomplete="off">
         <p class="settings-hint">Get a free key at <a href="https://www.remove.bg/api" target="_blank" rel="noopener">remove.bg/api</a>. Images are sent to remove.bg servers.</p>
       </div>
-    </div>
-    <div class="settings-section">
-      <h3>Image Processing</h3>
+      <hr class="settings-divider">
       <button id="rescale-toggle">Rescale images: Off</button>
       <div id="rescale-options" class="hidden">
         <div class="rescale-inputs">
@@ -102,36 +96,41 @@
       <h3>Compression</h3>
       <button id="compress-toggle">Compress: Off</button>
       <div id="compress-options" class="hidden">
-        <p class="settings-hint">Re-encodes video at best quality. Set a target size to also constrain file size.</p>
-        <div class="compress-presets">
-          <span class="compress-presets-label">Codec</span>
-          <div class="compress-preset-grid">
-            <button class="codec-preset-btn selected" data-codec="h264">H.264<span class="compress-preset-note">Compatible</span></button>
-            <button class="codec-preset-btn" data-codec="h265">H.265<span class="compress-preset-note">Smaller files</span></button>
-
+        <div class="compress-grid">
+          <div class="compress-grid-left">
+            <p class="settings-hint">Re-encodes video at best quality. Set a target size to also constrain file size.</p>
+            <div class="compress-presets">
+              <span class="compress-presets-label">Codec</span>
+              <div class="compress-preset-grid">
+                <button class="codec-preset-btn selected" data-codec="h264">H.264<span class="compress-preset-note">Compatible</span></button>
+                <button class="codec-preset-btn" data-codec="h265">H.265<span class="compress-preset-note">Smaller files</span></button>
+              </div>
+            </div>
+            <p id="codec-hint" class="settings-hint hidden">H.265 produces ~50% smaller files but may not play on older devices. Falls back to H.264 if encoding stalls.</p>
+            <div class="compress-presets">
+              <span class="compress-presets-label">Speed</span>
+              <div class="compress-preset-grid">
+                <button class="speed-preset-btn" data-speed="fast">Fast<span class="compress-preset-note">Fastest</span></button>
+                <button class="speed-preset-btn selected" data-speed="balanced">Balanced<span class="compress-preset-note">Default</span></button>
+                <button class="speed-preset-btn" data-speed="quality">Quality<span class="compress-preset-note">Slowest</span></button>
+              </div>
+            </div>
           </div>
-        </div>
-        <p id="codec-hint" class="settings-hint hidden">H.265 produces ~50% smaller files but may not play on older devices. Falls back to H.264 if encoding stalls.</p>
-        <div class="compress-presets">
-          <span class="compress-presets-label">Speed</span>
-          <div class="compress-preset-grid">
-            <button class="speed-preset-btn" data-speed="fast">Fast<span class="compress-preset-note">Fastest</span></button>
-            <button class="speed-preset-btn selected" data-speed="balanced">Balanced<span class="compress-preset-note">Default</span></button>
-            <button class="speed-preset-btn" data-speed="quality">Quality<span class="compress-preset-note">Slowest</span></button>
-          </div>
-        </div>
-        <button id="webm-mode-toggle">WebM mode: Off</button>
-        <p id="webm-hint" class="settings-hint hidden">Tries VP9 first for faster, smaller files. Output will be .webm.</p>
-        <div class="compress-size-row">
-          <input type="number" id="compress-target-mb" placeholder="Target MB (optional)" min="0.1" step="0.1">
-          <span class="compress-unit">MB</span>
-        </div>
-        <div class="compress-presets">
-          <span class="compress-presets-label">Discord</span>
-          <div class="compress-preset-grid">
-            <button class="compress-preset-btn" data-size="10">10 MB<span class="compress-preset-note">Free</span></button>
-            <button class="compress-preset-btn" data-size="50">50 MB<span class="compress-preset-note">Basic</span></button>
-            <button class="compress-preset-btn" data-size="500">500 MB<span class="compress-preset-note">Nitro</span></button>
+          <div class="compress-grid-right">
+            <button id="webm-mode-toggle">WebM mode: Off</button>
+            <p id="webm-hint" class="settings-hint hidden">Tries VP9 first for faster, smaller files. Output will be .webm.</p>
+            <div class="compress-size-row">
+              <input type="number" id="compress-target-mb" placeholder="Target MB (optional)" min="0.1" step="0.1">
+              <span class="compress-unit">MB</span>
+            </div>
+            <div class="compress-presets">
+              <span class="compress-presets-label">Discord</span>
+              <div class="compress-preset-grid">
+                <button class="compress-preset-btn" data-size="10">10 MB<span class="compress-preset-note">Free</span></button>
+                <button class="compress-preset-btn" data-size="50">50 MB<span class="compress-preset-note">Basic</span></button>
+                <button class="compress-preset-btn" data-size="500">500 MB<span class="compress-preset-note">Nitro</span></button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
