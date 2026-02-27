@@ -26,6 +26,28 @@ export function isWebCodecsAvailable(): boolean {
   return typeof VideoEncoder !== "undefined" && typeof VideoDecoder !== "undefined";
 }
 
+// Cache codec support checks to avoid repeated async lookups
+const codecSupportCache = new Map<string, boolean>();
+async function isCodecEncodingSupported(codec: "vp9" | "avc" | "hevc"): Promise<boolean> {
+  if (codecSupportCache.has(codec)) return codecSupportCache.get(codec)!;
+  const codecStrings: Record<string, string> = {
+    vp9: "vp09.00.10.08",
+    avc: "avc1.42001f",
+    hevc: "hev1.1.6.L93.B0",
+  };
+  try {
+    const result = await VideoEncoder.isConfigSupported({
+      codec: codecStrings[codec], width: 640, height: 480, bitrate: 1_000_000,
+    });
+    const supported = result.supported === true;
+    codecSupportCache.set(codec, supported);
+    return supported;
+  } catch {
+    codecSupportCache.set(codec, false);
+    return false;
+  }
+}
+
 interface ConversionOptions {
   videoCodec: string;
   videoBitrate: number;
@@ -79,11 +101,13 @@ export async function compressVideoWebCodecs(
 
     // ── Bitrate calculation ──
     let videoBitrate: number;
+    let generousBitrate = 0; // target bitrate without efficiency penalty (for VP9 first-pass)
     if (targetBytes > 0) {
       const safeTarget = targetBytes * 0.97;
       const audioBits = hasAudio ? 96000 : 0;
       const totalBitrate = (safeTarget * 8) / duration;
       const targetVideoBitrate = totalBitrate - audioBits;
+      generousBitrate = Math.max(Math.floor(targetVideoBitrate * 0.95), 50000);
 
       // Estimate original video bitrate to gauge compression difficulty
       const audioBytesEstimate = hasAudio ? (96000 / 8) * duration : 0;
@@ -107,6 +131,10 @@ export async function compressVideoWebCodecs(
       return null;
     }
 
+    // Verify the chosen codec is supported before attempting
+    const primaryCodecKey = videoCodec === "vp9" ? "vp9" : videoCodec === "hevc" ? "hevc" : "avc";
+    if (!await isCodecEncodingSupported(primaryCodecKey as "vp9" | "avc" | "hevc")) return null;
+
     // ── First attempt ──
     const result = await attemptConversion(makeInput(), makeOutput(), {
       videoCodec, videoBitrate, audioCodec, hasAudio, hwAccel,
@@ -128,11 +156,16 @@ export async function compressVideoWebCodecs(
     }
 
     // ── Overshot target — enter escalating strategy loop ──
+    // Phase 1: Codec efficiency (preserve quality — let VP9 do the heavy lifting)
+    // Phase 2: Measured lossy targeting (calibrated from previous attempts)
+    // Phase 3: Re-compress closest result
+
     let lastBitrate = videoBitrate;
     let lastSize = result.byteLength;
     let bestResult: ArrayBuffer | null = result;
     let bestSize = result.byteLength;
     let bestName = file.name;
+    const vp9Name = file.name.replace(/\.[^.]+$/, ".webm");
 
     // Helper: calibrate bitrate from last measured result
     const calibrate = (base: number, actual: number) =>
@@ -141,7 +174,7 @@ export async function compressVideoWebCodecs(
     // Helper: update tracking after an attempt
     const track = (res: ArrayBuffer | null, usedBitrate: number, name: string) => {
       if (!res) return;
-      if (res.byteLength <= targetBytes) return; // handled by caller
+      if (res.byteLength <= targetBytes) return;
       if (res.byteLength < bestSize) {
         bestResult = res;
         bestSize = res.byteLength;
@@ -151,21 +184,58 @@ export async function compressVideoWebCodecs(
       lastSize = res.byteLength;
     };
 
-    // Strategy 1: Calibrated bitrate, same encoder
+    // ── Phase 1: Codec efficiency first (generous bitrate, less lossy) ──
+
+    // Check codec support upfront to skip strategies that can't work
+    const vp9Supported = videoCodec !== "vp9" ? await isCodecEncodingSupported("vp9") : true;
+
+    // Strategy 1: VP9 at generous bitrate — codec efficiency alone may hit target
+    if (videoCodec !== "vp9" && vp9Supported) {
+      updatePopupHeading("Trying VP9 codec...");
+      resetProgressBar();
+      const res = await attemptConversion(makeInput(), makeOutput(true, false), {
+        videoCodec: "vp9", videoBitrate: generousBitrate, audioCodec: "opus", hasAudio,
+        hwAccel: "prefer-software",
+      });
+      if (res && res.byteLength <= targetBytes) return { name: vp9Name, bytes: new Uint8Array(res) };
+      track(res, generousBitrate, vp9Name);
+    }
+
+    // Strategy 2: VP9 + lower audio (64kbps) — save audio budget for video
+    if (videoCodec !== "vp9" && vp9Supported && hasAudio) {
+      updatePopupHeading("Trying VP9 with lower audio...");
+      resetProgressBar();
+      const res = await attemptConversion(makeInput(), makeOutput(true, false), {
+        videoCodec: "vp9", videoBitrate: generousBitrate, audioCodec: "opus", hasAudio,
+        hwAccel: "prefer-software", audioBitrate: 64000,
+      });
+      if (res && res.byteLength <= targetBytes) return { name: vp9Name, bytes: new Uint8Array(res) };
+      track(res, generousBitrate, vp9Name);
+    }
+
+    // ── Phase 2: Calibrated lossy targeting (measured from previous attempts) ──
+
+    // Strategy 3: VP9 with calibrated bitrate from measured data
     {
       updatePopupHeading("Calibrating bitrate...");
       resetProgressBar();
       const br = calibrate(lastBitrate, lastSize);
-      const res = await attemptConversion(makeInput(), makeOutput(), {
-        videoCodec, videoBitrate: br, audioCodec, hasAudio, hwAccel,
+      const useVp9 = videoCodec !== "vp9" && vp9Supported;
+      const name = useVp9 ? vp9Name : file.name;
+      const res = await attemptConversion(makeInput(), useVp9 ? makeOutput(true, false) : makeOutput(), {
+        videoCodec: useVp9 ? "vp9" : videoCodec,
+        videoBitrate: br,
+        audioCodec: useVp9 ? "opus" : audioCodec,
+        hasAudio,
+        hwAccel: "prefer-software", audioBitrate: 64000,
       });
-      if (res && res.byteLength <= targetBytes) return { name: file.name, bytes: new Uint8Array(res) };
-      track(res, br, file.name);
+      if (res && res.byteLength <= targetBytes) return { name, bytes: new Uint8Array(res) };
+      track(res, br, name);
     }
 
-    // Strategy 2: Software encoder + lower audio (64kbps)
+    // Strategy 4: Original codec with calibrated bitrate + 64k audio
     {
-      updatePopupHeading("Trying lower audio bitrate...");
+      updatePopupHeading("Calibrating bitrate...");
       resetProgressBar();
       const br = calibrate(lastBitrate, lastSize);
       const res = await attemptConversion(makeInput(), makeOutput(), {
@@ -176,40 +246,7 @@ export async function compressVideoWebCodecs(
       track(res, br, file.name);
     }
 
-    // Strategy 3: VP9 codec (much more efficient at low bitrates)
-    if (videoCodec !== "vp9") {
-      updatePopupHeading("Trying VP9 codec...");
-      resetProgressBar();
-      const br = calibrate(lastBitrate, lastSize);
-      const vp9Name = file.name.replace(/\.[^.]+$/, ".webm");
-      const res = await attemptConversion(makeInput(), makeOutput(true, false), {
-        videoCodec: "vp9", videoBitrate: br, audioCodec: "opus", hasAudio,
-        hwAccel: "prefer-software", audioBitrate: 64000,
-      });
-      if (res && res.byteLength <= targetBytes) return { name: vp9Name, bytes: new Uint8Array(res) };
-      track(res, br, vp9Name);
-    }
-
-    // Strategy 4: VP9 + slightly reduced framerate (subtle 2fps drop)
-    {
-      updatePopupHeading("Trying VP9 with lower framerate...");
-      resetProgressBar();
-      const br = calibrate(lastBitrate, lastSize);
-      const useVp9 = videoCodec !== "vp9";
-      const stratName = useVp9 ? file.name.replace(/\.[^.]+$/, ".webm") : file.name;
-      const res = await attemptConversion(makeInput(), useVp9 ? makeOutput(true, false) : makeOutput(), {
-        videoCodec: useVp9 ? "vp9" : videoCodec,
-        videoBitrate: br,
-        audioCodec: useVp9 ? "opus" : audioCodec,
-        hasAudio,
-        hwAccel: "prefer-software", audioBitrate: 64000,
-        frameRate: 28,
-      });
-      if (res && res.byteLength <= targetBytes) return { name: stratName, bytes: new Uint8Array(res) };
-      track(res, br, stratName);
-    }
-
-    // Strategy 5: Re-compress the best result (already close to target — much easier to shrink)
+    // ── Phase 3: Re-compress the closest result ──
     if (bestResult && bestSize < targetBytes * 1.5) {
       updatePopupHeading("Re-compressing closest result...");
       resetProgressBar();
@@ -228,7 +265,6 @@ export async function compressVideoWebCodecs(
         const reVideoCodec = reIsWebM ? "vp9" : videoCodec;
         const reAudioCodec = reIsWebM ? "opus" : audioCodec;
 
-        // Calculate bitrate from the best result's actual size
         const reAudioBits = reHasAudio ? 64000 : 0;
         const reTotalBitrate = (targetBytes * 0.95 * 8) / reDuration;
         const reBitrate = Math.max(Math.floor((reTotalBitrate - reAudioBits) * 0.90), 50000);
