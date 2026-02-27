@@ -126,6 +126,35 @@ export async function compressVideoWebCodecs(
       if (retryResult && retryResult.byteLength <= targetBytes) {
         return { name: file.name, bytes: new Uint8Array(retryResult) };
       }
+
+      // Hardware encoder couldn't hit target — try software encoder for tighter bitrate control
+      if (hwAccel !== "prefer-software") {
+        updatePopupHeading("Trying software encoder...");
+        resetProgressBar();
+
+        const swRatio = retryResult
+          ? (targetBytes / retryResult.byteLength) * 0.85
+          : 0.70;
+        const swBitrate = Math.max(Math.floor(videoBitrate * swRatio), 50000);
+
+        const swOutput = new Output({
+          format: isWebM ? new WebMOutputFormat() : isMkv ? new MkvOutputFormat() : new Mp4OutputFormat(),
+          target: new BufferTarget(),
+        });
+        const swInput = new Input({
+          formats: ALL_FORMATS,
+          source: new BufferSource(file.bytes),
+        });
+
+        const swResult = await attemptConversion(
+          swInput, swOutput, videoCodec, swBitrate, audioCodec, hasAudio, "prefer-software"
+        );
+
+        if (swResult && swResult.byteLength <= targetBytes) {
+          return { name: file.name, bytes: new Uint8Array(swResult) };
+        }
+      }
+
       return null; // Still over target, fall back to ffmpeg
     }
 

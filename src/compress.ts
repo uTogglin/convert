@@ -10,17 +10,8 @@ const yieldToBrowser = () => new Promise<void>(r => requestAnimationFrame(() => 
 
 let compressFFmpeg: FFmpeg | null = null;
 let ffmpegReady: Promise<void> | null = null;
-let mtFFmpeg: FFmpeg | null = null;
-let mtReady: Promise<void> | null = null;
-let useMT = false;
 
 async function getFFmpeg(): Promise<FFmpeg> {
-  if (useMT) {
-    if (!mtFFmpeg) mtFFmpeg = new FFmpeg();
-    if (!mtReady) mtReady = mtFFmpeg.load({ coreURL: "/wasm/mt/ffmpeg-core.js" }).then(() => {});
-    await mtReady;
-    return mtFFmpeg;
-  }
   if (!compressFFmpeg) compressFFmpeg = new FFmpeg();
   if (!ffmpegReady) ffmpegReady = compressFFmpeg.load({ coreURL: "/wasm/ffmpeg-core.js" }).then(() => {});
   await ffmpegReady;
@@ -28,13 +19,6 @@ async function getFFmpeg(): Promise<FFmpeg> {
 }
 
 async function reloadFFmpeg(): Promise<FFmpeg> {
-  if (useMT) {
-    if (mtFFmpeg) mtFFmpeg.terminate();
-    mtFFmpeg = new FFmpeg();
-    mtReady = mtFFmpeg.load({ coreURL: "/wasm/mt/ffmpeg-core.js" }).then(() => {});
-    await mtReady;
-    return mtFFmpeg;
-  }
   if (compressFFmpeg) compressFFmpeg.terminate();
   compressFFmpeg = new FFmpeg();
   ffmpegReady = compressFFmpeg.load({ coreURL: "/wasm/ffmpeg-core.js" }).then(() => {});
@@ -440,7 +424,7 @@ async function compressVideo(
     await showCompressPopup(
       `<h2>Falling back to software encoding...</h2>` +
       `<p>${file.name}</p>` +
-      `<p style="color:var(--text-muted);font-size:0.85rem">Hardware encoder couldn't hit target size. Using software encoder for tighter control.</p>` +
+      `<p style="color:var(--text-muted);font-size:0.85rem">WebCodecs couldn't hit target size. Using ffmpeg for tighter control.</p>` +
       `<div style="background:var(--input-border);border-radius:8px;height:18px;margin:12px 0;overflow:hidden">` +
         `<div id="compress-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s;border-radius:8px"></div>` +
       `</div>` +
@@ -448,9 +432,8 @@ async function compressVideo(
     );
   }
 
-  // ── ffmpeg.wasm fallback (multi-threaded) ──
-  useMT = true;
-  try {
+  // ── ffmpeg.wasm fallback ──
+  {
   const ff = await getFFmpeg();
   const ext = getExt(file.name);
   const inputName = "compress_input." + ext;
@@ -592,8 +575,6 @@ async function compressVideo(
   }
 
   return { name: file.name, bytes };
-  } finally {
-    useMT = false;
   }
 }
 
