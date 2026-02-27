@@ -292,6 +292,11 @@ async function attemptConversion(
       : { discard: true },
   });
 
+  // If audio was expected but got discarded, bail out so ffmpeg can handle it
+  if (opts.hasAudio && conversion.discardedTracks.some(t => t.track.isAudioTrack())) {
+    return null;
+  }
+
   if (!conversion.isValid) {
     const hasCodecIssue = conversion.discardedTracks.some(
       t => t.reason === "no_encodable_target_codec" || t.reason === "undecodable_source_codec"
