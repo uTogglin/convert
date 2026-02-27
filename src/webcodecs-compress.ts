@@ -403,7 +403,6 @@ export async function reencodeVideo(
   const audioCodec = targetFormat === "webm" ? "opus" : "aac";
 
   if (!await isCodecEncodingSupported(videoCodec as "vp9" | "avc")) return null;
-  if (!await canEncodeAudio(audioCodec as "aac" | "opus")) return null;
 
   try {
     const input = new Input({ formats: ALL_FORMATS, source: new BufferSource(file.bytes) });

@@ -1393,7 +1393,7 @@ window.tryConvertByTraversing = async function (
   const reencodeTarget = reencodeTargetMap[to.format.format] ?? reencodeTargetMap[to.format.internal];
   if (from.format.mime?.startsWith("video/") && reencodeTarget) {
     try {
-      const { reencodeVideo } = await import("./webcodecs-compress.js");
+      const { reencodeVideo } = await import("./webcodecs-compress.ts");
       const results: FileData[] = [];
       let allOk = true;
       for (const f of files) {
