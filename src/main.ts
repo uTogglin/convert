@@ -200,6 +200,7 @@ const ui = {
   themeToggle: document.querySelector("#theme-toggle") as HTMLButtonElement,
   logsToggle: document.querySelector("#logs-toggle") as HTMLButtonElement,
   logsPopout: document.querySelector("#logs-popout") as HTMLDivElement,
+  logsOverlay: document.querySelector("#logs-overlay") as HTMLDivElement,
   settingsToggle: document.querySelector("#settings-toggle") as HTMLButtonElement,
   settingsModal: document.querySelector("#settings-modal") as HTMLDivElement,
   settingsOverlay: document.querySelector("#settings-overlay") as HTMLDivElement,
@@ -342,7 +343,7 @@ ui.settingsOverlay.addEventListener("click", closeSettings);
 window.addEventListener("keydown", e => {
   if (e.key === "Escape") {
     if (!ui.settingsModal.classList.contains("hidden")) closeSettings();
-    if (!ui.logsPopout.classList.contains("hidden")) ui.logsPopout.classList.add("hidden");
+    if (!ui.logsPopout.classList.contains("hidden")) closeLogs();
   }
 });
 
@@ -1050,21 +1051,32 @@ if (ui.settingsToggle) {
   });
 }
 
-// ──── Logs Popout Toggle ────
+// ──── Logs Modal Toggle ────
+function openLogs() {
+  ui.logsPopout.classList.remove("hidden");
+  ui.logsOverlay.classList.remove("hidden");
+  const list = document.getElementById("app-log-list");
+  if (list) _renderAppLogInto(list);
+}
+function closeLogs() {
+  ui.logsPopout.classList.add("hidden");
+  ui.logsOverlay.classList.add("hidden");
+}
 if (ui.logsToggle) {
   ui.logsToggle.addEventListener("click", () => {
-    const open = ui.logsPopout.classList.toggle("hidden");
-    if (!open) {
-      const list = document.getElementById("app-log-list");
-      if (list) _renderAppLogInto(list);
+    if (ui.logsPopout.classList.contains("hidden")) {
+      openLogs();
+    } else {
+      closeLogs();
     }
   });
 }
+if (ui.logsOverlay) {
+  ui.logsOverlay.addEventListener("click", closeLogs);
+}
 const logsPopoutClose = document.getElementById("logs-popout-close");
 if (logsPopoutClose) {
-  logsPopoutClose.addEventListener("click", () => {
-    ui.logsPopout.classList.add("hidden");
-  });
+  logsPopoutClose.addEventListener("click", closeLogs);
 }
 
 // ──── Accent Color Picker ────
@@ -1176,23 +1188,19 @@ if (clearLogBtn) {
 
 // ──── Auto-download Toggle ────
 if (ui.autoDownloadToggle) {
-  ui.autoDownloadToggle.textContent = autoDownload ? "Auto-download: On" : "Auto-download: Off";
   ui.autoDownloadToggle.classList.toggle("active", autoDownload);
   ui.autoDownloadToggle.addEventListener("click", () => {
     autoDownload = !autoDownload;
-    ui.autoDownloadToggle.textContent = autoDownload ? "Auto-download: On" : "Auto-download: Off";
     ui.autoDownloadToggle.classList.toggle("active", autoDownload);
-    try { localStorage.setItem("convert-auto-download", String(autoDownload)); } catch {}
+    try { localStorage.setItem("convert-auto-download", String(autoDownload)); } catch {};
   });
 }
 
 // ──── Archive Multi-file Output Toggle ────
 if (ui.archiveMultiToggle) {
-  ui.archiveMultiToggle.textContent = archiveMultiOutput ? "Multi-file output: Archive" : "Multi-file output: Separate";
   ui.archiveMultiToggle.classList.toggle("active", archiveMultiOutput);
   ui.archiveMultiToggle.addEventListener("click", () => {
     archiveMultiOutput = !archiveMultiOutput;
-    ui.archiveMultiToggle.textContent = archiveMultiOutput ? "Multi-file output: Archive" : "Multi-file output: Separate";
     ui.archiveMultiToggle.classList.toggle("active", archiveMultiOutput);
     try { localStorage.setItem("convert-archive-multi", String(archiveMultiOutput)); } catch {}
   });
@@ -1201,17 +1209,17 @@ if (ui.archiveMultiToggle) {
 // ──── Remove Background Toggles ────
 function updateBgUI() {
   if (ui.bgModeToggle) ui.bgModeToggle.classList.toggle("hidden", !removeBg);
-  if (ui.bgCorrectionToggle) ui.bgCorrectionToggle.classList.toggle("hidden", !removeBg || bgMode === "api");
+  // Correction is inside a .sm-switch-row — toggle hidden on the row
+  const correctionRow = ui.bgCorrectionToggle?.closest(".sm-switch-row");
+  if (correctionRow) (correctionRow as HTMLElement).classList.toggle("hidden", !removeBg || bgMode === "api");
   if (ui.bgApiKeyRow) ui.bgApiKeyRow.classList.toggle("hidden", !removeBg || bgMode !== "api");
 }
 
 if (ui.removeBgToggle) {
-  ui.removeBgToggle.textContent = removeBg ? "Remove background: On" : "Remove background: Off";
   ui.removeBgToggle.classList.toggle("active", removeBg);
   updateBgUI();
   ui.removeBgToggle.addEventListener("click", () => {
     removeBg = !removeBg;
-    ui.removeBgToggle.textContent = removeBg ? "Remove background: On" : "Remove background: Off";
     ui.removeBgToggle.classList.toggle("active", removeBg);
     updateBgUI();
     try { localStorage.setItem("convert-remove-bg", String(removeBg)); } catch {}
@@ -1230,11 +1238,9 @@ if (ui.bgModeToggle) {
 }
 
 if (ui.bgCorrectionToggle) {
-  ui.bgCorrectionToggle.textContent = bgCorrection ? "Correction: On" : "Correction: Off";
   ui.bgCorrectionToggle.classList.toggle("active", bgCorrection);
   ui.bgCorrectionToggle.addEventListener("click", () => {
     bgCorrection = !bgCorrection;
-    ui.bgCorrectionToggle.textContent = bgCorrection ? "Correction: On" : "Correction: Off";
     ui.bgCorrectionToggle.classList.toggle("active", bgCorrection);
     try { localStorage.setItem("convert-bg-correction", String(bgCorrection)); } catch {}
   });
@@ -1251,12 +1257,10 @@ updateBgUI();
 
 // ──── Image Rescale Toggle ────
 if (ui.rescaleToggle) {
-  ui.rescaleToggle.textContent = rescaleEnabled ? "Rescale images: On" : "Rescale images: Off";
   ui.rescaleToggle.classList.toggle("active", rescaleEnabled);
   if (ui.rescaleOptions) ui.rescaleOptions.classList.toggle("hidden", !rescaleEnabled);
   ui.rescaleToggle.addEventListener("click", () => {
     rescaleEnabled = !rescaleEnabled;
-    ui.rescaleToggle.textContent = rescaleEnabled ? "Rescale images: On" : "Rescale images: Off";
     ui.rescaleToggle.classList.toggle("active", rescaleEnabled);
     if (ui.rescaleOptions) ui.rescaleOptions.classList.toggle("hidden", !rescaleEnabled);
     try { localStorage.setItem("convert-rescale", String(rescaleEnabled)); } catch {}
@@ -1319,11 +1323,9 @@ updateRescalePlaceholders();
 
 // ──── Privacy Mode Toggle ────
 if (ui.privacyToggle) {
-  ui.privacyToggle.textContent = privacyMode ? "Privacy mode: On" : "Privacy mode: Off";
   ui.privacyToggle.classList.toggle("active", privacyMode);
   ui.privacyToggle.addEventListener("click", () => {
     privacyMode = !privacyMode;
-    ui.privacyToggle.textContent = privacyMode ? "Privacy mode: On" : "Privacy mode: Off";
     ui.privacyToggle.classList.toggle("active", privacyMode);
     try { localStorage.setItem("convert-privacy", String(privacyMode)); } catch {}
   });
@@ -1396,12 +1398,10 @@ ui.speedPresetBtns.forEach(btn => {
 
 // WebM mode toggle
 if (ui.webmModeToggle) {
-  ui.webmModeToggle.textContent = compressWebmMode ? "WebM mode: On" : "WebM mode: Off";
   ui.webmModeToggle.classList.toggle("active", compressWebmMode);
   if (ui.webmHint) ui.webmHint.classList.toggle("hidden", !compressWebmMode);
   ui.webmModeToggle.addEventListener("click", () => {
     compressWebmMode = !compressWebmMode;
-    ui.webmModeToggle.textContent = compressWebmMode ? "WebM mode: On" : "WebM mode: Off";
     ui.webmModeToggle.classList.toggle("active", compressWebmMode);
     if (ui.webmHint) ui.webmHint.classList.toggle("hidden", !compressWebmMode);
     try { localStorage.setItem("convert-compress-webm", String(compressWebmMode)); } catch {}
@@ -1832,6 +1832,29 @@ async function applyRescale(files: FileData[]): Promise<FileData[]> {
   return result;
 }
 
+/** Apply processing steps gated by the active tool */
+async function applyToolProcessing(files: FileData[]): Promise<FileData[]> {
+  if (activeTool === "convert") {
+    // Convert: only strip metadata (privacy)
+    files = await applyMetadataStrip(files);
+  } else if (activeTool === "compress") {
+    // Compress: only compression
+    files = await applyCompression(files);
+  } else if (activeTool === "image") {
+    // Image tools: BG removal → metadata strip → rescale
+    files = await applyBgRemoval(files);
+    files = await applyMetadataStrip(files);
+    files = await applyRescale(files);
+  } else {
+    // Fallback (shouldn't happen): run all
+    files = await applyBgRemoval(files);
+    files = await applyMetadataStrip(files);
+    files = await applyRescale(files);
+    files = await applyCompression(files);
+  }
+  return files;
+}
+
 /** Apply file compression: re-encodes video with adaptive CRF, optionally constrained to target size */
 async function applyCompression(files: FileData[]): Promise<FileData[]> {
   if (!compressEnabled) return files;
@@ -1842,6 +1865,71 @@ async function applyCompression(files: FileData[]): Promise<FileData[]> {
 const videoCompressionExts = new Set([
   "mp4", "webm", "avi", "mov", "mkv", "flv", "wmv", "ogv", "m4v", "3gp", "ts", "mts",
 ]);
+
+/** Image extensions for redirect suggestion */
+const imageExts = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "ico", "avif", "tiff", "tif"]);
+
+/** Last converted files (for redirect to another tool) */
+let lastConvertedFiles: FileData[] = [];
+
+/** Generate redirect suggestion HTML if all output files are images or all are videos */
+function getRedirectSuggestionHtml(files: FileData[]): string {
+  if (activeTool !== "convert" || files.length === 0) return "";
+  const allImages = files.every(f => {
+    const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
+    return imageExts.has(ext);
+  });
+  const allVideos = files.every(f => {
+    const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
+    return videoCompressionExts.has(ext);
+  });
+  if (allImages) {
+    return `<br><button class="popup-redirect-btn" data-redirect-tool="image">Continue to Image Tools &rarr;</button>`;
+  }
+  if (allVideos) {
+    return `<br><button class="popup-redirect-btn" data-redirect-tool="compress">Continue to Compress &rarr;</button>`;
+  }
+  return "";
+}
+
+/** Attach click handlers to redirect buttons in the popup */
+function attachRedirectHandlers() {
+  for (const btn of document.querySelectorAll<HTMLButtonElement>(".popup-redirect-btn[data-redirect-tool]")) {
+    btn.addEventListener("click", () => {
+      const tool = btn.dataset.redirectTool as "image" | "compress";
+      redirectToToolWithFiles(tool);
+    });
+  }
+}
+
+/** Navigate to a tool and load the last converted files as input */
+function redirectToToolWithFiles(tool: "image" | "compress") {
+  window.hidePopup();
+  // Create File objects from the FileData
+  const newFiles: File[] = lastConvertedFiles.map(f => {
+    const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
+    const mimeMap: Record<string, string> = {
+      png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif",
+      webp: "image/webp", bmp: "image/bmp", svg: "image/svg+xml", ico: "image/x-icon",
+      avif: "image/avif", tiff: "image/tiff", tif: "image/tiff",
+      mp4: "video/mp4", webm: "video/webm", avi: "video/x-msvideo", mov: "video/quicktime",
+      mkv: "video/x-matroska", flv: "video/x-flv", wmv: "video/x-ms-wmv", ogv: "video/ogg",
+      m4v: "video/x-m4v", "3gp": "video/3gpp", ts: "video/mp2t", mts: "video/mp2t",
+    };
+    const mime = mimeMap[ext] || "application/octet-stream";
+    return new File([f.bytes], f.name, { type: mime });
+  });
+
+  showToolView(tool);
+  selectedFiles = newFiles;
+  allUploadedFiles = newFiles;
+  conversionQueue = [];
+  currentQueueIndex = 0;
+  isSameCategoryBatch = true;
+  renderFilePreviews(newFiles);
+  if (newFiles.length > 0) autoSelectInputFormat(newFiles[0]);
+  updateProcessButton();
+}
 
 function isVideoFile(name: string): boolean {
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
@@ -1905,22 +1993,11 @@ function updateProcessButton() {
     return;
   }
 
-  // Convert tool: original behavior
-  if (canProcess && hasProcessing && !outputSelected) {
-    const labels: string[] = [];
-    if (rescaleReady) labels.push("Resize");
-    if (removeBg) labels.push("Remove background");
-    if (compressReady) labels.push("Compress");
-    ui.convertButton.textContent = labels.join(" & ");
-    ui.convertButton.className = "";
-    ui.convertButton.setAttribute("data-process-mode", "true");
-  } else {
-    ui.convertButton.textContent = "Convert";
-    ui.convertButton.removeAttribute("data-process-mode");
-    // Don't override enabled state if an output format is selected
-    if (!outputSelected) {
-      ui.convertButton.className = "disabled";
-    }
+  // Convert tool: button is simply "Convert" — no process mode
+  ui.convertButton.textContent = "Convert";
+  ui.convertButton.removeAttribute("data-process-mode");
+  if (!outputSelected) {
+    ui.convertButton.className = "disabled";
   }
 }
 
@@ -2151,10 +2228,7 @@ ui.convertButton.onclick = async function () {
         fileData.push({ name: file.name, bytes: new Uint8Array(buf) });
       }
 
-      fileData = await applyBgRemoval(fileData);
-      fileData = await applyMetadataStrip(fileData);
-      fileData = await applyRescale(fileData);
-      fileData = await applyCompression(fileData);
+      fileData = await applyToolProcessing(fileData);
 
       for (const f of fileData) {
         downloadFile(f.bytes, f.name);
@@ -2234,7 +2308,7 @@ ui.convertButton.onclick = async function () {
         return;
       }
 
-      const processedOutputFiles = await applyCompression(await applyRescale(await applyMetadataStrip(await applyBgRemoval(allOutputFiles))));
+      const processedOutputFiles = await applyToolProcessing(allOutputFiles);
 
       if (processedOutputFiles.length === 1) {
         downloadFile(processedOutputFiles[0].bytes, processedOutputFiles[0].name);
@@ -2249,13 +2323,17 @@ ui.convertButton.onclick = async function () {
 
       const totalSize = processedOutputFiles.reduce((s, f) => s + f.bytes.length, 0);
       const compressionHtml = getVideoCompressionHtml(inputFiles, processedOutputFiles);
+      lastConvertedFiles = processedOutputFiles;
+      const redirectHtml1 = getRedirectSuggestionHtml(processedOutputFiles);
       window.showPopup(
         `<h2>Converted ${processedOutputFiles.length} file${processedOutputFiles.length !== 1 ? "s" : ""} to ${outputFormat.format}!</h2>` +
         `<p>Total size: ${formatFileSize(totalSize)}</p>` +
         compressionHtml +
         (processedOutputFiles.length > 1 && archiveMultiOutput ? `<p>Results delivered as a ZIP archive.</p>` : ``) +
-        `<button onclick="window.hidePopup()">OK</button>`
+        `<button onclick="window.hidePopup()">OK</button>` +
+        redirectHtml1
       );
+      attachRedirectHandlers();
 
     } else if (conversionQueue.length > 1) {
       // ── Mixed-category queue: convert current group, advance queue ──
@@ -2286,7 +2364,7 @@ ui.convertButton.onclick = async function () {
           return;
         }
 
-        const processedQueueFiles = await applyCompression(await applyRescale(await applyMetadataStrip(await applyBgRemoval(output.files))));
+        const processedQueueFiles = await applyToolProcessing(output.files);
         for (const file of processedQueueFiles) {
           downloadFile(file.bytes, file.name);
         }
@@ -2344,20 +2422,24 @@ ui.convertButton.onclick = async function () {
         return;
       }
 
-      const processedSingleFiles = await applyCompression(await applyRescale(await applyMetadataStrip(await applyBgRemoval(output.files))));
+      const processedSingleFiles = await applyToolProcessing(output.files);
       for (const file of processedSingleFiles) {
         downloadFile(file.bytes, file.name);
       }
 
       const singleTotalSize = processedSingleFiles.reduce((s, f) => s + f.bytes.length, 0);
       const compressionHtml = getVideoCompressionHtml(inputFiles, processedSingleFiles);
+      lastConvertedFiles = processedSingleFiles;
+      const redirectHtml3 = getRedirectSuggestionHtml(processedSingleFiles);
       window.showPopup(
         `<h2>Converted ${inputOption.format.format} to ${outputOption.format.format}!</h2>` +
         `<p>Size: ${formatFileSize(singleTotalSize)}</p>` +
         compressionHtml +
         `<p>Path used: <b>${output.path.map(c => c.format.format).join(" → ")}</b>.</p>\n` +
-        `<button onclick="window.hidePopup()">OK</button>`
+        `<button onclick="window.hidePopup()">OK</button>` +
+        redirectHtml3
       );
+      attachRedirectHandlers();
     }
 
   } catch (e) {

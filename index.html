@@ -135,12 +135,21 @@
         </div>
         <div class="sm-group">
           <span class="sm-label">Output</span>
-          <button id="auto-download-toggle" class="sm-btn">Auto-download: On</button>
-          <button id="archive-multi-toggle" class="sm-btn">Multi-file output: Archive</button>
+          <label class="sm-switch-row">
+            <span class="sm-switch-label">Auto-download</span>
+            <button id="auto-download-toggle" class="sm-switch" role="switch"></button>
+          </label>
+          <label class="sm-switch-row">
+            <span class="sm-switch-label">Archive multi-file output</span>
+            <button id="archive-multi-toggle" class="sm-switch" role="switch"></button>
+          </label>
         </div>
         <div class="sm-group">
           <span class="sm-label">Privacy</span>
-          <button id="privacy-toggle" class="sm-btn">Privacy mode: Off</button>
+          <label class="sm-switch-row">
+            <span class="sm-switch-label">Privacy mode</span>
+            <button id="privacy-toggle" class="sm-switch" role="switch"></button>
+          </label>
         </div>
       </div>
 
@@ -167,7 +176,10 @@
           </div>
           <div class="sm-group">
             <span class="sm-label">Output format</span>
-            <button id="webm-mode-toggle" class="sm-btn">WebM mode: Off</button>
+            <label class="sm-switch-row">
+            <span class="sm-switch-label">WebM mode</span>
+            <button id="webm-mode-toggle" class="sm-switch" role="switch"></button>
+          </label>
             <p id="webm-hint" class="sm-hint hidden">Tries VP9 first for faster, smaller files. Output will be .webm.</p>
           </div>
           <div class="sm-group">
@@ -197,9 +209,15 @@
         <h3 class="sm-panel-title">Image Tools</h3>
         <div class="sm-group">
           <span class="sm-label">Background removal</span>
-          <button id="remove-bg-toggle" class="sm-btn">Remove background: Off</button>
+          <label class="sm-switch-row">
+            <span class="sm-switch-label">Remove background</span>
+            <button id="remove-bg-toggle" class="sm-switch" role="switch"></button>
+          </label>
           <button id="bg-mode-toggle" class="sm-btn hidden">Mode: Local</button>
-          <button id="bg-correction-toggle" class="sm-btn hidden">Correction: Off</button>
+          <label class="sm-switch-row hidden">
+            <span class="sm-switch-label">Correction</span>
+            <button id="bg-correction-toggle" class="sm-switch" role="switch"></button>
+          </label>
           <div id="bg-api-key-row" class="hidden">
             <input type="password" id="bg-api-key" placeholder="remove.bg API key" autocomplete="off">
             <p class="sm-hint">Get a free key at <a href="https://www.remove.bg/api" target="_blank" rel="noopener">remove.bg/api</a>. Images are sent to remove.bg servers.</p>
@@ -207,7 +225,10 @@
         </div>
         <div class="sm-group">
           <span class="sm-label">Rescale</span>
-          <button id="rescale-toggle" class="sm-btn">Rescale images: Off</button>
+          <label class="sm-switch-row">
+            <span class="sm-switch-label">Rescale images</span>
+            <button id="rescale-toggle" class="sm-switch" role="switch"></button>
+          </label>
           <div id="rescale-options" class="hidden">
             <div class="sm-size-row">
               <input type="number" id="rescale-width" placeholder="Width" min="1">
@@ -251,7 +272,8 @@
     </main>
   </div>
 
-  <!-- Logs popout -->
+  <!-- Logs overlay + modal -->
+  <div id="logs-overlay" class="hidden"></div>
   <div id="logs-popout" class="hidden">
     <div class="logs-popout-header">
       <h3>Error Log</h3>
