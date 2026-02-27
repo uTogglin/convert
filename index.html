@@ -331,19 +331,41 @@
       <p>Upload images to remove backgrounds, rescale, and strip metadata.</p>
     </div>
 
-    <!-- Canvas + settings side by side, centered -->
+    <!-- Canvas column + settings side by side, centered -->
     <div id="img-layout">
-      <div id="img-canvas">
-        <div id="img-drop-prompt">
-          <svg class="img-drop-icon" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-            <circle cx="8.5" cy="8.5" r="1.5"></circle>
-            <polyline points="21 15 16 10 5 21"></polyline>
-          </svg>
-          <span class="img-drop-text">Drop image here</span>
-          <span class="img-drop-sub">or click to browse</span>
+      <!-- Left column: canvas + filmstrip + controls -->
+      <div id="img-canvas-col">
+        <div id="img-canvas">
+          <div id="img-drop-prompt">
+            <svg class="img-drop-icon" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <circle cx="8.5" cy="8.5" r="1.5"></circle>
+              <polyline points="21 15 16 10 5 21"></polyline>
+            </svg>
+            <span class="img-drop-text">Drop image here</span>
+            <span class="img-drop-sub">or click to browse</span>
+          </div>
+          <img id="img-preview" class="hidden" alt="Preview">
         </div>
-        <img id="img-preview" class="hidden" alt="Preview">
+
+        <!-- Below canvas: filmstrip, remove bg, before/after -->
+        <div id="img-workspace" class="hidden">
+          <div class="img-filmstrip">
+            <div id="img-filmstrip-grid"></div>
+            <button id="img-add-more" class="img-filmstrip-add" title="Add more images">+</button>
+          </div>
+          <div class="img-below-controls">
+            <label class="img-removebg-row">
+              <span>Remove Background</span>
+              <button id="img-remove-bg-toggle" class="sm-switch" role="switch"></button>
+            </label>
+            <div class="img-compare-toggle">
+              <span class="img-compare-label" data-side="before">Before</span>
+              <button id="img-compare-switch" class="img-toggle-switch" role="switch"></button>
+              <span class="img-compare-label" data-side="after">After</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Settings + download (right of canvas) -->
@@ -379,25 +401,6 @@
         </div>
         <button id="img-download-btn" class="img-download-btn disabled">Download</button>
       </aside>
-    </div>
-
-    <!-- Below canvas: filmstrip, remove bg toggle, before/after (centered under canvas) -->
-    <div id="img-workspace" class="hidden">
-      <div class="img-filmstrip">
-        <div id="img-filmstrip-grid"></div>
-        <button id="img-add-more" class="img-filmstrip-add" title="Add more images">+</button>
-      </div>
-      <div class="img-below-controls">
-        <label class="img-removebg-row">
-          <span>Remove Background</span>
-          <button id="img-remove-bg-toggle" class="sm-switch" role="switch"></button>
-        </label>
-        <div class="img-compare-toggle">
-          <span class="img-compare-label" data-side="before">Before</span>
-          <button id="img-compare-switch" class="img-toggle-switch" role="switch"></button>
-          <span class="img-compare-label" data-side="after">After</span>
-        </div>
-      </div>
     </div>
 
     <!-- Hidden file input for image tools -->
