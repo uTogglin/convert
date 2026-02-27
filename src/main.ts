@@ -141,6 +141,9 @@ let compressSpeed: "fast" | "balanced" | "quality" = (() => {
     return "balanced";
   } catch { return "balanced" as const; }
 })();
+let compressWebmMode: boolean = (() => {
+  try { return localStorage.getItem("convert-compress-webm") === "true"; } catch { return false; }
+})();
 /** Queue for mixed-category batch conversion */
 let conversionQueue: File[][] = [];
 let currentQueueIndex = 0;
@@ -219,6 +222,8 @@ const ui = {
   codecPresetBtns: document.querySelectorAll(".codec-preset-btn") as NodeListOf<HTMLButtonElement>,
   codecHint: document.querySelector("#codec-hint") as HTMLParagraphElement,
   speedPresetBtns: document.querySelectorAll(".speed-preset-btn") as NodeListOf<HTMLButtonElement>,
+  webmModeToggle: document.querySelector("#webm-mode-toggle") as HTMLButtonElement,
+  webmHint: document.querySelector("#webm-hint") as HTMLParagraphElement,
   outputTray: document.querySelector("#output-tray") as HTMLDivElement,
   outputTrayGrid: document.querySelector("#output-tray-grid") as HTMLDivElement,
   downloadAllBtn: document.querySelector("#download-all-btn") as HTMLButtonElement,
@@ -1255,6 +1260,19 @@ ui.speedPresetBtns.forEach(btn => {
   });
 });
 
+// WebM mode toggle
+if (ui.webmModeToggle) {
+  ui.webmModeToggle.textContent = compressWebmMode ? "WebM mode: On" : "WebM mode: Off";
+  ui.webmModeToggle.classList.toggle("active", compressWebmMode);
+  if (ui.webmHint) ui.webmHint.classList.toggle("hidden", !compressWebmMode);
+  ui.webmModeToggle.addEventListener("click", () => {
+    compressWebmMode = !compressWebmMode;
+    ui.webmModeToggle.textContent = compressWebmMode ? "WebM mode: On" : "WebM mode: Off";
+    ui.webmModeToggle.classList.toggle("active", compressWebmMode);
+    if (ui.webmHint) ui.webmHint.classList.toggle("hidden", !compressWebmMode);
+    try { localStorage.setItem("convert-compress-webm", String(compressWebmMode)); } catch {}
+  });
+}
 
 // ──── Output Tray: Download All / Clear ────
 if (ui.downloadAllBtn) {
@@ -1664,7 +1682,7 @@ async function applyRescale(files: FileData[]): Promise<FileData[]> {
 async function applyCompression(files: FileData[]): Promise<FileData[]> {
   if (!compressEnabled) return files;
   const targetBytes = compressTargetMB > 0 ? compressTargetMB * 1024 * 1024 : 0;
-  return await applyFileCompression(files, targetBytes, compressMode, compressSpeed, 23, compressCodec);
+  return await applyFileCompression(files, targetBytes, compressMode, compressSpeed, 23, compressCodec, compressWebmMode);
 }
 
 const videoCompressionExts = new Set([

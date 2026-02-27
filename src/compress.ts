@@ -414,11 +414,12 @@ async function compressVideo(
   targetBytes: number,
   encoderSpeed: "fast" | "balanced" | "quality" = "balanced",
   crf?: number,
-  codec: "h264" | "h265" = "h264"
+  codec: "h264" | "h265" = "h264",
+  webmMode?: boolean
 ): Promise<FileData> {
   // ── WebCodecs fast path (hardware-accelerated) ──
   if (isWebCodecsAvailable()) {
-    const result = await compressVideoWebCodecs(file, targetBytes, encoderSpeed, crf, codec);
+    const result = await compressVideoWebCodecs(file, targetBytes, encoderSpeed, crf, codec, webmMode);
     if (result !== null) return result;
     console.info(`WebCodecs unavailable for "${file.name}", falling back to ffmpeg.wasm`);
     await showCompressPopup(
@@ -686,7 +687,8 @@ export async function applyFileCompression(
   mode: "auto" | "lossy",
   encoderSpeed: "fast" | "balanced" | "quality" = "balanced",
   crf?: number,
-  codec: "h264" | "h265" = "h264"
+  codec: "h264" | "h265" = "h264",
+  webmMode?: boolean
 ): Promise<FileData[]> {
   const isReencode = targetBytes === 0 && crf !== undefined;
   const result: FileData[] = [];
@@ -727,7 +729,7 @@ export async function applyFileCompression(
         else result.push(f);
         break;
       case "video":
-        result.push(await compressVideo(f, targetBytes, encoderSpeed, crf, codec));
+        result.push(await compressVideo(f, targetBytes, encoderSpeed, crf, codec, webmMode));
         break;
       case "audio":
         if (!isReencode) result.push(await compressAudio(f, targetBytes, mode));

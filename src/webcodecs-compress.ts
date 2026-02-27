@@ -63,7 +63,8 @@ export async function compressVideoWebCodecs(
   targetBytes: number,
   encoderSpeed: "fast" | "balanced" | "quality" = "balanced",
   crf?: number,
-  codec: "h264" | "h265" = "h264"
+  codec: "h264" | "h265" = "h264",
+  webmMode?: boolean
 ): Promise<FileData | null> {
   if (!isWebCodecsAvailable()) return null;
 
@@ -72,8 +73,11 @@ export async function compressVideoWebCodecs(
 
   const isWebM = ext === "webm";
   const isMkv = ext === "mkv";
+  // WebM mode: treat non-WebM files as if targeting WebM output
+  const useWebmMode = webmMode && !isWebM;
+  const effectiveWebM = isWebM || useWebmMode;
 
-  function makeOutput(forWebM = isWebM, forMkv = isMkv) {
+  function makeOutput(forWebM = effectiveWebM, forMkv = useWebmMode ? false : isMkv) {
     const fmt = forWebM ? new WebMOutputFormat() : forMkv ? new MkvOutputFormat() : new Mp4OutputFormat();
     return new Output({ format: fmt, target: new BufferTarget() });
   }
@@ -81,6 +85,9 @@ export async function compressVideoWebCodecs(
   function makeInput() {
     return new Input({ formats: ALL_FORMATS, source: new BufferSource(file.bytes) });
   }
+
+  // Output filename: swap extension to .webm when webmMode overrides format
+  const outputName = useWebmMode ? file.name.replace(/\.[^.]+$/, ".webm") : file.name;
 
   try {
     const input = makeInput();
@@ -97,8 +104,8 @@ export async function compressVideoWebCodecs(
     const reducedFps = originalFps > 4 ? Math.round(originalFps) - 2 : 0; // e.g. 60→58, 30→28
 
     // Video codec selection
-    const videoCodec = isWebM ? "vp9" : codec === "h265" ? "hevc" : "avc";
-    const audioCodec = isWebM ? "opus" : "aac";
+    const videoCodec = effectiveWebM ? "vp9" : codec === "h265" ? "hevc" : "avc";
+    const audioCodec = effectiveWebM ? "opus" : "aac";
     // Speed preset → hardware acceleration preference
     let hwAccel: "prefer-hardware" | "prefer-software" = encoderSpeed === "quality"
       ? "prefer-software"
@@ -152,12 +159,12 @@ export async function compressVideoWebCodecs(
 
     // Success: under target
     if (targetBytes > 0 && result.byteLength <= targetBytes) {
-      return { name: file.name, bytes: new Uint8Array(result) };
+      return { name: outputName, bytes: new Uint8Array(result) };
     }
 
     // No target mode and result is smaller than original
     if (targetBytes <= 0) {
-      return { name: file.name, bytes: new Uint8Array(result) };
+      return { name: outputName, bytes: new Uint8Array(result) };
     }
 
     // ── Overshot target — enter escalating strategy loop ──
@@ -170,7 +177,7 @@ export async function compressVideoWebCodecs(
     let lastSize = result.byteLength;
     let bestResult: ArrayBuffer | null = result;
     let bestSize = result.byteLength;
-    let bestName = file.name;
+    let bestName = outputName;
 
     // Helper: calibrate bitrate from last measured result
     const calibrate = (base: number, actual: number) =>
@@ -197,8 +204,8 @@ export async function compressVideoWebCodecs(
       const res = await attemptConversion(makeInput(), makeOutput(), {
         videoCodec, videoBitrate: br, audioCodec, hasAudio, hwAccel,
       });
-      if (res && res.byteLength <= targetBytes) return { name: file.name, bytes: new Uint8Array(res) };
-      track(res, br, file.name);
+      if (res && res.byteLength <= targetBytes) return { name: outputName, bytes: new Uint8Array(res) };
+      track(res, br, outputName);
     }
 
     // Strategy 2: Software encoder + lower audio (64kbps) + subtle fps drop
@@ -211,8 +218,8 @@ export async function compressVideoWebCodecs(
         hwAccel: "prefer-software", audioBitrate: 64000,
         ...(reducedFps > 0 ? { frameRate: reducedFps } : {}),
       });
-      if (res && res.byteLength <= targetBytes) return { name: file.name, bytes: new Uint8Array(res) };
-      track(res, br, file.name);
+      if (res && res.byteLength <= targetBytes) return { name: outputName, bytes: new Uint8Array(res) };
+      track(res, br, outputName);
     }
 
     // ── Strategy 3: Re-compress the closest result ──
