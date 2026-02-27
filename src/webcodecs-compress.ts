@@ -80,8 +80,8 @@ export async function compressVideoWebCodecs(
       const safeTarget = targetBytes * 0.97;
       const audioBits = hasAudio ? 96000 : 0;
       const totalBitrate = (safeTarget * 8) / duration;
-      // Conservative factor: hardware encoders consistently overshoot
-      videoBitrate = Math.max(Math.floor((totalBitrate - audioBits) * 0.85), 50000);
+      // CBR keeps the encoder close to target; small margin for container overhead
+      videoBitrate = Math.max(Math.floor((totalBitrate - audioBits) * 0.95), 50000);
     } else if (crf !== undefined) {
       // Map CRF to approximate bitrate based on input file stats
       const videoTrack = await input.getPrimaryVideoTrack();
@@ -93,8 +93,11 @@ export async function compressVideoWebCodecs(
       return null;
     }
 
+    // Use CBR for target-size mode (predictable output size), VBR for re-encode mode (better quality)
+    const bitrateMode = targetBytes > 0 ? "constant" as const : "variable" as const;
+
     const result = await attemptConversion(
-      input, output, videoCodec, videoBitrate, audioCodec, hasAudio, hwAccel
+      input, output, videoCodec, videoBitrate, audioCodec, hasAudio, hwAccel, bitrateMode
     );
 
     if (!result) return null;
@@ -107,7 +110,7 @@ export async function compressVideoWebCodecs(
       updatePopupHeading("Retrying with lower bitrate...");
       resetProgressBar();
 
-      const retryRatio = (targetBytes / result.byteLength) * 0.80;
+      const retryRatio = (targetBytes / result.byteLength) * 0.90;
       const retryBitrate = Math.max(Math.floor(videoBitrate * retryRatio), 50000);
 
       const retryOutput = new Output({
@@ -120,7 +123,7 @@ export async function compressVideoWebCodecs(
       });
 
       const retryResult = await attemptConversion(
-        retryInput, retryOutput, videoCodec, retryBitrate, audioCodec, hasAudio, hwAccel
+        retryInput, retryOutput, videoCodec, retryBitrate, audioCodec, hasAudio, hwAccel, "constant"
       );
 
       if (retryResult && retryResult.byteLength <= targetBytes) {
@@ -147,7 +150,7 @@ export async function compressVideoWebCodecs(
         });
 
         const swResult = await attemptConversion(
-          swInput, swOutput, videoCodec, swBitrate, audioCodec, hasAudio, "prefer-software"
+          swInput, swOutput, videoCodec, swBitrate, audioCodec, hasAudio, "prefer-software", "constant"
         );
 
         if (swResult && swResult.byteLength <= targetBytes) {
@@ -172,7 +175,8 @@ async function attemptConversion(
   videoBitrate: number,
   audioCodec: string,
   hasAudio: boolean,
-  hwAccel: "prefer-hardware" | "prefer-software"
+  hwAccel: "prefer-hardware" | "prefer-software",
+  bitrateMode: "constant" | "variable" = "variable"
 ): Promise<ArrayBuffer | null> {
   const conversion = await Conversion.init({
     input,
@@ -180,6 +184,8 @@ async function attemptConversion(
     video: {
       codec: videoCodec as "avc" | "hevc" | "vp9",
       bitrate: videoBitrate,
+      bitrateMode,
+      latencyMode: "quality",
       hardwareAcceleration: hwAccel,
       forceTranscode: true,
     },
