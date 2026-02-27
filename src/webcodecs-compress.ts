@@ -99,8 +99,10 @@ export async function compressVideoWebCodecs(
 
     if (!result) return null;
 
-    // If larger than original, keep original
-    if (result.byteLength >= file.bytes.length) return file;
+    // If larger than original: in re-encode mode keep original, in target-size mode continue to retry
+    if (result.byteLength >= file.bytes.length) {
+      if (targetBytes <= 0) return file;
+    }
 
     // If target size mode and overshot, use measured data to calibrate retries
     if (targetBytes > 0 && result.byteLength > targetBytes) {
