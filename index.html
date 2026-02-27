@@ -229,6 +229,83 @@
     <div id="output-tray-grid"></div>
   </div>
 
+  <!-- Compress tool page -->
+  <section id="compress-page" class="tool-page hidden">
+    <div class="tool-page-header">
+      <h2>Compress Video</h2>
+      <p>Re-encode your videos for smaller file sizes. Everything runs locally in your browser.</p>
+    </div>
+    <div class="tool-page-body">
+      <div class="tool-card">
+        <h3>Codec</h3>
+        <div class="tool-pill-row">
+          <button class="tool-pill selected" id="tp-codec-h264" data-codec="h264">H.264<span class="tool-pill-note">Compatible</span></button>
+          <button class="tool-pill" id="tp-codec-h265" data-codec="h265">H.265<span class="tool-pill-note">Smaller files</span></button>
+        </div>
+      </div>
+      <div class="tool-card">
+        <h3>Speed</h3>
+        <div class="tool-pill-row">
+          <button class="tool-pill" id="tp-speed-fast" data-speed="fast">Fast<span class="tool-pill-note">Fastest</span></button>
+          <button class="tool-pill selected" id="tp-speed-balanced" data-speed="balanced">Balanced<span class="tool-pill-note">Default</span></button>
+          <button class="tool-pill" id="tp-speed-quality" data-speed="quality">Quality<span class="tool-pill-note">Slowest</span></button>
+        </div>
+      </div>
+      <div class="tool-card">
+        <h3>Output</h3>
+        <button class="tool-toggle" id="tp-webm-toggle">WebM mode: Off</button>
+        <p class="tool-hint" id="tp-webm-hint" style="display:none">Tries VP9 first for faster, smaller files. Output will be .webm.</p>
+      </div>
+      <div class="tool-card">
+        <h3>Target Size</h3>
+        <div class="tool-size-row">
+          <input type="number" id="tp-target-mb" placeholder="Optional" min="0.1" step="0.1">
+          <span class="tool-unit">MB</span>
+        </div>
+        <div class="tool-pill-row" style="margin-top:10px">
+          <button class="tool-pill tp-size-preset" data-size="10">10 MB<span class="tool-pill-note">Free</span></button>
+          <button class="tool-pill tp-size-preset" data-size="50">50 MB<span class="tool-pill-note">Basic</span></button>
+          <button class="tool-pill tp-size-preset" data-size="500">500 MB<span class="tool-pill-note">Nitro</span></button>
+        </div>
+        <span class="tool-pill-label">Discord presets</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Image tools page -->
+  <section id="image-page" class="tool-page hidden">
+    <div class="tool-page-header">
+      <h2>Image Tools</h2>
+      <p>Remove backgrounds and rescale your images. All processing happens locally.</p>
+    </div>
+    <div class="tool-page-body">
+      <div class="tool-card">
+        <h3>Remove Background</h3>
+        <button class="tool-toggle" id="tp-bg-toggle">Off</button>
+        <div id="tp-bg-options" style="display:none">
+          <button class="tool-toggle" id="tp-bg-mode">Mode: Local</button>
+          <button class="tool-toggle" id="tp-bg-correction">Correction: Off</button>
+          <div id="tp-bg-api-row" style="display:none">
+            <input type="password" id="tp-bg-api-key" placeholder="remove.bg API key" autocomplete="off">
+            <p class="tool-hint">Get a free key at <a href="https://www.remove.bg/api" target="_blank" rel="noopener">remove.bg/api</a>.</p>
+          </div>
+        </div>
+      </div>
+      <div class="tool-card">
+        <h3>Rescale</h3>
+        <button class="tool-toggle" id="tp-rescale-toggle">Off</button>
+        <div id="tp-rescale-options" style="display:none">
+          <div class="tool-size-row">
+            <input type="number" id="tp-rescale-width" placeholder="Width" min="1">
+            <span class="tool-unit">&times;</span>
+            <input type="number" id="tp-rescale-height" placeholder="Height" min="1">
+          </div>
+          <label class="tool-check"><input type="checkbox" id="tp-rescale-lock" checked> Lock aspect ratio</label>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <div id="format-containers">
 
     <div id="from-container" class="format-container">

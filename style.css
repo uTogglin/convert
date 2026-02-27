@@ -219,14 +219,233 @@ body {
 }
 #back-to-home.hidden { display: none; }
 
-/* ── Tool view (converter UI) hidden by default ── */
+/* ── Tool view visibility ── */
 .tool-view-hidden #file-area,
 .tool-view-hidden #settings-drawer,
 .tool-view-hidden #archive-panel,
 .tool-view-hidden #output-tray,
 .tool-view-hidden #format-containers,
-.tool-view-hidden #convert-button {
+.tool-view-hidden #convert-button,
+.tool-view-hidden .tool-page {
   display: none !important;
+}
+
+/* Per-tool visibility: hide format-containers for compress/image,
+   hide tool pages for convert, and cross-hide between compress/image */
+body[data-tool="compress"] #format-containers,
+body[data-tool="image"] #format-containers { display: none !important; }
+body[data-tool="compress"] #image-page,
+body[data-tool="image"] #compress-page,
+body[data-tool="convert"] #compress-page,
+body[data-tool="convert"] #image-page { display: none !important; }
+
+/* Hide duplicate settings sections from the drawer when on dedicated tool pages */
+body[data-tool="compress"] .settings-section:has(#compress-toggle) { display: none; }
+body[data-tool="image"] #remove-bg-toggle,
+body[data-tool="image"] #bg-mode-toggle,
+body[data-tool="image"] #bg-correction-toggle,
+body[data-tool="image"] #bg-api-key-row,
+body[data-tool="image"] #rescale-toggle,
+body[data-tool="image"] #rescale-options { display: none !important; }
+
+/* =========================================
+   TOOL PAGES (Compress & Image)
+   ========================================= */
+.tool-page {
+  margin: 0 24px 24px;
+}
+.tool-page.hidden { display: none; }
+
+.tool-page-header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+.tool-page-header h2 {
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+.tool-page-header p {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.tool-page-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  max-width: 800px;
+  margin: 0 auto;
+  padding-bottom: 100px;
+}
+
+.tool-card {
+  background: var(--surface-color);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tool-card h3 {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-muted);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tool-card h3::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+.tool-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tool-pill {
+  padding: 8px 16px;
+  border: 1.5px solid var(--input-border);
+  border-radius: 50px;
+  background: var(--input-bg);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.84rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-family: inherit;
+}
+.tool-pill:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.tool-pill.selected {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: white;
+  box-shadow: 0 2px 10px var(--accent-dim);
+}
+.tool-pill-note {
+  font-size: 0.68rem;
+  font-weight: 400;
+  opacity: 0.65;
+}
+.tool-pill-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.tool-toggle {
+  width: 100%;
+  text-align: left;
+  padding: 8px 14px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg);
+  color: var(--text-main);
+  cursor: pointer;
+  font-size: 0.84rem;
+  font-weight: 500;
+  font-family: inherit;
+  transition: all 0.18s ease;
+}
+.tool-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.tool-toggle.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.tool-size-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tool-size-row input[type="number"] {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg);
+  color: var(--text-main);
+  font-size: 0.85rem;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.tool-size-row input[type="number"]:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+  outline: none;
+}
+.tool-unit {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+.tool-hint {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.45;
+}
+.tool-hint a { color: var(--accent); }
+
+.tool-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+#tp-bg-options,
+#tp-rescale-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#tp-bg-api-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+#tp-bg-api-row input {
+  padding: 7px 10px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg);
+  color: var(--text-main);
+  font-size: 0.85rem;
+  width: 100%;
+}
+#tp-bg-api-row input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+  outline: none;
 }
 
 /* =========================================
@@ -1323,4 +1542,6 @@ button.selected {
   .home-grid { grid-template-columns: 1fr; max-width: 400px; }
   #home-page { padding: 32px 16px; min-height: calc(100vh - 61px); }
   .home-title { font-size: 1.5rem; }
+  .tool-page { margin: 0 12px 12px; }
+  .tool-page-body { grid-template-columns: 1fr; }
 }
