@@ -99,7 +99,7 @@ async function convertBackToOriginal(
       const res = await attemptConversion(mkInput(), mkOutput(), {
         videoCodec: originalVideoCodec,
         videoBitrate: bitrate,
-        audioCodec: originalAudioCodec,
+        audioCodec: "opus", // Keep Opus from the VP9 intermediate — AAC encoding isn't supported by WebCodecs
         hasAudio,
         hwAccel: "prefer-software",
         audioBitrate: 64000,
@@ -397,10 +397,16 @@ async function attemptConversion(
   });
 
   if (!conversion.isValid) {
-    const videoDiscarded = conversion.discardedTracks.some(
-      t => t.reason === "no_encodable_target_codec" || t.reason === "undecodable_source_codec"
-    );
-    if (videoDiscarded) return null;
+    const critical = conversion.discardedTracks.some(t => {
+      const reason = t.reason === "no_encodable_target_codec" || t.reason === "undecodable_source_codec";
+      if (!reason) return false;
+      // Video discarded → always fail
+      if (t.type === "video") return true;
+      // Audio discarded when we expected audio → fail (avoids silent audio loss)
+      if (t.type === "audio" && opts.hasAudio) return true;
+      return false;
+    });
+    if (critical) return null;
   }
 
   conversion.onProgress = (progress: number) => {
