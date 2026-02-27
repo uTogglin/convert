@@ -184,8 +184,14 @@ export async function compressVideoWebCodecs(
     let bestName = outputName;
 
     // Helper: calibrate bitrate from last measured result
-    const calibrate = (base: number, actual: number) =>
-      Math.max(Math.floor(base * (targetBytes / actual) * 0.90), 50000);
+    // Safety factor scales with overshoot: gentle for near-misses, aggressive for big misses
+    const calibrate = (base: number, actual: number) => {
+      const overshoot = actual / targetBytes;           // 1.1 = 10% over, 2.0 = 100% over
+      const safety = overshoot > 1.5 ? 0.78
+                   : overshoot > 1.2 ? 0.85
+                   : 0.93;
+      return Math.max(Math.floor(base * (targetBytes / actual) * safety), 50000);
+    };
 
     // Helper: update tracking after an attempt
     const track = (res: ArrayBuffer | null, usedBitrate: number, name: string) => {
@@ -247,7 +253,9 @@ export async function compressVideoWebCodecs(
 
         const reAudioBits = reHasAudio ? 64000 : 0;
         const reTotalBitrate = (targetBytes * 0.95 * 8) / reDuration;
-        const reBitrate = Math.max(Math.floor((reTotalBitrate - reAudioBits) * 0.90), 50000);
+        const reOvershoot = bestSize / targetBytes;
+        const reSafety = reOvershoot > 1.5 ? 0.78 : reOvershoot > 1.2 ? 0.85 : 0.93;
+        const reBitrate = Math.max(Math.floor((reTotalBitrate - reAudioBits) * reSafety), 50000);
 
         const reOutput = new Output({
           format: reIsWebM ? new WebMOutputFormat() : reIsMkv ? new MkvOutputFormat() : new Mp4OutputFormat(),
@@ -365,8 +373,10 @@ export async function compressVideoVP9(
       if (!res) return null;
       if (res.byteLength <= targetBytes) return { name: vp9Name, bytes: new Uint8Array(res) };
 
-      // Calibrate for next attempt
-      bitrate = Math.max(Math.floor(bitrate * (targetBytes / res.byteLength) * 0.90), 50000);
+      // Calibrate for next attempt — scale safety with overshoot
+      const vp9Overshoot = res.byteLength / targetBytes;
+      const vp9Safety = vp9Overshoot > 1.5 ? 0.78 : vp9Overshoot > 1.2 ? 0.85 : 0.93;
+      bitrate = Math.max(Math.floor(bitrate * (targetBytes / res.byteLength) * vp9Safety), 50000);
     }
 
     return null;
