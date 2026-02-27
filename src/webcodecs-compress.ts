@@ -425,12 +425,13 @@ export async function reencodeVideo(
   }
 
   try {
-    // Probe file once — reused across all attempts
+    // Probe file once, then dispose to free VideoSamples
     const probeInput = new Input({ formats: ALL_FORMATS, source: new BufferSource(file.bytes) });
     const duration = await probeInput.computeDuration();
-    if (!duration || duration <= 0) return null;
+    if (!duration || duration <= 0) { probeInput.dispose(); return null; }
 
     const hasAudio = (await probeInput.getPrimaryAudioTrack()) !== null;
+    probeInput.dispose();
 
     // Match original bitrate (no quality loss)
     const audioBitsEstimate = hasAudio ? (128000 / 8) * duration : 0;
@@ -450,8 +451,9 @@ export async function reencodeVideo(
       updatePopupHeading(`Re-encoding video (${label})...`);
       resetProgressBar();
 
+      let input: Input | null = null;
       try {
-        const input = new Input({ formats: ALL_FORMATS, source: new BufferSource(file.bytes) });
+        input = new Input({ formats: ALL_FORMATS, source: new BufferSource(file.bytes) });
         const fmt = targetFormat === "webm" ? new WebMOutputFormat()
                   : targetFormat === "mkv" ? new MkvOutputFormat()
                   : new Mp4OutputFormat();
@@ -468,6 +470,8 @@ export async function reencodeVideo(
         }
       } catch (e) {
         console.warn(`[reencode] ${label} failed:`, e);
+      } finally {
+        try { input?.dispose(); } catch { /* already disposed by conversion */ }
       }
     }
 
