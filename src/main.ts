@@ -155,6 +155,14 @@ let allUploadedFiles: File[] = [];
 /** Name of the folder picked via "Open Folder", or null if files were added individually */
 let activeFolderName: string | null = null;
 
+/** Image tools state */
+let imgToolFiles: File[] = [];
+let imgActiveIndex: number = 0;
+let imgProcessedData: Map<number, FileData> = new Map();
+let imgOriginalUrls: Map<number, string> = new Map();
+let imgProcessedUrls: Map<number, string> = new Map();
+let imgShowAfter: boolean = false;
+
 /** Returns the broad media category from a file's MIME type */
 function getMediaCategory(file: File): string {
   return file.type.split("/")[0] || "unknown";
@@ -233,6 +241,26 @@ const ui = {
   clearOutputBtn: document.querySelector("#clear-output-btn") as HTMLButtonElement,
   homePage: document.querySelector("#home-page") as HTMLElement,
   backToHome: document.querySelector("#back-to-home") as HTMLButtonElement,
+  // Image tools inline UI
+  imgUploadZone: document.querySelector("#img-upload-zone") as HTMLDivElement,
+  imgWorkspace: document.querySelector("#img-workspace") as HTMLDivElement,
+  imgPreview: document.querySelector("#img-preview") as HTMLImageElement,
+  imgFilmstripGrid: document.querySelector("#img-filmstrip-grid") as HTMLDivElement,
+  imgAddMore: document.querySelector("#img-add-more") as HTMLButtonElement,
+  imgCompareSwitch: document.querySelector("#img-compare-switch") as HTMLButtonElement,
+  imgDownloadBtn: document.querySelector("#img-download-btn") as HTMLButtonElement,
+  imgFileInput: document.querySelector("#img-file-input") as HTMLInputElement,
+  imgRemoveBgToggle: document.querySelector("#img-remove-bg-toggle") as HTMLButtonElement,
+  imgBgModeToggle: document.querySelector("#img-bg-mode-toggle") as HTMLButtonElement,
+  imgBgCorrectionToggle: document.querySelector("#img-bg-correction-toggle") as HTMLButtonElement,
+  imgBgCorrectionRow: document.querySelector("#img-bg-correction-row") as HTMLElement,
+  imgBgApiKeyRow: document.querySelector("#img-bg-api-key-row") as HTMLDivElement,
+  imgBgApiKeyInput: document.querySelector("#img-bg-api-key") as HTMLInputElement,
+  imgRescaleToggle: document.querySelector("#img-rescale-toggle") as HTMLButtonElement,
+  imgRescaleOptions: document.querySelector("#img-rescale-options") as HTMLDivElement,
+  imgRescaleWidthInput: document.querySelector("#img-rescale-width") as HTMLInputElement,
+  imgRescaleHeightInput: document.querySelector("#img-rescale-height") as HTMLInputElement,
+  imgRescaleLockInput: document.querySelector("#img-rescale-lock-ratio") as HTMLInputElement,
 };
 
 // ── Home page / tool navigation ──────────────────────────────────────────────
@@ -243,6 +271,8 @@ const compressPage = document.querySelector("#compress-page") as HTMLElement;
 const imagePage = document.querySelector("#image-page") as HTMLElement;
 
 function showHomePage() {
+  // Clean up image tools state when navigating away
+  if (activeTool === "image") imgResetState();
   activeTool = null;
   document.body.classList.add("tool-view-hidden");
   document.body.removeAttribute("data-tool");
@@ -253,6 +283,8 @@ function showHomePage() {
 }
 
 function showToolView(tool: "convert" | "compress" | "image") {
+  // Clean up image tools state when switching away
+  if (activeTool === "image" && tool !== "image") imgResetState();
   activeTool = tool;
   document.body.classList.remove("tool-view-hidden");
   document.body.setAttribute("data-tool", tool);
@@ -271,6 +303,7 @@ function showToolView(tool: "convert" | "compress" | "image") {
     }
   } else if (tool === "image") {
     imagePage.classList.remove("hidden");
+    syncImageSettingsUI();
   }
   updateProcessButton();
 }
@@ -710,9 +743,21 @@ function presentQueueGroup(index: number) {
 // Add the file selection handler to both the file input element and to
 // the window as a drag-and-drop event, and to the clipboard paste event.
 ui.fileInput.addEventListener("change", fileSelectHandler);
-window.addEventListener("drop", fileSelectHandler);
+window.addEventListener("drop", (e) => {
+  // On image page, let the image tools handle drops
+  if (activeTool === "image") return;
+  fileSelectHandler(e);
+});
 window.addEventListener("dragover", e => e.preventDefault());
-window.addEventListener("paste", fileSelectHandler);
+window.addEventListener("paste", (e) => {
+  // On image page, redirect paste to image tools
+  if (activeTool === "image" && e.clipboardData?.files.length) {
+    e.preventDefault();
+    imgLoadFiles(Array.from(e.clipboardData.files));
+    return;
+  }
+  fileSelectHandler(e);
+});
 
 // ── Folder input via hidden webkitdirectory input ──
 
@@ -1223,6 +1268,7 @@ if (ui.removeBgToggle) {
     ui.removeBgToggle.classList.toggle("active", removeBg);
     updateBgUI();
     try { localStorage.setItem("convert-remove-bg", String(removeBg)); } catch {}
+    syncImageSettingsUI();
     updateProcessButton();
   });
 }
@@ -1234,6 +1280,7 @@ if (ui.bgModeToggle) {
     ui.bgModeToggle.textContent = bgMode === "local" ? "Mode: Local" : "Mode: remove.bg API";
     updateBgUI();
     try { localStorage.setItem("convert-bg-mode", bgMode); } catch {}
+    syncImageSettingsUI();
   });
 }
 
@@ -1243,6 +1290,7 @@ if (ui.bgCorrectionToggle) {
     bgCorrection = !bgCorrection;
     ui.bgCorrectionToggle.classList.toggle("active", bgCorrection);
     try { localStorage.setItem("convert-bg-correction", String(bgCorrection)); } catch {}
+    syncImageSettingsUI();
   });
 }
 
@@ -1251,6 +1299,7 @@ if (ui.bgApiKeyInput) {
   ui.bgApiKeyInput.addEventListener("input", () => {
     bgApiKey = ui.bgApiKeyInput.value.trim();
     try { localStorage.setItem("convert-bg-api-key", bgApiKey); } catch {}
+    syncImageSettingsUI();
   });
 }
 updateBgUI();
@@ -1264,6 +1313,7 @@ if (ui.rescaleToggle) {
     ui.rescaleToggle.classList.toggle("active", rescaleEnabled);
     if (ui.rescaleOptions) ui.rescaleOptions.classList.toggle("hidden", !rescaleEnabled);
     try { localStorage.setItem("convert-rescale", String(rescaleEnabled)); } catch {}
+    syncImageSettingsUI();
     updateProcessButton();
   });
 }
@@ -1288,6 +1338,7 @@ if (ui.rescaleWidthInput) {
     }
     updateRescalePlaceholders();
     try { localStorage.setItem("convert-rescale-width", String(rescaleWidth)); } catch {}
+    syncImageSettingsUI();
     updateProcessButton();
   });
 }
@@ -1302,6 +1353,7 @@ if (ui.rescaleHeightInput) {
     }
     updateRescalePlaceholders();
     try { localStorage.setItem("convert-rescale-height", String(rescaleHeight)); } catch {}
+    syncImageSettingsUI();
     updateProcessButton();
   });
 }
@@ -1317,6 +1369,7 @@ if (ui.rescaleLockInput) {
     }
     updateRescalePlaceholders();
     try { localStorage.setItem("convert-rescale-lock", String(rescaleLockRatio)); } catch {}
+    syncImageSettingsUI();
   });
 }
 updateRescalePlaceholders();
@@ -1921,14 +1974,21 @@ function redirectToToolWithFiles(tool: "image" | "compress") {
   });
 
   showToolView(tool);
-  selectedFiles = newFiles;
-  allUploadedFiles = newFiles;
-  conversionQueue = [];
-  currentQueueIndex = 0;
-  isSameCategoryBatch = true;
-  renderFilePreviews(newFiles);
-  if (newFiles.length > 0) autoSelectInputFormat(newFiles[0]);
-  updateProcessButton();
+
+  if (tool === "image") {
+    // Use image tools workspace
+    imgResetState();
+    imgLoadFiles(newFiles);
+  } else {
+    selectedFiles = newFiles;
+    allUploadedFiles = newFiles;
+    conversionQueue = [];
+    currentQueueIndex = 0;
+    isSameCategoryBatch = true;
+    renderFilePreviews(newFiles);
+    if (newFiles.length > 0) autoSelectInputFormat(newFiles[0]);
+    updateProcessButton();
+  }
 }
 
 function isVideoFile(name: string): boolean {
@@ -2208,6 +2268,303 @@ ui.createArchiveBtn.addEventListener("click", async () => {
   }
 });
 
+// ── Image Tools: Upload, Preview, Filmstrip, Settings Sync, Before/After ────
+
+/** Sync inline image settings UI with global state (both directions) */
+function syncImageSettingsUI() {
+  // Remove BG
+  if (ui.imgRemoveBgToggle) ui.imgRemoveBgToggle.classList.toggle("active", removeBg);
+  if (ui.imgBgModeToggle) {
+    ui.imgBgModeToggle.classList.toggle("hidden", !removeBg);
+    ui.imgBgModeToggle.textContent = bgMode === "local" ? "Mode: Local" : "Mode: remove.bg API";
+  }
+  if (ui.imgBgCorrectionRow) ui.imgBgCorrectionRow.classList.toggle("hidden", !removeBg || bgMode === "api");
+  if (ui.imgBgCorrectionToggle) ui.imgBgCorrectionToggle.classList.toggle("active", bgCorrection);
+  if (ui.imgBgApiKeyRow) ui.imgBgApiKeyRow.classList.toggle("hidden", !removeBg || bgMode !== "api");
+  if (ui.imgBgApiKeyInput) ui.imgBgApiKeyInput.value = bgApiKey;
+  // Rescale
+  if (ui.imgRescaleToggle) ui.imgRescaleToggle.classList.toggle("active", rescaleEnabled);
+  if (ui.imgRescaleOptions) ui.imgRescaleOptions.classList.toggle("hidden", !rescaleEnabled);
+  if (ui.imgRescaleWidthInput) ui.imgRescaleWidthInput.value = rescaleWidth > 0 ? String(rescaleWidth) : "";
+  if (ui.imgRescaleHeightInput) ui.imgRescaleHeightInput.value = rescaleHeight > 0 ? String(rescaleHeight) : "";
+  if (ui.imgRescaleLockInput) ui.imgRescaleLockInput.checked = rescaleLockRatio;
+}
+
+/** Also sync the modal settings UI from global state */
+function syncModalSettingsUI() {
+  if (ui.removeBgToggle) ui.removeBgToggle.classList.toggle("active", removeBg);
+  if (ui.bgModeToggle) {
+    ui.bgModeToggle.classList.toggle("hidden", !removeBg);
+    ui.bgModeToggle.textContent = bgMode === "local" ? "Mode: Local" : "Mode: remove.bg API";
+  }
+  updateBgUI();
+  if (ui.bgCorrectionToggle) ui.bgCorrectionToggle.classList.toggle("active", bgCorrection);
+  if (ui.bgApiKeyInput) ui.bgApiKeyInput.value = bgApiKey;
+  if (ui.rescaleToggle) ui.rescaleToggle.classList.toggle("active", rescaleEnabled);
+  if (ui.rescaleOptions) ui.rescaleOptions.classList.toggle("hidden", !rescaleEnabled);
+  if (ui.rescaleWidthInput) ui.rescaleWidthInput.value = rescaleWidth > 0 ? String(rescaleWidth) : "";
+  if (ui.rescaleHeightInput) ui.rescaleHeightInput.value = rescaleHeight > 0 ? String(rescaleHeight) : "";
+  if (ui.rescaleLockInput) ui.rescaleLockInput.checked = rescaleLockRatio;
+}
+
+/** Wire inline image settings — each toggle updates global state + syncs both UIs */
+function wireInlineImageSettings() {
+  // Remove BG toggle
+  ui.imgRemoveBgToggle?.addEventListener("click", () => {
+    removeBg = !removeBg;
+    try { localStorage.setItem("convert-remove-bg", String(removeBg)); } catch {}
+    syncImageSettingsUI();
+    syncModalSettingsUI();
+    imgUpdateProcessButton();
+  });
+  // BG mode toggle
+  ui.imgBgModeToggle?.addEventListener("click", () => {
+    bgMode = bgMode === "local" ? "api" : "local";
+    try { localStorage.setItem("convert-bg-mode", bgMode); } catch {}
+    syncImageSettingsUI();
+    syncModalSettingsUI();
+  });
+  // Correction toggle
+  ui.imgBgCorrectionToggle?.addEventListener("click", () => {
+    bgCorrection = !bgCorrection;
+    try { localStorage.setItem("convert-bg-correction", String(bgCorrection)); } catch {}
+    syncImageSettingsUI();
+    syncModalSettingsUI();
+  });
+  // API key input
+  ui.imgBgApiKeyInput?.addEventListener("input", () => {
+    bgApiKey = ui.imgBgApiKeyInput.value.trim();
+    try { localStorage.setItem("convert-bg-api-key", bgApiKey); } catch {}
+    syncModalSettingsUI();
+  });
+  // Rescale toggle
+  ui.imgRescaleToggle?.addEventListener("click", () => {
+    rescaleEnabled = !rescaleEnabled;
+    try { localStorage.setItem("convert-rescale", String(rescaleEnabled)); } catch {}
+    syncImageSettingsUI();
+    syncModalSettingsUI();
+    imgUpdateProcessButton();
+  });
+  // Rescale width
+  ui.imgRescaleWidthInput?.addEventListener("input", () => {
+    rescaleWidth = parseInt(ui.imgRescaleWidthInput.value) || 0;
+    if (rescaleLockRatio && rescaleWidth > 0) {
+      rescaleHeight = 0;
+      ui.imgRescaleHeightInput.value = "";
+      try { localStorage.setItem("convert-rescale-height", "0"); } catch {}
+    }
+    try { localStorage.setItem("convert-rescale-width", String(rescaleWidth)); } catch {}
+    syncModalSettingsUI();
+    imgUpdateProcessButton();
+  });
+  // Rescale height
+  ui.imgRescaleHeightInput?.addEventListener("input", () => {
+    rescaleHeight = parseInt(ui.imgRescaleHeightInput.value) || 0;
+    if (rescaleLockRatio && rescaleHeight > 0) {
+      rescaleWidth = 0;
+      ui.imgRescaleWidthInput.value = "";
+      try { localStorage.setItem("convert-rescale-width", "0"); } catch {}
+    }
+    try { localStorage.setItem("convert-rescale-height", String(rescaleHeight)); } catch {}
+    syncModalSettingsUI();
+    imgUpdateProcessButton();
+  });
+  // Lock ratio
+  ui.imgRescaleLockInput?.addEventListener("change", () => {
+    rescaleLockRatio = ui.imgRescaleLockInput.checked;
+    if (rescaleLockRatio && rescaleWidth > 0 && rescaleHeight > 0) {
+      rescaleHeight = 0;
+      ui.imgRescaleHeightInput.value = "";
+      try { localStorage.setItem("convert-rescale-height", "0"); } catch {}
+    }
+    try { localStorage.setItem("convert-rescale-lock", String(rescaleLockRatio)); } catch {}
+    syncModalSettingsUI();
+  });
+}
+wireInlineImageSettings();
+
+/** Update the process button state for image tools (uses the shared convert button) */
+function imgUpdateProcessButton() {
+  updateProcessButton();
+}
+
+/** Load files into the image tools workspace */
+function imgLoadFiles(files: File[]) {
+  // Filter to image files only
+  const imageFiles = files.filter(f => f.type.startsWith("image/"));
+  if (imageFiles.length === 0) return;
+
+  // Merge with existing, deduplicating
+  const existing = new Set(imgToolFiles.map(f => `${f.name}|${f.size}`));
+  const merged = [...imgToolFiles, ...imageFiles.filter(f => !existing.has(`${f.name}|${f.size}`))];
+  imgToolFiles = merged;
+
+  // Also set selectedFiles for the shared process button
+  selectedFiles = imgToolFiles;
+  allUploadedFiles = imgToolFiles;
+
+  // Show workspace, hide upload zone
+  ui.imgUploadZone?.classList.add("hidden");
+  ui.imgWorkspace?.classList.remove("hidden");
+
+  // Clear any previous processed data for new images
+  imgProcessedData.clear();
+  for (const url of imgProcessedUrls.values()) URL.revokeObjectURL(url);
+  imgProcessedUrls.clear();
+  imgShowAfter = false;
+  ui.imgCompareSwitch?.classList.remove("active");
+  imgUpdateCompareLabels();
+  ui.imgDownloadBtn?.classList.add("disabled");
+
+  imgRenderFilmstrip();
+  imgShowImage(imgToolFiles.length > 1 ? imgToolFiles.length - 1 : 0);
+  syncImageSettingsUI();
+  imgUpdateProcessButton();
+}
+
+/** Show image at index in the large preview */
+function imgShowImage(index: number) {
+  if (index < 0 || index >= imgToolFiles.length) return;
+  imgActiveIndex = index;
+
+  // Create original URL if not already cached
+  if (!imgOriginalUrls.has(index)) {
+    imgOriginalUrls.set(index, URL.createObjectURL(imgToolFiles[index]));
+  }
+
+  // Show original or processed based on toggle
+  if (imgShowAfter && imgProcessedUrls.has(index)) {
+    ui.imgPreview.src = imgProcessedUrls.get(index)!;
+  } else {
+    ui.imgPreview.src = imgOriginalUrls.get(index)!;
+  }
+
+  // Update filmstrip active state
+  const thumbs = ui.imgFilmstripGrid?.querySelectorAll(".img-filmstrip-thumb");
+  thumbs?.forEach((t, i) => t.classList.toggle("active", i === index));
+}
+
+/** Render filmstrip thumbnails */
+function imgRenderFilmstrip() {
+  if (!ui.imgFilmstripGrid) return;
+  ui.imgFilmstripGrid.innerHTML = "";
+  for (let i = 0; i < imgToolFiles.length; i++) {
+    const thumb = document.createElement("div");
+    thumb.className = "img-filmstrip-thumb" + (i === imgActiveIndex ? " active" : "");
+
+    const img = document.createElement("img");
+    if (!imgOriginalUrls.has(i)) {
+      imgOriginalUrls.set(i, URL.createObjectURL(imgToolFiles[i]));
+    }
+    img.src = imgOriginalUrls.get(i)!;
+    img.alt = imgToolFiles[i].name;
+    thumb.appendChild(img);
+
+    thumb.addEventListener("click", () => imgShowImage(i));
+    ui.imgFilmstripGrid.appendChild(thumb);
+  }
+}
+
+/** Update before/after label styling */
+function imgUpdateCompareLabels() {
+  const labels = document.querySelectorAll<HTMLSpanElement>(".img-compare-label");
+  labels.forEach(l => {
+    const side = l.dataset.side;
+    l.classList.toggle("active-side", side === (imgShowAfter ? "after" : "before"));
+  });
+}
+
+/** Reset image tools state */
+function imgResetState() {
+  for (const url of imgOriginalUrls.values()) URL.revokeObjectURL(url);
+  for (const url of imgProcessedUrls.values()) URL.revokeObjectURL(url);
+  imgToolFiles = [];
+  imgActiveIndex = 0;
+  imgProcessedData.clear();
+  imgOriginalUrls.clear();
+  imgProcessedUrls.clear();
+  imgShowAfter = false;
+  if (ui.imgUploadZone) ui.imgUploadZone.classList.remove("hidden");
+  if (ui.imgWorkspace) ui.imgWorkspace.classList.add("hidden");
+  if (ui.imgCompareSwitch) ui.imgCompareSwitch.classList.remove("active");
+  if (ui.imgDownloadBtn) ui.imgDownloadBtn.classList.add("disabled");
+  if (ui.imgFilmstripGrid) ui.imgFilmstripGrid.innerHTML = "";
+  if (ui.imgPreview) ui.imgPreview.src = "";
+  imgUpdateCompareLabels();
+}
+
+// Upload zone click → trigger file input
+ui.imgUploadZone?.addEventListener("click", (e) => {
+  if ((e.target as HTMLElement).id === "img-browse-btn") return;
+  ui.imgFileInput?.click();
+});
+document.getElementById("img-browse-btn")?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  ui.imgFileInput?.click();
+});
+
+// Upload zone drag-and-drop
+ui.imgUploadZone?.addEventListener("dragover", (e) => e.preventDefault());
+ui.imgUploadZone?.addEventListener("drop", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  if (e.dataTransfer?.files) imgLoadFiles(Array.from(e.dataTransfer.files));
+});
+
+// Also allow dropping on the workspace (to add more)
+ui.imgWorkspace?.addEventListener("dragover", (e) => e.preventDefault());
+ui.imgWorkspace?.addEventListener("drop", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  if (e.dataTransfer?.files) imgLoadFiles(Array.from(e.dataTransfer.files));
+});
+
+// File input change handler
+ui.imgFileInput?.addEventListener("change", () => {
+  const files = ui.imgFileInput.files;
+  if (files && files.length > 0) {
+    imgLoadFiles(Array.from(files));
+    ui.imgFileInput.value = "";
+  }
+});
+
+// Add more button
+ui.imgAddMore?.addEventListener("click", () => ui.imgFileInput?.click());
+
+// Before/after toggle
+ui.imgCompareSwitch?.addEventListener("click", () => {
+  // Only toggle if we have processed data for the current image
+  if (!imgProcessedUrls.has(imgActiveIndex)) return;
+  imgShowAfter = !imgShowAfter;
+  ui.imgCompareSwitch.classList.toggle("active", imgShowAfter);
+  imgUpdateCompareLabels();
+  imgShowImage(imgActiveIndex);
+});
+
+// Download button
+ui.imgDownloadBtn?.addEventListener("click", () => {
+  if (imgProcessedData.size === 0) return;
+  if (imgProcessedData.size === 1) {
+    // Single image: download it
+    const data = imgProcessedData.values().next().value as FileData;
+    const blob = new Blob([data.bytes as BlobPart], { type: "application/octet-stream" });
+    const url = URL.createObjectURL(blob);
+    triggerDownload(url, data.name);
+    URL.revokeObjectURL(url);
+  } else {
+    // Multiple images: download all
+    for (const [, data] of imgProcessedData) {
+      const blob = new Blob([data.bytes as BlobPart], { type: "application/octet-stream" });
+      const url = URL.createObjectURL(blob);
+      triggerDownload(url, data.name);
+      URL.revokeObjectURL(url);
+    }
+  }
+});
+
+// Initialize compare labels
+imgUpdateCompareLabels();
+
 ui.convertButton.onclick = async function () {
 
   const inputFiles = selectedFiles;
@@ -2230,18 +2587,49 @@ ui.convertButton.onclick = async function () {
 
       fileData = await applyToolProcessing(fileData);
 
-      for (const f of fileData) {
-        downloadFile(f.bytes, f.name);
-      }
+      // Image tools: store processed data for before/after preview
+      if (activeTool === "image" && imgToolFiles.length > 0) {
+        imgProcessedData.clear();
+        for (const url of imgProcessedUrls.values()) URL.revokeObjectURL(url);
+        imgProcessedUrls.clear();
 
-      const totalSize = fileData.reduce((s, f) => s + f.bytes.length, 0);
-      const compressionHtml = getVideoCompressionHtml(inputFiles, fileData);
-      window.showPopup(
-        `<h2>Processed ${fileData.length} file${fileData.length !== 1 ? "s" : ""}!</h2>` +
-        `<p>Total size: ${formatFileSize(totalSize)}</p>` +
-        compressionHtml +
-        `<button onclick="window.hidePopup()">OK</button>`
-      );
+        for (let i = 0; i < fileData.length; i++) {
+          const f = fileData[i];
+          imgProcessedData.set(i, f);
+          const blob = new Blob([f.bytes as BlobPart], { type: "application/octet-stream" });
+          imgProcessedUrls.set(i, URL.createObjectURL(blob));
+        }
+
+        // Auto-switch to "After" view
+        imgShowAfter = true;
+        ui.imgCompareSwitch?.classList.add("active");
+        imgUpdateCompareLabels();
+        imgShowImage(imgActiveIndex);
+
+        // Enable download button
+        ui.imgDownloadBtn?.classList.remove("disabled");
+
+        const totalSize = fileData.reduce((s, f) => s + f.bytes.length, 0);
+        window.showPopup(
+          `<h2>Processed ${fileData.length} image${fileData.length !== 1 ? "s" : ""}!</h2>` +
+          `<p>Total size: ${formatFileSize(totalSize)}</p>` +
+          `<p>Use the Before/After toggle to compare results.</p>` +
+          `<button onclick="window.hidePopup()">OK</button>`
+        );
+      } else {
+        for (const f of fileData) {
+          downloadFile(f.bytes, f.name);
+        }
+
+        const totalSize = fileData.reduce((s, f) => s + f.bytes.length, 0);
+        const compressionHtml = getVideoCompressionHtml(inputFiles, fileData);
+        window.showPopup(
+          `<h2>Processed ${fileData.length} file${fileData.length !== 1 ? "s" : ""}!</h2>` +
+          `<p>Total size: ${formatFileSize(totalSize)}</p>` +
+          compressionHtml +
+          `<button onclick="window.hidePopup()">OK</button>`
+        );
+      }
     } catch (e) {
       window.hidePopup();
       alert("Error during processing:\n" + e);
