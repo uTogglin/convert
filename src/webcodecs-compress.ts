@@ -26,6 +26,16 @@ export function isWebCodecsAvailable(): boolean {
   return typeof VideoEncoder !== "undefined" && typeof VideoDecoder !== "undefined";
 }
 
+interface ConversionOptions {
+  videoCodec: string;
+  videoBitrate: number;
+  audioCodec: string;
+  hasAudio: boolean;
+  hwAccel: "prefer-hardware" | "prefer-software";
+  audioBitrate?: number;
+  frameRate?: number;
+}
+
 export async function compressVideoWebCodecs(
   file: FileData,
   targetBytes: number,
@@ -41,24 +51,17 @@ export async function compressVideoWebCodecs(
   const isWebM = ext === "webm";
   const isMkv = ext === "mkv";
 
-  // Determine output format matching the input container
-  const outputFormat = isWebM
-    ? new WebMOutputFormat()
-    : isMkv
-      ? new MkvOutputFormat()
-      : new Mp4OutputFormat();
+  function makeOutput(forWebM = isWebM, forMkv = isMkv) {
+    const fmt = forWebM ? new WebMOutputFormat() : forMkv ? new MkvOutputFormat() : new Mp4OutputFormat();
+    return new Output({ format: fmt, target: new BufferTarget() });
+  }
 
-  const input = new Input({
-    formats: ALL_FORMATS,
-    source: new BufferSource(file.bytes),
-  });
-
-  const output = new Output({
-    format: outputFormat,
-    target: new BufferTarget(),
-  });
+  function makeInput() {
+    return new Input({ formats: ALL_FORMATS, source: new BufferSource(file.bytes) });
+  }
 
   try {
+    const input = makeInput();
     const duration = await input.computeDuration();
     if (!duration || duration <= 0) return null;
 
@@ -74,7 +77,7 @@ export async function compressVideoWebCodecs(
       ? "prefer-software"
       : "prefer-hardware";
 
-    // Bitrate calculation
+    // ── Bitrate calculation ──
     let videoBitrate: number;
     if (targetBytes > 0) {
       const safeTarget = targetBytes * 0.97;
@@ -87,27 +90,16 @@ export async function compressVideoWebCodecs(
       const originalVideoBitrate = ((file.bytes.length - audioBytesEstimate) * 8) / duration;
       const compressionRatio = targetVideoBitrate / originalVideoBitrate;
 
-      // Adaptive efficiency: hardware encoders are progressively worse at
-      // aggressive compression because they're less efficient than the software
-      // encoder that made the original file. Scale the requested bitrate down
-      // based on how hard we're asking the encoder to compress.
-      //   ratio 0.0 → factor 0.40  (very aggressive, massive undershoot needed)
-      //   ratio 0.5 → factor 0.78
-      //   ratio 0.7 → factor 0.90  (light compression, close to 1:1)
-      //   ratio 1.0 → factor 0.92  (capped)
+      // Adaptive efficiency curve based on compression difficulty
       const efficiency = Math.min(0.40 + compressionRatio * 0.75, 0.92);
 
-      // For very aggressive compression (>60% reduction), hardware encoders
-      // can't hit the target — skip straight to software encoder
+      // Skip hardware for very aggressive compression
       if (compressionRatio < 0.4 && hwAccel === "prefer-hardware") {
         hwAccel = "prefer-software";
       }
 
       videoBitrate = Math.max(Math.floor(targetVideoBitrate * efficiency), 50000);
     } else if (crf !== undefined) {
-      // Map CRF to approximate bitrate based on input file stats
-      const videoTrack = await input.getPrimaryVideoTrack();
-      if (!videoTrack) return null;
       const inputBitrate = (file.bytes.length * 8) / duration;
       const crfScale = Math.pow(2, (23 - crf) / 6);
       videoBitrate = Math.max(Math.floor(inputBitrate * crfScale * 0.5), 50000);
@@ -115,68 +107,150 @@ export async function compressVideoWebCodecs(
       return null;
     }
 
-    const result = await attemptConversion(
-      input, output, videoCodec, videoBitrate, audioCodec, hasAudio, hwAccel
-    );
+    // ── First attempt ──
+    const result = await attemptConversion(makeInput(), makeOutput(), {
+      videoCodec, videoBitrate, audioCodec, hasAudio, hwAccel,
+    });
 
     if (!result) return null;
 
-    // If larger than original: in re-encode mode keep original, in target-size mode continue to retry
-    if (result.byteLength >= file.bytes.length) {
-      if (targetBytes <= 0) return file;
+    // Re-encode mode: if larger than original, keep original
+    if (result.byteLength >= file.bytes.length && targetBytes <= 0) return file;
+
+    // Success: under target
+    if (targetBytes > 0 && result.byteLength <= targetBytes) {
+      return { name: file.name, bytes: new Uint8Array(result) };
     }
 
-    // If target size mode and overshot, use measured data to calibrate retries
-    if (targetBytes > 0 && result.byteLength > targetBytes) {
-      // Measured: at videoBitrate, encoder produced result.byteLength
-      // Linear correction: scale bitrate proportionally to hit target
-      let lastBitrate = videoBitrate;
-      let lastSize = result.byteLength;
-
-      // Retry 1: same encoder, calibrated from measured output
-      {
-        updatePopupHeading("Retrying with calibrated bitrate...");
-        resetProgressBar();
-
-        const correctedBitrate = Math.max(Math.floor(lastBitrate * (targetBytes / lastSize) * 0.90), 50000);
-
-        const retryResult = await attemptConversion(
-          new Input({ formats: ALL_FORMATS, source: new BufferSource(file.bytes) }),
-          new Output({ format: isWebM ? new WebMOutputFormat() : isMkv ? new MkvOutputFormat() : new Mp4OutputFormat(), target: new BufferTarget() }),
-          videoCodec, correctedBitrate, audioCodec, hasAudio, hwAccel
-        );
-
-        if (retryResult && retryResult.byteLength <= targetBytes) {
-          return { name: file.name, bytes: new Uint8Array(retryResult) };
-        }
-        if (retryResult) {
-          lastBitrate = correctedBitrate;
-          lastSize = retryResult.byteLength;
-        }
-      }
-
-      // Retry 2: software encoder, calibrated from the last measured output
-      if (hwAccel !== "prefer-software") {
-        updatePopupHeading("Trying software encoder...");
-        resetProgressBar();
-
-        const swBitrate = Math.max(Math.floor(lastBitrate * (targetBytes / lastSize) * 0.90), 50000);
-
-        const swResult = await attemptConversion(
-          new Input({ formats: ALL_FORMATS, source: new BufferSource(file.bytes) }),
-          new Output({ format: isWebM ? new WebMOutputFormat() : isMkv ? new MkvOutputFormat() : new Mp4OutputFormat(), target: new BufferTarget() }),
-          videoCodec, swBitrate, audioCodec, hasAudio, "prefer-software"
-        );
-
-        if (swResult && swResult.byteLength <= targetBytes) {
-          return { name: file.name, bytes: new Uint8Array(swResult) };
-        }
-      }
-
-      return null; // Still over target, fall back to ffmpeg
+    // No target mode and result is smaller than original
+    if (targetBytes <= 0) {
+      return { name: file.name, bytes: new Uint8Array(result) };
     }
 
-    return { name: file.name, bytes: new Uint8Array(result) };
+    // ── Overshot target — enter escalating strategy loop ──
+    let lastBitrate = videoBitrate;
+    let lastSize = result.byteLength;
+    let bestResult: ArrayBuffer | null = result;
+    let bestSize = result.byteLength;
+    let bestName = file.name;
+
+    // Helper: calibrate bitrate from last measured result
+    const calibrate = (base: number, actual: number) =>
+      Math.max(Math.floor(base * (targetBytes / actual) * 0.90), 50000);
+
+    // Helper: update tracking after an attempt
+    const track = (res: ArrayBuffer | null, usedBitrate: number, name: string) => {
+      if (!res) return;
+      if (res.byteLength <= targetBytes) return; // handled by caller
+      if (res.byteLength < bestSize) {
+        bestResult = res;
+        bestSize = res.byteLength;
+        bestName = name;
+      }
+      lastBitrate = usedBitrate;
+      lastSize = res.byteLength;
+    };
+
+    // Strategy 1: Calibrated bitrate, same encoder
+    {
+      updatePopupHeading("Calibrating bitrate...");
+      resetProgressBar();
+      const br = calibrate(lastBitrate, lastSize);
+      const res = await attemptConversion(makeInput(), makeOutput(), {
+        videoCodec, videoBitrate: br, audioCodec, hasAudio, hwAccel,
+      });
+      if (res && res.byteLength <= targetBytes) return { name: file.name, bytes: new Uint8Array(res) };
+      track(res, br, file.name);
+    }
+
+    // Strategy 2: Software encoder + lower audio (64kbps)
+    {
+      updatePopupHeading("Trying lower audio bitrate...");
+      resetProgressBar();
+      const br = calibrate(lastBitrate, lastSize);
+      const res = await attemptConversion(makeInput(), makeOutput(), {
+        videoCodec, videoBitrate: br, audioCodec, hasAudio,
+        hwAccel: "prefer-software", audioBitrate: 64000,
+      });
+      if (res && res.byteLength <= targetBytes) return { name: file.name, bytes: new Uint8Array(res) };
+      track(res, br, file.name);
+    }
+
+    // Strategy 3: VP9 codec (much more efficient at low bitrates)
+    if (videoCodec !== "vp9") {
+      updatePopupHeading("Trying VP9 codec...");
+      resetProgressBar();
+      const br = calibrate(lastBitrate, lastSize);
+      const vp9Name = file.name.replace(/\.[^.]+$/, ".webm");
+      const res = await attemptConversion(makeInput(), makeOutput(true, false), {
+        videoCodec: "vp9", videoBitrate: br, audioCodec: "opus", hasAudio,
+        hwAccel: "prefer-software", audioBitrate: 64000,
+      });
+      if (res && res.byteLength <= targetBytes) return { name: vp9Name, bytes: new Uint8Array(res) };
+      track(res, br, vp9Name);
+    }
+
+    // Strategy 4: VP9 + slightly reduced framerate (subtle 2fps drop)
+    {
+      updatePopupHeading("Trying VP9 with lower framerate...");
+      resetProgressBar();
+      const br = calibrate(lastBitrate, lastSize);
+      const useVp9 = videoCodec !== "vp9";
+      const stratName = useVp9 ? file.name.replace(/\.[^.]+$/, ".webm") : file.name;
+      const res = await attemptConversion(makeInput(), useVp9 ? makeOutput(true, false) : makeOutput(), {
+        videoCodec: useVp9 ? "vp9" : videoCodec,
+        videoBitrate: br,
+        audioCodec: useVp9 ? "opus" : audioCodec,
+        hasAudio,
+        hwAccel: "prefer-software", audioBitrate: 64000,
+        frameRate: 28,
+      });
+      if (res && res.byteLength <= targetBytes) return { name: stratName, bytes: new Uint8Array(res) };
+      track(res, br, stratName);
+    }
+
+    // Strategy 5: Re-compress the best result (already close to target — much easier to shrink)
+    if (bestResult && bestSize < targetBytes * 1.5) {
+      updatePopupHeading("Re-compressing closest result...");
+      resetProgressBar();
+
+      const bestBytes = new Uint8Array(bestResult);
+      const bestExt = (bestName.split(".").pop() ?? "").toLowerCase();
+      const reIsWebM = bestExt === "webm";
+      const reIsMkv = bestExt === "mkv";
+
+      const reInput = new Input({ formats: ALL_FORMATS, source: new BufferSource(bestBytes) });
+      const reDuration = await reInput.computeDuration();
+
+      if (reDuration && reDuration > 0) {
+        const reAudioTrack = await reInput.getPrimaryAudioTrack();
+        const reHasAudio = reAudioTrack !== null;
+        const reVideoCodec = reIsWebM ? "vp9" : videoCodec;
+        const reAudioCodec = reIsWebM ? "opus" : audioCodec;
+
+        // Calculate bitrate from the best result's actual size
+        const reAudioBits = reHasAudio ? 64000 : 0;
+        const reTotalBitrate = (targetBytes * 0.95 * 8) / reDuration;
+        const reBitrate = Math.max(Math.floor((reTotalBitrate - reAudioBits) * 0.90), 50000);
+
+        const reOutput = new Output({
+          format: reIsWebM ? new WebMOutputFormat() : reIsMkv ? new MkvOutputFormat() : new Mp4OutputFormat(),
+          target: new BufferTarget(),
+        });
+
+        const res = await attemptConversion(reInput, reOutput, {
+          videoCodec: reVideoCodec, videoBitrate: reBitrate,
+          audioCodec: reAudioCodec, hasAudio: reHasAudio,
+          hwAccel: "prefer-software", audioBitrate: 64000,
+        });
+
+        if (res && res.byteLength <= targetBytes) {
+          return { name: bestName, bytes: new Uint8Array(res) };
+        }
+      }
+    }
+
+    return null; // All strategies exhausted, fall back to ffmpeg
   } catch (e) {
     console.warn(`WebCodecs compression failed for "${file.name}":`, e);
     return null;
@@ -186,23 +260,23 @@ export async function compressVideoWebCodecs(
 async function attemptConversion(
   input: Input,
   output: Output,
-  videoCodec: string,
-  videoBitrate: number,
-  audioCodec: string,
-  hasAudio: boolean,
-  hwAccel: "prefer-hardware" | "prefer-software"
+  opts: ConversionOptions
 ): Promise<ArrayBuffer | null> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const videoConfig: any = {
+    codec: opts.videoCodec as "avc" | "hevc" | "vp9",
+    bitrate: opts.videoBitrate,
+    hardwareAcceleration: opts.hwAccel,
+    forceTranscode: true,
+  };
+  if (opts.frameRate) videoConfig.frameRate = opts.frameRate;
+
   const conversion = await Conversion.init({
     input,
     output,
-    video: {
-      codec: videoCodec as "avc" | "hevc" | "vp9",
-      bitrate: videoBitrate,
-      hardwareAcceleration: hwAccel,
-      forceTranscode: true,
-    },
-    audio: hasAudio
-      ? { codec: audioCodec as "aac" | "opus", bitrate: 96000 }
+    video: videoConfig,
+    audio: opts.hasAudio
+      ? { codec: opts.audioCodec as "aac" | "opus", bitrate: opts.audioBitrate ?? 96000 }
       : { discard: true },
   });
 
