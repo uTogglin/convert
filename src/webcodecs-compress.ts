@@ -92,8 +92,9 @@ export async function compressVideoWebCodecs(
 
     // Probe original framerate for subtle fps drop in later strategies
     const videoTrack = await input.getPrimaryVideoTrack();
-    const originalFps = videoTrack?.frameRate ?? 0;
-    const reducedFps = originalFps > 4 ? originalFps - 2 : 0; // e.g. 60→58, 30→28
+    const packetStats = videoTrack ? await videoTrack.computePacketStats() : null;
+    const originalFps = packetStats?.averagePacketRate ?? 0;
+    const reducedFps = originalFps > 4 ? Math.round(originalFps) - 2 : 0; // e.g. 60→58, 30→28
 
     // Video codec selection
     const videoCodec = isWebM ? "vp9" : codec === "h265" ? "hevc" : "avc";
