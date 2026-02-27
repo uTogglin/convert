@@ -105,52 +105,46 @@ export async function compressVideoWebCodecs(
     // If larger than original, keep original
     if (result.byteLength >= file.bytes.length) return file;
 
-    // If target size mode and overshot, retry at lower bitrate
+    // If target size mode and overshot, use measured data to calibrate retries
     if (targetBytes > 0 && result.byteLength > targetBytes) {
-      updatePopupHeading("Retrying with lower bitrate...");
-      resetProgressBar();
+      // Measured: at videoBitrate, encoder produced result.byteLength
+      // Linear correction: scale bitrate proportionally to hit target
+      let lastBitrate = videoBitrate;
+      let lastSize = result.byteLength;
 
-      const retryRatio = (targetBytes / result.byteLength) * 0.90;
-      const retryBitrate = Math.max(Math.floor(videoBitrate * retryRatio), 50000);
+      // Retry 1: same encoder, calibrated from measured output
+      {
+        updatePopupHeading("Retrying with calibrated bitrate...");
+        resetProgressBar();
 
-      const retryOutput = new Output({
-        format: isWebM ? new WebMOutputFormat() : isMkv ? new MkvOutputFormat() : new Mp4OutputFormat(),
-        target: new BufferTarget(),
-      });
-      const retryInput = new Input({
-        formats: ALL_FORMATS,
-        source: new BufferSource(file.bytes),
-      });
+        const correctedBitrate = Math.max(Math.floor(lastBitrate * (targetBytes / lastSize) * 0.95), 50000);
 
-      const retryResult = await attemptConversion(
-        retryInput, retryOutput, videoCodec, retryBitrate, audioCodec, hasAudio, hwAccel, "constant"
-      );
+        const retryResult = await attemptConversion(
+          new Input({ formats: ALL_FORMATS, source: new BufferSource(file.bytes) }),
+          new Output({ format: isWebM ? new WebMOutputFormat() : isMkv ? new MkvOutputFormat() : new Mp4OutputFormat(), target: new BufferTarget() }),
+          videoCodec, correctedBitrate, audioCodec, hasAudio, hwAccel, "constant"
+        );
 
-      if (retryResult && retryResult.byteLength <= targetBytes) {
-        return { name: file.name, bytes: new Uint8Array(retryResult) };
+        if (retryResult && retryResult.byteLength <= targetBytes) {
+          return { name: file.name, bytes: new Uint8Array(retryResult) };
+        }
+        if (retryResult) {
+          lastBitrate = correctedBitrate;
+          lastSize = retryResult.byteLength;
+        }
       }
 
-      // Hardware encoder couldn't hit target — try software encoder for tighter bitrate control
+      // Retry 2: software encoder, calibrated from the last measured output
       if (hwAccel !== "prefer-software") {
         updatePopupHeading("Trying software encoder...");
         resetProgressBar();
 
-        const swRatio = retryResult
-          ? (targetBytes / retryResult.byteLength) * 0.85
-          : 0.70;
-        const swBitrate = Math.max(Math.floor(videoBitrate * swRatio), 50000);
-
-        const swOutput = new Output({
-          format: isWebM ? new WebMOutputFormat() : isMkv ? new MkvOutputFormat() : new Mp4OutputFormat(),
-          target: new BufferTarget(),
-        });
-        const swInput = new Input({
-          formats: ALL_FORMATS,
-          source: new BufferSource(file.bytes),
-        });
+        const swBitrate = Math.max(Math.floor(lastBitrate * (targetBytes / lastSize) * 0.95), 50000);
 
         const swResult = await attemptConversion(
-          swInput, swOutput, videoCodec, swBitrate, audioCodec, hasAudio, "prefer-software", "constant"
+          new Input({ formats: ALL_FORMATS, source: new BufferSource(file.bytes) }),
+          new Output({ format: isWebM ? new WebMOutputFormat() : isMkv ? new MkvOutputFormat() : new Mp4OutputFormat(), target: new BufferTarget() }),
+          videoCodec, swBitrate, audioCodec, hasAudio, "prefer-software", "constant"
         );
 
         if (swResult && swResult.byteLength <= targetBytes) {
