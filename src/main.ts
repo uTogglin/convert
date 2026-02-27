@@ -811,14 +811,14 @@ async function buildOptionList () {
         const previous = targetParent?.getElementsByClassName("selected")?.[0];
         if (previous) previous.className = "";
         event.target.className = "selected";
-        const allSelected = document.getElementsByClassName("selected");
+        const inputSelected = ui.inputList.querySelector(".selected");
         // In same-category batch mode with mixed exact formats, only output selection is needed
         const outputSelected = ui.outputList.querySelector(".selected");
         if (isSameCategoryBatch && allUploadedFiles.length > 1 && outputSelected) {
           ui.convertButton.className = "";
           ui.convertButton.textContent = "Convert";
           ui.convertButton.removeAttribute("data-process-mode");
-        } else if (allSelected.length === 2) {
+        } else if (inputSelected && outputSelected) {
           ui.convertButton.className = "";
           ui.convertButton.textContent = "Convert";
           ui.convertButton.removeAttribute("data-process-mode");
