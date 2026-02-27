@@ -70,9 +70,9 @@ export async function compressVideoWebCodecs(
     const audioCodec = isWebM ? "opus" : "aac";
 
     // Speed preset → hardware acceleration preference
-    const hwAccel = encoderSpeed === "quality"
-      ? "prefer-software" as const
-      : "prefer-hardware" as const;
+    let hwAccel: "prefer-hardware" | "prefer-software" = encoderSpeed === "quality"
+      ? "prefer-software"
+      : "prefer-hardware";
 
     // Bitrate calculation
     let videoBitrate: number;
@@ -80,8 +80,30 @@ export async function compressVideoWebCodecs(
       const safeTarget = targetBytes * 0.97;
       const audioBits = hasAudio ? 96000 : 0;
       const totalBitrate = (safeTarget * 8) / duration;
-      // Conservative factor: hardware encoders tend to overshoot target bitrate
-      videoBitrate = Math.max(Math.floor((totalBitrate - audioBits) * 0.85), 50000);
+      const targetVideoBitrate = totalBitrate - audioBits;
+
+      // Estimate original video bitrate to gauge compression difficulty
+      const audioBytesEstimate = hasAudio ? (96000 / 8) * duration : 0;
+      const originalVideoBitrate = ((file.bytes.length - audioBytesEstimate) * 8) / duration;
+      const compressionRatio = targetVideoBitrate / originalVideoBitrate;
+
+      // Adaptive efficiency: hardware encoders are progressively worse at
+      // aggressive compression because they're less efficient than the software
+      // encoder that made the original file. Scale the requested bitrate down
+      // based on how hard we're asking the encoder to compress.
+      //   ratio 0.0 → factor 0.40  (very aggressive, massive undershoot needed)
+      //   ratio 0.5 → factor 0.78
+      //   ratio 0.7 → factor 0.90  (light compression, close to 1:1)
+      //   ratio 1.0 → factor 0.92  (capped)
+      const efficiency = Math.min(0.40 + compressionRatio * 0.75, 0.92);
+
+      // For very aggressive compression (>60% reduction), hardware encoders
+      // can't hit the target — skip straight to software encoder
+      if (compressionRatio < 0.4 && hwAccel === "prefer-hardware") {
+        hwAccel = "prefer-software";
+      }
+
+      videoBitrate = Math.max(Math.floor(targetVideoBitrate * efficiency), 50000);
     } else if (crf !== undefined) {
       // Map CRF to approximate bitrate based on input file stats
       const videoTrack = await input.getPrimaryVideoTrack();
