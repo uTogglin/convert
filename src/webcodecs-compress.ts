@@ -384,3 +384,63 @@ export async function compressVideoVP9(
     return null;
   }
 }
+
+/**
+ * Fast video-to-video re-encode via WebCodecs (hardware-accelerated).
+ * Re-encodes at the original bitrate — no quality loss, just a container/codec change.
+ */
+export async function reencodeVideo(
+  file: FileData,
+  targetFormat: "webm" | "mp4" | "mkv"
+): Promise<FileData | null> {
+  if (!isWebCodecsAvailable()) return null;
+
+  const ext = (file.name.split(".").pop() ?? "").toLowerCase();
+  if (!SUPPORTED_EXTS.has(ext)) return null;
+
+  // Pick codecs based on target format
+  const videoCodec = targetFormat === "webm" ? "vp9" : "avc";
+  const audioCodec = targetFormat === "webm" ? "opus" : "aac";
+
+  if (!await isCodecEncodingSupported(videoCodec as "vp9" | "avc")) return null;
+  if (!await canEncodeAudio(audioCodec as "aac" | "opus")) return null;
+
+  try {
+    const input = new Input({ formats: ALL_FORMATS, source: new BufferSource(file.bytes) });
+    const duration = await input.computeDuration();
+    if (!duration || duration <= 0) return null;
+
+    const hasAudio = (await input.getPrimaryAudioTrack()) !== null;
+    if (hasAudio && !await canEncodeAudio(audioCodec as "aac" | "opus")) return null;
+
+    // Match original bitrate (no quality loss)
+    const audioBitsEstimate = hasAudio ? (128000 / 8) * duration : 0;
+    const originalVideoBitrate = ((file.bytes.length - audioBitsEstimate) * 8) / duration;
+    const videoBitrate = Math.max(Math.floor(originalVideoBitrate), 100000);
+
+    const outputFormat = targetFormat === "webm" ? new WebMOutputFormat()
+                       : targetFormat === "mkv" ? new MkvOutputFormat()
+                       : new Mp4OutputFormat();
+    const output = new Output({ format: outputFormat, target: new BufferTarget() });
+
+    const outputExt = targetFormat === "webm" ? "webm" : targetFormat === "mkv" ? "mkv" : "mp4";
+    const outputName = file.name.replace(/\.[^.]+$/, "." + outputExt);
+
+    updatePopupHeading("Re-encoding video...");
+    resetProgressBar();
+
+    const res = await attemptConversion(
+      input, output,
+      {
+        videoCodec, videoBitrate, audioCodec, hasAudio,
+        hwAccel: "prefer-hardware", audioBitrate: 128000,
+      },
+    );
+
+    if (!res) return null;
+    return { name: outputName, bytes: new Uint8Array(res) };
+  } catch (e) {
+    console.warn(`WebCodecs re-encode failed for "${file.name}":`, e);
+    return null;
+  }
+}

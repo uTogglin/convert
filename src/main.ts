@@ -1386,6 +1386,26 @@ window.tryConvertByTraversing = async function (
   ui.popupBox.style.display = "block";
   ui.popupBackground.style.display = "block";
 
+  // ── Fast path: video → video via WebCodecs (hardware-accelerated) ──
+  const reencodeTargetMap: Record<string, "webm" | "mp4" | "mkv"> = {
+    webm: "webm", mp4: "mp4", m4v: "mp4", mov: "mp4", mkv: "mkv", matroska: "mkv",
+  };
+  const reencodeTarget = reencodeTargetMap[to.format.format] ?? reencodeTargetMap[to.format.internal];
+  if (from.format.mime?.startsWith("video/") && reencodeTarget) {
+    try {
+      const { reencodeVideo } = await import("./webcodecs-compress.js");
+      const results: FileData[] = [];
+      let allOk = true;
+      for (const f of files) {
+        const r = await reencodeVideo(f, reencodeTarget);
+        if (r) { results.push(r); } else { allOk = false; break; }
+      }
+      if (allOk && results.length > 0) {
+        return { files: results, path: [from, to] };
+      }
+    } catch { /* fall through to graph search */ }
+  }
+
   // Live listener: update popup with the path currently being explored
   const searchListener = (state: string, path: ConvertPathNode[]) => {
     const pathEl = document.getElementById("convert-search-path");
