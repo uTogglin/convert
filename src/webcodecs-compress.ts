@@ -2,7 +2,7 @@ import type { FileData } from "./FormatHandler.ts";
 import {
   Input, Output, Conversion, BufferSource, BufferTarget,
   Mp4OutputFormat, WebMOutputFormat, MkvOutputFormat,
-  ALL_FORMATS,
+  ALL_FORMATS, canEncodeAudio,
 } from "mediabunny";
 
 const SUPPORTED_EXTS = new Set(["mp4", "m4v", "mov", "webm", "mkv", "ts"]);
@@ -106,6 +106,10 @@ export async function compressVideoWebCodecs(
     // Video codec selection
     const videoCodec = effectiveWebM ? "vp9" : codec === "h265" ? "hevc" : "avc";
     const audioCodec = effectiveWebM ? "opus" : "aac";
+
+    // Skip WebCodecs entirely if the browser can't encode the needed audio codec
+    if (hasAudio && !await canEncodeAudio(audioCodec as "aac" | "opus")) return null;
+
     // Speed preset → hardware acceleration preference
     let hwAccel: "prefer-hardware" | "prefer-software" = encoderSpeed === "quality"
       ? "prefer-software"
@@ -337,6 +341,7 @@ export async function compressVideoVP9(
     if (!duration || duration <= 0) return null;
 
     const hasAudio = (await input.getPrimaryAudioTrack()) !== null;
+    if (hasAudio && !await canEncodeAudio("opus")) return null;
     const audioBits = hasAudio ? 64000 : 0;
     const totalBitrate = (targetBytes * 0.95 * 8) / duration;
     let bitrate = Math.max(Math.floor((totalBitrate - audioBits) * 0.90), 50000);
