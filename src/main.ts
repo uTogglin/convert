@@ -242,7 +242,8 @@ const ui = {
   homePage: document.querySelector("#home-page") as HTMLElement,
   backToHome: document.querySelector("#back-to-home") as HTMLButtonElement,
   // Image tools inline UI
-  imgUploadZone: document.querySelector("#img-upload-zone") as HTMLDivElement,
+  imgCanvas: document.querySelector("#img-canvas") as HTMLDivElement,
+  imgDropPrompt: document.querySelector("#img-drop-prompt") as HTMLDivElement,
   imgWorkspace: document.querySelector("#img-workspace") as HTMLDivElement,
   imgPreview: document.querySelector("#img-preview") as HTMLImageElement,
   imgFilmstripGrid: document.querySelector("#img-filmstrip-grid") as HTMLDivElement,
@@ -2403,8 +2404,10 @@ function imgLoadFiles(files: File[]) {
   selectedFiles = imgToolFiles;
   allUploadedFiles = imgToolFiles;
 
-  // Show workspace, hide upload zone
-  ui.imgUploadZone?.classList.add("hidden");
+  // Switch canvas to preview mode, show workspace
+  ui.imgCanvas?.classList.add("has-image");
+  ui.imgDropPrompt?.classList.add("hidden");
+  ui.imgPreview?.classList.remove("hidden");
   ui.imgWorkspace?.classList.remove("hidden");
 
   // Clear any previous processed data for new images
@@ -2484,28 +2487,25 @@ function imgResetState() {
   imgOriginalUrls.clear();
   imgProcessedUrls.clear();
   imgShowAfter = false;
-  if (ui.imgUploadZone) ui.imgUploadZone.classList.remove("hidden");
+  // Reset canvas back to drop-prompt
+  if (ui.imgCanvas) ui.imgCanvas.classList.remove("has-image");
+  if (ui.imgDropPrompt) ui.imgDropPrompt.classList.remove("hidden");
+  if (ui.imgPreview) { ui.imgPreview.classList.add("hidden"); ui.imgPreview.src = ""; }
   if (ui.imgWorkspace) ui.imgWorkspace.classList.add("hidden");
   if (ui.imgCompareSwitch) ui.imgCompareSwitch.classList.remove("active");
   if (ui.imgDownloadBtn) ui.imgDownloadBtn.classList.add("disabled");
   if (ui.imgFilmstripGrid) ui.imgFilmstripGrid.innerHTML = "";
-  if (ui.imgPreview) ui.imgPreview.src = "";
   imgUpdateCompareLabels();
 }
 
-// Upload zone click → trigger file input
-ui.imgUploadZone?.addEventListener("click", (e) => {
-  if ((e.target as HTMLElement).id === "img-browse-btn") return;
+// Canvas click → trigger file input (only in empty state)
+ui.imgCanvas?.addEventListener("click", (e) => {
+  if (ui.imgCanvas.classList.contains("has-image")) return;
   ui.imgFileInput?.click();
 });
-document.getElementById("img-browse-btn")?.addEventListener("click", (e) => {
-  e.stopPropagation();
-  ui.imgFileInput?.click();
-});
-
-// Upload zone drag-and-drop
-ui.imgUploadZone?.addEventListener("dragover", (e) => e.preventDefault());
-ui.imgUploadZone?.addEventListener("drop", (e) => {
+// Canvas drag-and-drop
+ui.imgCanvas?.addEventListener("dragover", (e) => e.preventDefault());
+ui.imgCanvas?.addEventListener("drop", (e) => {
   e.preventDefault();
   e.stopPropagation();
   if (e.dataTransfer?.files) imgLoadFiles(Array.from(e.dataTransfer.files));

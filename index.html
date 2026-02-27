@@ -330,64 +330,68 @@
       <p>Upload images to remove backgrounds, rescale, and strip metadata.</p>
     </div>
 
-    <!-- Upload zone (shown when no images loaded) -->
-    <div id="img-upload-zone">
-      <h3>Drop images here</h3>
-      <p>or click to browse</p>
-      <button class="browse-btn" id="img-browse-btn">Browse files</button>
+    <!-- Central preview / upload box (always visible) -->
+    <div id="img-canvas-wrap">
+      <div id="img-canvas">
+        <!-- Empty-state drop prompt -->
+        <div id="img-drop-prompt">
+          <svg class="img-drop-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+            <polyline points="21 15 16 10 5 21"></polyline>
+          </svg>
+          <span class="img-drop-text">Drop image here</span>
+          <span class="img-drop-sub">or click to browse</span>
+        </div>
+        <!-- Preview image (hidden until loaded) -->
+        <img id="img-preview" class="hidden" alt="Preview">
+      </div>
     </div>
 
-    <!-- Workspace (shown when images loaded) -->
+    <!-- Below-preview row: filmstrip + settings (hidden until image loaded) -->
     <div id="img-workspace" class="hidden">
-      <div class="img-workspace-main">
-        <!-- Large image preview -->
-        <div class="img-preview-area">
-          <img id="img-preview" alt="Preview">
-        </div>
-
-        <!-- Inline settings sidebar -->
-        <aside class="img-settings">
-          <h4 class="img-settings-title">Settings</h4>
-          <div class="img-settings-group">
-            <span class="sm-label">Background removal</span>
-            <label class="sm-switch-row">
-              <span class="sm-switch-label">Remove background</span>
-              <button id="img-remove-bg-toggle" class="sm-switch" role="switch"></button>
-            </label>
-            <button id="img-bg-mode-toggle" class="sm-btn hidden">Mode: Local</button>
-            <label class="sm-switch-row hidden" id="img-bg-correction-row">
-              <span class="sm-switch-label">Correction</span>
-              <button id="img-bg-correction-toggle" class="sm-switch" role="switch"></button>
-            </label>
-            <div id="img-bg-api-key-row" class="hidden">
-              <input type="password" id="img-bg-api-key" placeholder="remove.bg API key" autocomplete="off">
-            </div>
-          </div>
-          <div class="img-settings-group">
-            <span class="sm-label">Rescale</span>
-            <label class="sm-switch-row">
-              <span class="sm-switch-label">Rescale images</span>
-              <button id="img-rescale-toggle" class="sm-switch" role="switch"></button>
-            </label>
-            <div id="img-rescale-options" class="hidden">
-              <div class="sm-size-row">
-                <input type="number" id="img-rescale-width" placeholder="Width" min="1">
-                <span class="sm-unit">&times;</span>
-                <input type="number" id="img-rescale-height" placeholder="Height" min="1">
-              </div>
-              <label class="sm-check"><input type="checkbox" id="img-rescale-lock-ratio" checked> Lock aspect ratio</label>
-            </div>
-          </div>
-        </aside>
-      </div>
-
       <!-- Filmstrip thumbnail row -->
       <div class="img-filmstrip">
         <div id="img-filmstrip-grid"></div>
         <button id="img-add-more" class="img-filmstrip-add" title="Add more images">+</button>
       </div>
 
-      <!-- Controls: before/after toggle + process + download -->
+      <!-- Inline settings -->
+      <details class="img-settings" open>
+        <summary class="img-settings-title">Settings</summary>
+        <div class="img-settings-group">
+          <span class="sm-label">Background removal</span>
+          <label class="sm-switch-row">
+            <span class="sm-switch-label">Remove background</span>
+            <button id="img-remove-bg-toggle" class="sm-switch" role="switch"></button>
+          </label>
+          <button id="img-bg-mode-toggle" class="sm-btn hidden">Mode: Local</button>
+          <label class="sm-switch-row hidden" id="img-bg-correction-row">
+            <span class="sm-switch-label">Correction</span>
+            <button id="img-bg-correction-toggle" class="sm-switch" role="switch"></button>
+          </label>
+          <div id="img-bg-api-key-row" class="hidden">
+            <input type="password" id="img-bg-api-key" placeholder="remove.bg API key" autocomplete="off">
+          </div>
+        </div>
+        <div class="img-settings-group">
+          <span class="sm-label">Rescale</span>
+          <label class="sm-switch-row">
+            <span class="sm-switch-label">Rescale images</span>
+            <button id="img-rescale-toggle" class="sm-switch" role="switch"></button>
+          </label>
+          <div id="img-rescale-options" class="hidden">
+            <div class="sm-size-row">
+              <input type="number" id="img-rescale-width" placeholder="Width" min="1">
+              <span class="sm-unit">&times;</span>
+              <input type="number" id="img-rescale-height" placeholder="Height" min="1">
+            </div>
+            <label class="sm-check"><input type="checkbox" id="img-rescale-lock-ratio" checked> Lock aspect ratio</label>
+          </div>
+        </div>
+      </details>
+
+      <!-- Controls: before/after toggle + download -->
       <div class="img-controls">
         <div class="img-compare-toggle">
           <span class="img-compare-label" data-side="before">Before</span>
