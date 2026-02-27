@@ -1917,7 +1917,7 @@ function redirectToToolWithFiles(tool: "image" | "compress") {
       m4v: "video/x-m4v", "3gp": "video/3gpp", ts: "video/mp2t", mts: "video/mp2t",
     };
     const mime = mimeMap[ext] || "application/octet-stream";
-    return new File([f.bytes], f.name, { type: mime });
+    return new File([f.bytes as BlobPart], f.name, { type: mime });
   });
 
   showToolView(tool);
