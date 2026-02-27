@@ -277,6 +277,10 @@ body[data-tool="convert"] #image-page { display: none !important; }
 }
 #settings-modal.hidden { display: none; }
 
+/* ── No-sidebar mode (tool-specific settings) ── */
+#settings-modal.sm-no-sidebar { width: 480px; height: auto; max-height: 85vh; }
+#settings-modal.sm-no-sidebar .sm-sidebar.hidden { display: none; }
+
 /* ── Sidebar ── */
 .sm-sidebar {
   width: 180px;
@@ -395,8 +399,7 @@ body[data-tool="convert"] #image-page { display: none !important; }
   margin-bottom: 6px;
 }
 .codec-preset-btn,
-.speed-preset-btn,
-.compress-preset-btn {
+.speed-preset-btn {
   padding: 7px 16px;
   border: 1.5px solid var(--input-border);
   border-radius: 50px;
@@ -413,14 +416,12 @@ body[data-tool="convert"] #image-page { display: none !important; }
   font-family: inherit;
 }
 .codec-preset-btn:hover,
-.speed-preset-btn:hover,
-.compress-preset-btn:hover {
+.speed-preset-btn:hover {
   border-color: var(--accent);
   color: var(--accent);
 }
 .codec-preset-btn.selected,
-.speed-preset-btn.selected,
-.compress-preset-btn.selected {
+.speed-preset-btn.selected {
   border-color: var(--accent);
   background: var(--accent);
   color: white;
@@ -431,12 +432,35 @@ body[data-tool="convert"] #image-page { display: none !important; }
   font-weight: 400;
   opacity: 0.65;
 }
-.sm-pill-label {
-  font-size: 0.68rem;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: var(--text-muted);
-  margin-top: 2px;
+
+/* Settings select dropdown */
+.sm-select {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg);
+  color: var(--text-main);
+  font-size: 0.84rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.18s ease;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23666678' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+}
+.sm-select:hover { border-color: var(--accent); }
+.sm-select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+  outline: none;
+}
+.sm-select option, .sm-select optgroup {
+  background: var(--card-bg);
+  color: var(--text-main);
 }
 
 .sm-hint {
@@ -625,6 +649,57 @@ body[data-tool="convert"] #image-page { display: none !important; }
 }
 .color-dot:hover { transform: scale(1.2); }
 .color-dot.active { border-color: var(--text-main) !important; box-shadow: 0 0 0 2px var(--bg-color), 0 0 8px var(--accent-dim); }
+
+/* ──── Logs toggle button ──── */
+#logs-toggle {
+  position: relative;
+}
+#logs-toggle .log-badge {
+  position: absolute;
+  top: -4px; right: -4px;
+  font-size: 0.6rem;
+  min-width: 16px; height: 16px;
+  padding: 0 3px;
+}
+
+/* ──── Logs popout ──── */
+#logs-popout {
+  position: fixed;
+  top: 61px; right: 16px;
+  width: 460px; max-width: calc(100vw - 32px);
+  max-height: 50vh;
+  background: var(--surface-color);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+  z-index: 140;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+}
+#logs-popout.hidden { display: none; }
+.logs-popout-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.logs-popout-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+#logs-popout-close {
+  background: none; border: none;
+  color: var(--text-muted); font-size: 1.3rem;
+  cursor: pointer; padding: 0 4px;
+  line-height: 1;
+}
+#logs-popout-close:hover { color: var(--text-main); }
+#logs-popout .app-log-list {
+  flex: 1;
+  max-height: 300px;
+}
 
 /* ──── Log badge ──── */
 .log-badge {
@@ -1363,4 +1438,6 @@ button.selected {
   .sm-nav { padding: 0 6px; }
   .sm-nav-btn { font-size: 0.78rem; padding: 8px 10px; gap: 8px; }
   .sm-content { padding: 18px 16px; }
+  #logs-popout { width: calc(100vw - 24px); right: 12px; }
+  #settings-modal.sm-no-sidebar { width: 100vw; max-width: 100vw; border-radius: 0; }
 }

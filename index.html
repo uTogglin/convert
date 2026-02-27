@@ -38,6 +38,10 @@
           <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
         </svg>
       </button>
+      <button id="logs-toggle" title="Logs">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+        <span id="log-badge" class="log-badge hidden">0</span>
+      </button>
       <button id="settings-toggle" title="Settings">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="3"></circle>
@@ -118,10 +122,6 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="2.5"></circle><circle cx="17.5" cy="10.5" r="2.5"></circle><circle cx="8.5" cy="7.5" r="2.5"></circle><circle cx="6.5" cy="12.5" r="2.5"></circle><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12a10 10 0 0 0 6 9.18"></path></svg>
           Appearance
         </button>
-        <button class="sm-nav-btn" data-panel="logs">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
-          Logs <span id="log-badge" class="log-badge hidden">0</span>
-        </button>
       </nav>
     </aside>
     <main class="sm-content">
@@ -147,11 +147,8 @@
       <!-- Compress panel -->
       <div class="sm-panel" data-panel="compress">
         <h3 class="sm-panel-title">Compress</h3>
-        <div class="sm-group">
-          <button id="compress-toggle" class="sm-btn">Compress: Off</button>
-          <p class="sm-hint">Re-encodes video at best quality. Set a target size to constrain file size.</p>
-        </div>
-        <div id="compress-options" class="hidden">
+        <p class="sm-hint">Re-encodes video at best quality. Set a target size to constrain file size.</p>
+        <div id="compress-options">
           <div class="sm-group">
             <span class="sm-label">Codec</span>
             <div class="sm-pill-row">
@@ -179,12 +176,18 @@
               <input type="number" id="compress-target-mb" placeholder="Target MB (optional)" min="0.1" step="0.1">
               <span class="sm-unit">MB</span>
             </div>
-            <div class="sm-pill-row">
-              <button class="compress-preset-btn" data-size="10">10 MB<span class="sm-pill-note">Free</span></button>
-              <button class="compress-preset-btn" data-size="50">50 MB<span class="sm-pill-note">Basic</span></button>
-              <button class="compress-preset-btn" data-size="500">500 MB<span class="sm-pill-note">Nitro</span></button>
-            </div>
-            <span class="sm-pill-label">Discord presets</span>
+            <select id="compress-preset-select" class="sm-select">
+              <option value="">No preset</option>
+              <optgroup label="Discord">
+                <option value="10">10 MB — Free</option>
+                <option value="50">50 MB — Basic</option>
+                <option value="500">500 MB — Nitro</option>
+              </optgroup>
+              <optgroup label="Twitter / X">
+                <option value="15">15 MB — Standard</option>
+                <option value="512">512 MB — Premium</option>
+              </optgroup>
+            </select>
           </div>
         </div>
       </div>
@@ -244,18 +247,22 @@
         </div>
       </div>
 
-      <!-- Logs panel -->
-      <div class="sm-panel" data-panel="logs">
-        <h3 class="sm-panel-title">Error Log</h3>
-        <p class="sm-hint">Captured <code>console.error</code> and <code>console.warn</code> messages.</p>
-        <div id="app-log-list" class="app-log-list"><p class="app-log-empty">No errors or warnings captured yet.</p></div>
-        <div class="app-log-actions">
-          <button id="copy-log-btn">Copy log</button>
-          <button id="clear-log-btn">Clear log</button>
-        </div>
-      </div>
 
     </main>
+  </div>
+
+  <!-- Logs popout -->
+  <div id="logs-popout" class="hidden">
+    <div class="logs-popout-header">
+      <h3>Error Log</h3>
+      <button id="logs-popout-close" title="Close">&times;</button>
+    </div>
+    <p class="sm-hint" style="margin:0 0 8px">Captured <code>console.error</code> and <code>console.warn</code> messages.</p>
+    <div id="app-log-list" class="app-log-list"><p class="app-log-empty">No errors or warnings captured yet.</p></div>
+    <div class="app-log-actions">
+      <button id="copy-log-btn">Copy log</button>
+      <button id="clear-log-btn">Clear log</button>
+    </div>
   </div>
 
   <div id="file-area">

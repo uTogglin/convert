@@ -198,6 +198,8 @@ const ui = {
   archiveFmtBtns: document.querySelectorAll(".archive-fmt-btn") as NodeListOf<HTMLButtonElement>,
   createArchiveBtn: document.querySelector("#create-archive-btn") as HTMLButtonElement,
   themeToggle: document.querySelector("#theme-toggle") as HTMLButtonElement,
+  logsToggle: document.querySelector("#logs-toggle") as HTMLButtonElement,
+  logsPopout: document.querySelector("#logs-popout") as HTMLDivElement,
   settingsToggle: document.querySelector("#settings-toggle") as HTMLButtonElement,
   settingsModal: document.querySelector("#settings-modal") as HTMLDivElement,
   settingsOverlay: document.querySelector("#settings-overlay") as HTMLDivElement,
@@ -216,10 +218,9 @@ const ui = {
   rescaleHeightInput: document.querySelector("#rescale-height") as HTMLInputElement,
   rescaleLockInput: document.querySelector("#rescale-lock-ratio") as HTMLInputElement,
   privacyToggle: document.querySelector("#privacy-toggle") as HTMLButtonElement,
-  compressToggle: document.querySelector("#compress-toggle") as HTMLButtonElement,
   compressOptions: document.querySelector("#compress-options") as HTMLDivElement,
   compressTargetInput: document.querySelector("#compress-target-mb") as HTMLInputElement,
-  compressPresetBtns: document.querySelectorAll(".compress-preset-btn") as NodeListOf<HTMLButtonElement>,
+  compressPresetSelect: document.querySelector("#compress-preset-select") as HTMLSelectElement,
   codecPresetBtns: document.querySelectorAll(".codec-preset-btn") as NodeListOf<HTMLButtonElement>,
   codecHint: document.querySelector("#codec-hint") as HTMLParagraphElement,
   speedPresetBtns: document.querySelectorAll(".speed-preset-btn") as NodeListOf<HTMLButtonElement>,
@@ -262,13 +263,10 @@ function showToolView(tool: "convert" | "compress" | "image") {
 
   if (tool === "compress") {
     compressPage.classList.remove("hidden");
-    // Auto-enable compression
+    // Auto-enable compression — always on for compress tool
     if (!compressEnabled) {
       compressEnabled = true;
       try { localStorage.setItem("convert-compress", "true"); } catch {}
-      ui.compressToggle.textContent = "Compress: On";
-      ui.compressToggle.classList.add("active");
-      ui.compressOptions.classList.remove("hidden");
     }
   } else if (tool === "image") {
     imagePage.classList.remove("hidden");
@@ -298,7 +296,26 @@ const smNavBtns = document.querySelectorAll<HTMLButtonElement>(".sm-nav-btn");
 const smPanels = document.querySelectorAll<HTMLDivElement>(".sm-panel");
 
 function openSettings(panel?: string) {
-  if (panel) switchSettingsPanel(panel);
+  const sidebar = ui.settingsModal.querySelector(".sm-sidebar") as HTMLElement;
+  if (activeTool) {
+    // On a tool page: hide sidebar, show only that tool's panel + appearance
+    sidebar.classList.add("hidden");
+    ui.settingsModal.classList.add("sm-no-sidebar");
+    // Build a simple tab bar for the two panels
+    const toolPanel = activeTool === "compress" ? "compress" : activeTool === "image" ? "image" : "convert";
+    switchSettingsPanel(panel || toolPanel);
+    // Show only relevant nav items
+    smNavBtns.forEach(b => {
+      const p = b.dataset.panel;
+      b.classList.toggle("hidden", p !== toolPanel && p !== "appearance");
+    });
+  } else {
+    // Home page: show full sidebar
+    sidebar.classList.remove("hidden");
+    ui.settingsModal.classList.remove("sm-no-sidebar");
+    smNavBtns.forEach(b => b.classList.remove("hidden"));
+    if (panel) switchSettingsPanel(panel);
+  }
   ui.settingsModal.classList.remove("hidden");
   ui.settingsOverlay.classList.remove("hidden");
 }
@@ -323,8 +340,9 @@ for (const btn of smNavBtns) {
 // Close on overlay click or Escape
 ui.settingsOverlay.addEventListener("click", closeSettings);
 window.addEventListener("keydown", e => {
-  if (e.key === "Escape" && !ui.settingsModal.classList.contains("hidden")) {
-    closeSettings();
+  if (e.key === "Escape") {
+    if (!ui.settingsModal.classList.contains("hidden")) closeSettings();
+    if (!ui.logsPopout.classList.contains("hidden")) ui.logsPopout.classList.add("hidden");
   }
 });
 
@@ -1026,11 +1044,26 @@ if (ui.settingsToggle) {
                   : activeTool === "image" ? "image"
                   : undefined;
       openSettings(panel);
-      const list = document.getElementById("app-log-list");
-      if (list) _renderAppLogInto(list);
     } else {
       closeSettings();
     }
+  });
+}
+
+// ──── Logs Popout Toggle ────
+if (ui.logsToggle) {
+  ui.logsToggle.addEventListener("click", () => {
+    const open = ui.logsPopout.classList.toggle("hidden");
+    if (!open) {
+      const list = document.getElementById("app-log-list");
+      if (list) _renderAppLogInto(list);
+    }
+  });
+}
+const logsPopoutClose = document.getElementById("logs-popout-close");
+if (logsPopoutClose) {
+  logsPopoutClose.addEventListener("click", () => {
+    ui.logsPopout.classList.add("hidden");
   });
 }
 
@@ -1298,44 +1331,33 @@ if (ui.privacyToggle) {
 
 // ──── Compression Settings ────
 
-if (ui.compressToggle) {
-  ui.compressToggle.textContent = compressEnabled ? "Compress: On" : "Compress: Off";
-  ui.compressToggle.classList.toggle("active", compressEnabled);
-  if (ui.compressOptions) ui.compressOptions.classList.toggle("hidden", !compressEnabled);
-  ui.compressToggle.addEventListener("click", () => {
-    compressEnabled = !compressEnabled;
-    ui.compressToggle.textContent = compressEnabled ? "Compress: On" : "Compress: Off";
-    ui.compressToggle.classList.toggle("active", compressEnabled);
-    if (ui.compressOptions) ui.compressOptions.classList.toggle("hidden", !compressEnabled);
-    try { localStorage.setItem("convert-compress", String(compressEnabled)); } catch {}
-    updateProcessButton();
-  });
-}
+// Compression is always enabled on the compress tool page (no toggle needed)
 
 if (ui.compressTargetInput) {
   if (compressTargetMB > 0) ui.compressTargetInput.value = String(compressTargetMB);
   ui.compressTargetInput.addEventListener("input", () => {
     compressTargetMB = parseFloat(ui.compressTargetInput.value) || 0;
-    ui.compressPresetBtns.forEach(b => b.classList.remove("selected"));
+    if (ui.compressPresetSelect) ui.compressPresetSelect.value = "";
     try { localStorage.setItem("convert-compress-target", String(compressTargetMB)); } catch {}
     updateProcessButton();
   });
 }
 
-ui.compressPresetBtns.forEach(btn => {
-  if (compressTargetMB === parseFloat(btn.getAttribute("data-size") ?? "0")) {
-    btn.classList.add("selected");
+if (ui.compressPresetSelect) {
+  // Restore saved preset value
+  if (compressTargetMB > 0) {
+    const opts = Array.from(ui.compressPresetSelect.options);
+    const match = opts.find(o => parseFloat(o.value) === compressTargetMB);
+    if (match) ui.compressPresetSelect.value = match.value;
   }
-  btn.addEventListener("click", () => {
-    const size = parseFloat(btn.getAttribute("data-size") ?? "0");
+  ui.compressPresetSelect.addEventListener("change", () => {
+    const size = parseFloat(ui.compressPresetSelect.value) || 0;
     compressTargetMB = size;
-    if (ui.compressTargetInput) ui.compressTargetInput.value = String(size);
-    ui.compressPresetBtns.forEach(b => b.classList.remove("selected"));
-    btn.classList.add("selected");
+    if (ui.compressTargetInput) ui.compressTargetInput.value = size > 0 ? String(size) : "";
     try { localStorage.setItem("convert-compress-target", String(compressTargetMB)); } catch {}
     updateProcessButton();
   });
-});
+}
 
 // Codec selection (H.264 / H.265)
 const codecHints: Record<string, string> = {
