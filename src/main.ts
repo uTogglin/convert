@@ -6,7 +6,7 @@ import JSZip from "jszip";
 import { gzip as pakoGzip } from "pako";
 import { createTar } from "./handlers/archive.js";
 import { applyFileCompression } from "./compress.js";
-import { processVideo, probeVideoInfo, extractSubtitles, addSubtitlesToVideo } from "./video-editor.js";
+import { processVideo, probeVideoInfo, extractSubtitles, addSubtitlesToVideo, mergeVideos } from "./video-editor.js";
 import type { SubtitleStreamInfo } from "./video-editor.js";
 import { generateSubtitles } from "./subtitle-generator.js";
 
@@ -187,6 +187,20 @@ let vidAddSubBurn: boolean = false;
 const vidEqFreqs = [60, 230, 910, 3600, 14000];
 let vidEqBands: number[] = [0, 0, 0, 0, 0];
 
+/** Crop state */
+let vidCropEnabled: boolean = false;
+let vidCropX: number = 0;
+let vidCropY: number = 0;
+let vidCropW: number = 0;
+let vidCropH: number = 0;
+let vidOrigWidth: number = 0;
+let vidOrigHeight: number = 0;
+let vidCropPreset: string = "free";
+
+/** Merge state */
+let vidMergeFiles: File[] = [];
+let vidMergeReEncode: boolean = false;
+
 /** Returns the broad media category from a file's MIME type */
 function getMediaCategory(file: File): string {
   return file.type.split("/")[0] || "unknown";
@@ -329,6 +343,25 @@ const ui = {
   vidEqReset: document.querySelector("#vid-eq-reset") as HTMLButtonElement,
   vidFullscreenBtn: document.querySelector("#vid-fullscreen-btn") as HTMLButtonElement,
   vidCanvasCol: document.querySelector("#vid-canvas-col") as HTMLDivElement,
+  // Crop UI
+  vidCropOverlay: document.querySelector("#vid-crop-overlay") as HTMLDivElement,
+  vidCropBox: document.querySelector("#vid-crop-box") as HTMLDivElement,
+  vidCropPresets: document.querySelectorAll(".vid-crop-preset") as NodeListOf<HTMLButtonElement>,
+  vidCropManualCollapsible: document.querySelector("#vid-crop-manual-collapsible") as HTMLDivElement,
+  vidCropManualToggle: document.querySelector("#vid-crop-manual-toggle") as HTMLButtonElement,
+  vidCropXInput: document.querySelector("#vid-crop-x") as HTMLInputElement,
+  vidCropYInput: document.querySelector("#vid-crop-y") as HTMLInputElement,
+  vidCropWInput: document.querySelector("#vid-crop-w") as HTMLInputElement,
+  vidCropHInput: document.querySelector("#vid-crop-h") as HTMLInputElement,
+  vidCropInfo: document.querySelector("#vid-crop-info") as HTMLSpanElement,
+  vidCropReset: document.querySelector("#vid-crop-reset") as HTMLButtonElement,
+  // Merge UI
+  vidMergeCollapsible: document.querySelector("#vid-merge-collapsible") as HTMLDivElement,
+  vidMergeToggle: document.querySelector("#vid-merge-toggle") as HTMLButtonElement,
+  vidMergeList: document.querySelector("#vid-merge-list") as HTMLDivElement,
+  vidMergeAdd: document.querySelector("#vid-merge-add") as HTMLButtonElement,
+  vidMergeReEncode: document.querySelector("#vid-merge-reencode") as HTMLButtonElement,
+  vidMergeFileInput: document.querySelector("#vid-merge-file-input") as HTMLInputElement,
   // Video settings panel prefs
   vidPrefRemoveAudio: document.querySelector("#vid-pref-remove-audio") as HTMLButtonElement,
   vidPrefRemoveSubs: document.querySelector("#vid-pref-remove-subs") as HTMLButtonElement,
@@ -2761,6 +2794,8 @@ function vidHasEdits(): boolean {
     vidRemoveAudio ||
     vidRemoveSubtitles ||
     vidEqBands.some(g => g !== 0) ||
+    vidCropEnabled ||
+    vidMergeFiles.length > 0 ||
     (vidSubFile !== null && (vidAddSubMux || vidAddSubBurn));
 }
 
@@ -2836,6 +2871,27 @@ function vidLoadFile(file: File) {
   if (ui.vidEqCollapsible) ui.vidEqCollapsible.classList.remove("open");
   ui.vidEqSliders?.forEach((s, i) => { s.value = "0"; if (ui.vidEqValues[i]) ui.vidEqValues[i].textContent = "0 dB"; });
 
+  // Reset crop state
+  vidCropEnabled = false;
+  vidCropX = 0; vidCropY = 0; vidCropW = 0; vidCropH = 0;
+  vidOrigWidth = 0; vidOrigHeight = 0;
+  vidCropPreset = "free";
+  ui.vidCropOverlay?.classList.add("hidden");
+  ui.vidCropPresets?.forEach(b => b.classList.toggle("active", b.dataset.ratio === "free"));
+  if (ui.vidCropInfo) ui.vidCropInfo.textContent = "";
+  if (ui.vidCropXInput) ui.vidCropXInput.value = "0";
+  if (ui.vidCropYInput) ui.vidCropYInput.value = "0";
+  if (ui.vidCropWInput) ui.vidCropWInput.value = "0";
+  if (ui.vidCropHInput) ui.vidCropHInput.value = "0";
+  if (ui.vidCropManualCollapsible) ui.vidCropManualCollapsible.classList.remove("open");
+
+  // Reset merge state
+  vidMergeFiles = [];
+  vidMergeReEncode = false;
+  ui.vidMergeReEncode?.classList.remove("active");
+  if (ui.vidMergeCollapsible) ui.vidMergeCollapsible.classList.remove("open");
+  vidUpdateMergeList();
+
   // Reset language dropdown
   if (ui.vidSubLangSelect) {
     ui.vidSubLangSelect.innerHTML = '<option value="all">All tracks</option>';
@@ -2905,14 +2961,45 @@ function vidResetState() {
   if (ui.vidEqCollapsible) ui.vidEqCollapsible.classList.remove("open");
   ui.vidEqSliders?.forEach((s, i) => { s.value = "0"; if (ui.vidEqValues[i]) ui.vidEqValues[i].textContent = "0 dB"; });
   if (ui.vidSubLangSelect) ui.vidSubLangSelect.innerHTML = '<option value="all">All tracks</option>';
+
+  // Reset crop
+  vidCropEnabled = false;
+  vidCropX = 0; vidCropY = 0; vidCropW = 0; vidCropH = 0;
+  vidOrigWidth = 0; vidOrigHeight = 0;
+  vidCropPreset = "free";
+  ui.vidCropOverlay?.classList.add("hidden");
+  ui.vidCropPresets?.forEach(b => b.classList.toggle("active", b.dataset.ratio === "free"));
+  if (ui.vidCropInfo) ui.vidCropInfo.textContent = "";
+  if (ui.vidCropManualCollapsible) ui.vidCropManualCollapsible.classList.remove("open");
+
+  // Reset merge
+  vidMergeFiles = [];
+  vidMergeReEncode = false;
+  ui.vidMergeReEncode?.classList.remove("active");
+  if (ui.vidMergeCollapsible) ui.vidMergeCollapsible.classList.remove("open");
+  vidUpdateMergeList();
+
   vidUpdateActionButton();
 }
 
-// Video loadedmetadata: set duration, show workspace
+// Video loadedmetadata: set duration, show workspace, capture resolution
 ui.vidPreview?.addEventListener("loadedmetadata", () => {
   vidDuration = ui.vidPreview.duration;
   vidTrimStart = 0;
   vidTrimEnd = vidDuration;
+
+  // Capture native video resolution for crop
+  vidOrigWidth = ui.vidPreview.videoWidth;
+  vidOrigHeight = ui.vidPreview.videoHeight;
+  vidCropW = vidOrigWidth;
+  vidCropH = vidOrigHeight;
+  vidCropX = 0;
+  vidCropY = 0;
+  vidCropEnabled = false;
+  if (ui.vidCropWInput) ui.vidCropWInput.value = String(vidOrigWidth);
+  if (ui.vidCropHInput) ui.vidCropHInput.value = String(vidOrigHeight);
+  if (ui.vidCropXInput) ui.vidCropXInput.value = "0";
+  if (ui.vidCropYInput) ui.vidCropYInput.value = "0";
 
   if (ui.vidTrimStartInput) ui.vidTrimStartInput.value = vidFormatTime(0);
   if (ui.vidTrimEndInput) ui.vidTrimEndInput.value = vidFormatTime(vidDuration);
@@ -3198,6 +3285,355 @@ ui.vidEqReset?.addEventListener("click", () => {
   vidUpdateActionButton();
 });
 
+// ── Crop helpers & handlers ──────────────────────────────────────────────────
+
+/** Enforce even dimensions for h264 compatibility */
+function vidEven(n: number): number { return Math.round(n / 2) * 2; }
+
+/** Invalidate processed data on crop change */
+function vidCropChanged() {
+  vidProcessedData = null;
+  if (vidProcessedUrl) { URL.revokeObjectURL(vidProcessedUrl); vidProcessedUrl = null; }
+  vidUpdateCropOverlay();
+  vidUpdateCropInfo();
+  vidUpdateActionButton();
+}
+
+/** Update crop info text */
+function vidUpdateCropInfo() {
+  if (!ui.vidCropInfo) return;
+  if (vidCropEnabled) {
+    ui.vidCropInfo.textContent = `${vidCropW}×${vidCropH} at (${vidCropX},${vidCropY})`;
+  } else {
+    ui.vidCropInfo.textContent = "";
+  }
+}
+
+/** Update manual crop input values */
+function vidUpdateCropInputs() {
+  if (ui.vidCropXInput) ui.vidCropXInput.value = String(vidCropX);
+  if (ui.vidCropYInput) ui.vidCropYInput.value = String(vidCropY);
+  if (ui.vidCropWInput) ui.vidCropWInput.value = String(vidCropW);
+  if (ui.vidCropHInput) ui.vidCropHInput.value = String(vidCropH);
+}
+
+/**
+ * Get the video's displayed rect within the canvas (accounting for object-fit: contain)
+ */
+function vidGetVideoRect(): { vx: number; vy: number; vw: number; vh: number } | null {
+  if (!ui.vidCanvas || !ui.vidPreview || vidOrigWidth === 0 || vidOrigHeight === 0) return null;
+  const canvasRect = ui.vidCanvas.getBoundingClientRect();
+  const cw = canvasRect.width;
+  const ch = canvasRect.height;
+  const videoAspect = vidOrigWidth / vidOrigHeight;
+  const canvasAspect = cw / ch;
+  let vw: number, vh: number, vx: number, vy: number;
+  if (videoAspect > canvasAspect) {
+    // Pillarboxed (letterboxed top/bottom)
+    vw = cw;
+    vh = cw / videoAspect;
+    vx = 0;
+    vy = (ch - vh) / 2;
+  } else {
+    // Letterboxed (pillarboxed left/right)
+    vh = ch;
+    vw = ch * videoAspect;
+    vx = (cw - vw) / 2;
+    vy = 0;
+  }
+  return { vx, vy, vw, vh };
+}
+
+/** Update the crop overlay position/size from crop state */
+function vidUpdateCropOverlay() {
+  if (!ui.vidCropOverlay || !ui.vidCropBox) return;
+  if (!vidCropEnabled || vidOrigWidth === 0) {
+    ui.vidCropOverlay.classList.add("hidden");
+    return;
+  }
+  ui.vidCropOverlay.classList.remove("hidden");
+  const rect = vidGetVideoRect();
+  if (!rect) return;
+  const { vx, vy, vw, vh } = rect;
+  const scaleX = vw / vidOrigWidth;
+  const scaleY = vh / vidOrigHeight;
+  ui.vidCropBox.style.left = (vx + vidCropX * scaleX) + "px";
+  ui.vidCropBox.style.top = (vy + vidCropY * scaleY) + "px";
+  ui.vidCropBox.style.width = (vidCropW * scaleX) + "px";
+  ui.vidCropBox.style.height = (vidCropH * scaleY) + "px";
+}
+
+/** Apply a crop preset ratio */
+function vidApplyCropPreset(ratio: string) {
+  if (vidOrigWidth === 0 || vidOrigHeight === 0) return;
+  vidCropPreset = ratio;
+  ui.vidCropPresets?.forEach(b => b.classList.toggle("active", b.dataset.ratio === ratio));
+
+  if (ratio === "free") {
+    // Reset to full frame
+    vidCropEnabled = false;
+    vidCropX = 0; vidCropY = 0;
+    vidCropW = vidOrigWidth; vidCropH = vidOrigHeight;
+  } else {
+    vidCropEnabled = true;
+    const [rw, rh] = ratio.split(":").map(Number);
+    const targetAspect = rw / rh;
+    const srcAspect = vidOrigWidth / vidOrigHeight;
+    let w: number, h: number;
+    if (targetAspect > srcAspect) {
+      w = vidOrigWidth;
+      h = Math.round(vidOrigWidth / targetAspect);
+    } else {
+      h = vidOrigHeight;
+      w = Math.round(vidOrigHeight * targetAspect);
+    }
+    w = vidEven(w); h = vidEven(h);
+    w = Math.min(w, vidOrigWidth); h = Math.min(h, vidOrigHeight);
+    vidCropW = w; vidCropH = h;
+    vidCropX = vidEven(Math.floor((vidOrigWidth - w) / 2));
+    vidCropY = vidEven(Math.floor((vidOrigHeight - h) / 2));
+  }
+  vidUpdateCropInputs();
+  vidCropChanged();
+}
+
+// Crop preset buttons
+ui.vidCropPresets?.forEach(btn => {
+  btn.addEventListener("click", () => {
+    const ratio = btn.dataset.ratio ?? "free";
+    vidApplyCropPreset(ratio);
+  });
+});
+
+// Manual crop toggle
+ui.vidCropManualToggle?.addEventListener("click", () => {
+  ui.vidCropManualCollapsible?.classList.toggle("open");
+});
+
+// Manual crop input handlers
+function vidHandleCropInput() {
+  if (vidOrigWidth === 0) return;
+  let x = parseInt(ui.vidCropXInput?.value ?? "0") || 0;
+  let y = parseInt(ui.vidCropYInput?.value ?? "0") || 0;
+  let w = parseInt(ui.vidCropWInput?.value ?? "0") || 0;
+  let h = parseInt(ui.vidCropHInput?.value ?? "0") || 0;
+  // Enforce even
+  x = vidEven(x); y = vidEven(y); w = vidEven(w); h = vidEven(h);
+  // Clamp bounds
+  w = Math.max(2, Math.min(w, vidOrigWidth));
+  h = Math.max(2, Math.min(h, vidOrigHeight));
+  x = Math.max(0, Math.min(x, vidOrigWidth - w));
+  y = Math.max(0, Math.min(y, vidOrigHeight - h));
+  vidCropX = x; vidCropY = y; vidCropW = w; vidCropH = h;
+  vidCropEnabled = (w < vidOrigWidth || h < vidOrigHeight || x > 0 || y > 0);
+  vidCropPreset = "free";
+  ui.vidCropPresets?.forEach(b => b.classList.toggle("active", b.dataset.ratio === "free"));
+  vidUpdateCropInputs();
+  vidCropChanged();
+}
+ui.vidCropXInput?.addEventListener("change", vidHandleCropInput);
+ui.vidCropYInput?.addEventListener("change", vidHandleCropInput);
+ui.vidCropWInput?.addEventListener("change", vidHandleCropInput);
+ui.vidCropHInput?.addEventListener("change", vidHandleCropInput);
+
+// Crop reset
+ui.vidCropReset?.addEventListener("click", () => {
+  vidApplyCropPreset("free");
+});
+
+// Crop overlay drag interaction (move box + resize handles)
+(() => {
+  let dragType: "move" | string | null = null;
+  let startMX = 0, startMY = 0;
+  let startCropX = 0, startCropY = 0, startCropW = 0, startCropH = 0;
+
+  function onPointerDown(e: PointerEvent) {
+    if (!vidCropEnabled || vidOrigWidth === 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const target = e.target as HTMLElement;
+    if (target.classList.contains("vid-crop-handle")) {
+      dragType = target.dataset.pos ?? null;
+    } else if (target.id === "vid-crop-box" || target.closest("#vid-crop-box")) {
+      dragType = "move";
+    } else {
+      return;
+    }
+    startMX = e.clientX; startMY = e.clientY;
+    startCropX = vidCropX; startCropY = vidCropY;
+    startCropW = vidCropW; startCropH = vidCropH;
+    document.addEventListener("pointermove", onPointerMove);
+    document.addEventListener("pointerup", onPointerUp);
+  }
+
+  function onPointerMove(e: PointerEvent) {
+    if (!dragType) return;
+    const rect = vidGetVideoRect();
+    if (!rect) return;
+    const scaleX = vidOrigWidth / rect.vw;
+    const scaleY = vidOrigHeight / rect.vh;
+    const dx = (e.clientX - startMX) * scaleX;
+    const dy = (e.clientY - startMY) * scaleY;
+
+    if (dragType === "move") {
+      let nx = vidEven(Math.round(startCropX + dx));
+      let ny = vidEven(Math.round(startCropY + dy));
+      nx = Math.max(0, Math.min(nx, vidOrigWidth - vidCropW));
+      ny = Math.max(0, Math.min(ny, vidOrigHeight - vidCropH));
+      vidCropX = nx; vidCropY = ny;
+    } else {
+      let nx = startCropX, ny = startCropY, nw = startCropW, nh = startCropH;
+      const pos = dragType;
+      if (pos.includes("w")) { nx += dx; nw -= dx; }
+      if (pos.includes("e")) { nw += dx; }
+      if (pos.includes("n")) { ny += dy; nh -= dy; }
+      if (pos.includes("s")) { nh += dy; }
+      // Enforce minimums
+      nw = Math.max(vidEven(Math.round(nw)), 2);
+      nh = Math.max(vidEven(Math.round(nh)), 2);
+      nx = vidEven(Math.round(nx));
+      ny = vidEven(Math.round(ny));
+      // Clamp to video bounds
+      if (nx < 0) { nw += nx; nx = 0; }
+      if (ny < 0) { nh += ny; ny = 0; }
+      if (nx + nw > vidOrigWidth) nw = vidOrigWidth - nx;
+      if (ny + nh > vidOrigHeight) nh = vidOrigHeight - ny;
+      nw = vidEven(nw); nh = vidEven(nh);
+      vidCropX = nx; vidCropY = ny; vidCropW = nw; vidCropH = nh;
+    }
+    vidUpdateCropInputs();
+    vidUpdateCropOverlay();
+    vidUpdateCropInfo();
+  }
+
+  function onPointerUp() {
+    dragType = null;
+    document.removeEventListener("pointermove", onPointerMove);
+    document.removeEventListener("pointerup", onPointerUp);
+    vidProcessedData = null;
+    if (vidProcessedUrl) { URL.revokeObjectURL(vidProcessedUrl); vidProcessedUrl = null; }
+    vidUpdateActionButton();
+  }
+
+  ui.vidCropBox?.addEventListener("pointerdown", onPointerDown);
+  document.querySelectorAll(".vid-crop-handle").forEach(h => {
+    h.addEventListener("pointerdown", onPointerDown as EventListener);
+  });
+})();
+
+// Update crop overlay on window resize
+window.addEventListener("resize", vidUpdateCropOverlay);
+
+// ── Merge handlers ──────────────────────────────────────────────────────────
+
+/** Render the merge file list */
+function vidUpdateMergeList() {
+  if (!ui.vidMergeList) return;
+  ui.vidMergeList.innerHTML = "";
+  if (!vidFile && vidMergeFiles.length === 0) return;
+
+  // Primary file (the loaded video)
+  if (vidFile) {
+    const item = document.createElement("div");
+    item.className = "vid-merge-item primary";
+    item.innerHTML = `<span class="vid-merge-item-index">#1</span>` +
+      `<span class="vid-merge-item-name">${vidFile.name}</span>` +
+      `<span class="vid-merge-item-badge">Primary</span>`;
+    ui.vidMergeList.appendChild(item);
+  }
+
+  // Additional merge files
+  vidMergeFiles.forEach((f, i) => {
+    const idx = (vidFile ? 2 : 1) + i;
+    const item = document.createElement("div");
+    item.className = "vid-merge-item";
+
+    const indexSpan = document.createElement("span");
+    indexSpan.className = "vid-merge-item-index";
+    indexSpan.textContent = `#${idx}`;
+
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "vid-merge-item-name";
+    nameSpan.textContent = f.name;
+
+    const actions = document.createElement("div");
+    actions.className = "vid-merge-item-actions";
+
+    if (i > 0) {
+      const upBtn = document.createElement("button");
+      upBtn.className = "vid-merge-item-btn";
+      upBtn.title = "Move up";
+      upBtn.textContent = "\u25B2";
+      upBtn.addEventListener("click", () => {
+        [vidMergeFiles[i - 1], vidMergeFiles[i]] = [vidMergeFiles[i], vidMergeFiles[i - 1]];
+        vidMergeChanged();
+      });
+      actions.appendChild(upBtn);
+    }
+    if (i < vidMergeFiles.length - 1) {
+      const downBtn = document.createElement("button");
+      downBtn.className = "vid-merge-item-btn";
+      downBtn.title = "Move down";
+      downBtn.textContent = "\u25BC";
+      downBtn.addEventListener("click", () => {
+        [vidMergeFiles[i], vidMergeFiles[i + 1]] = [vidMergeFiles[i + 1], vidMergeFiles[i]];
+        vidMergeChanged();
+      });
+      actions.appendChild(downBtn);
+    }
+    const rmBtn = document.createElement("button");
+    rmBtn.className = "vid-merge-item-btn";
+    rmBtn.title = "Remove";
+    rmBtn.textContent = "\u00D7";
+    rmBtn.addEventListener("click", () => {
+      vidMergeFiles.splice(i, 1);
+      vidMergeChanged();
+    });
+    actions.appendChild(rmBtn);
+
+    item.append(indexSpan, nameSpan, actions);
+    ui.vidMergeList.appendChild(item);
+  });
+}
+
+function vidMergeChanged() {
+  vidProcessedData = null;
+  if (vidProcessedUrl) { URL.revokeObjectURL(vidProcessedUrl); vidProcessedUrl = null; }
+  vidUpdateMergeList();
+  vidUpdateActionButton();
+}
+
+// Merge collapsible toggle
+ui.vidMergeToggle?.addEventListener("click", () => {
+  ui.vidMergeCollapsible?.classList.toggle("open");
+});
+
+// Merge add button → open file input
+ui.vidMergeAdd?.addEventListener("click", () => {
+  ui.vidMergeFileInput?.click();
+});
+
+// Merge file input change
+ui.vidMergeFileInput?.addEventListener("change", () => {
+  const files = ui.vidMergeFileInput.files;
+  if (files && files.length > 0) {
+    for (const f of Array.from(files)) {
+      if (f.type.startsWith("video/")) vidMergeFiles.push(f);
+    }
+    vidMergeChanged();
+    ui.vidMergeFileInput.value = "";
+  }
+});
+
+// Merge re-encode toggle
+ui.vidMergeReEncode?.addEventListener("click", () => {
+  vidMergeReEncode = !vidMergeReEncode;
+  ui.vidMergeReEncode.classList.toggle("active", vidMergeReEncode);
+  vidProcessedData = null;
+  if (vidProcessedUrl) { URL.revokeObjectURL(vidProcessedUrl); vidProcessedUrl = null; }
+  vidUpdateActionButton();
+});
+
 // Fullscreen toggle
 ui.vidFullscreenBtn?.addEventListener("click", () => {
   const col = ui.vidCanvasCol;
@@ -3412,10 +3848,12 @@ ui.vidDownloadBtn?.addEventListener("click", async () => {
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
     const hasEq = vidEqBands.some(g => g !== 0);
+    const hasCrop = vidCropEnabled;
     const hasStandardEdits = vidTrimStart > 0.01 ||
       (vidDuration > 0 && vidTrimEnd < vidDuration - 0.01) ||
-      vidRemoveAudio || vidRemoveSubtitles || hasEq;
+      vidRemoveAudio || vidRemoveSubtitles || hasEq || hasCrop;
     const hasSubAdd = vidSubFile && (vidAddSubMux || vidAddSubBurn);
+    const hasMerge = vidMergeFiles.length > 0;
 
     let result: FileData;
 
@@ -3426,6 +3864,7 @@ ui.vidDownloadBtn?.addEventListener("click", async () => {
         removeAudio: vidRemoveAudio,
         removeSubtitles: vidRemoveSubtitles,
         eqBands: hasEq ? vidEqFreqs.map((freq, i) => ({ freq, gain: vidEqBands[i] })) : undefined,
+        crop: hasCrop ? { x: vidCropX, y: vidCropY, w: vidCropW, h: vidCropH } : undefined,
       }, (pct) => {
         const popup = document.getElementById("popup");
         if (popup) {
@@ -3447,13 +3886,30 @@ ui.vidDownloadBtn?.addEventListener("click", async () => {
         const p = popup.querySelector("p");
         if (p) p.textContent = mode === "burn" ? "Burning subtitles..." : "Muxing subtitles...";
       }
-      // Create a temporary File from the result bytes for addSubtitlesToVideo
       const tmpFile = new File([result.bytes as BlobPart], result.name, { type: "video/mp4" });
       result = await addSubtitlesToVideo(tmpFile, vidSubFile, { mode }, (pct) => {
         const popup2 = document.getElementById("popup");
         if (popup2) {
           const p = popup2.querySelector("p");
           if (p) p.textContent = `${mode === "burn" ? "Burning" : "Muxing"} subtitles... ${pct}%`;
+        }
+      });
+    }
+
+    // Merge with additional files if configured
+    if (hasMerge) {
+      const popup = document.getElementById("popup");
+      if (popup) {
+        const p = popup.querySelector("p");
+        if (p) p.textContent = "Merging videos...";
+      }
+      const primaryFile = new File([result.bytes as BlobPart], result.name, { type: "video/mp4" });
+      const allFiles = [primaryFile, ...vidMergeFiles];
+      result = await mergeVideos(allFiles, vidMergeReEncode, (pct) => {
+        const popup2 = document.getElementById("popup");
+        if (popup2) {
+          const p = popup2.querySelector("p");
+          if (p) p.textContent = `Merging... ${pct}%`;
         }
       });
     }

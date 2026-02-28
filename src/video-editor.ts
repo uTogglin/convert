@@ -46,6 +46,7 @@ export interface VideoProcessOptions {
   removeAudio?: boolean;
   removeSubtitles?: boolean;
   eqBands?: { freq: number; gain: number }[];
+  crop?: { x: number; y: number; w: number; h: number };
 }
 
 /**
@@ -57,9 +58,10 @@ export async function processVideo(
   onProgress?: (pct: number) => void,
 ): Promise<FileData> {
   const hasEq = options.eqBands?.some(b => b.gain !== 0) ?? false;
+  const hasCrop = !!options.crop;
   const hasEdits = (options.trimStart !== undefined && options.trimStart > 0) ||
     (options.trimEnd !== undefined && options.trimEnd < Infinity) ||
-    options.removeAudio || options.removeSubtitles || hasEq;
+    options.removeAudio || options.removeSubtitles || hasEq || hasCrop;
 
   if (!hasEdits) {
     const buf = await file.arrayBuffer();
@@ -98,10 +100,27 @@ async function processWithFFmpeg(
     if (duration > 0) args.push("-t", String(duration));
   }
 
-  // Build EQ audio filter chain (only non-zero bands, only if not removing audio)
+  // Build filter chains
   const eqActive = !options.removeAudio && options.eqBands?.some(b => b.gain !== 0);
-  if (eqActive) {
-    // Must re-encode audio for filters; video stays stream-copied
+  const cropActive = !!options.crop;
+
+  if (cropActive) {
+    // Crop requires video re-encoding (can't stream-copy)
+    const { x, y, w, h } = options.crop!;
+    args.push("-vf", `crop=${w}:${h}:${x}:${y}`);
+    if (eqActive) {
+      // Re-encode audio with EQ filters too
+      args.push("-c:a", "aac");
+      const filters = options.eqBands!
+        .filter(b => b.gain !== 0)
+        .map(b => `equalizer=f=${b.freq}:width_type=o:width=2:g=${b.gain}`)
+        .join(",");
+      args.push("-af", filters);
+    } else {
+      args.push("-c:a", "copy");
+    }
+  } else if (eqActive) {
+    // EQ only: re-encode audio, stream-copy video
     args.push("-c:v", "copy", "-c:a", "aac");
     const filters = options.eqBands!
       .filter(b => b.gain !== 0)
@@ -147,6 +166,8 @@ export interface VideoProbeInfo {
   subtitleCount: number;
   subtitles: SubtitleStreamInfo[];
   duration: number;
+  width: number;
+  height: number;
 }
 
 /**
@@ -185,7 +206,15 @@ export async function probeVideoInfo(file: File): Promise<VideoProbeInfo> {
     duration = parseInt(durMatch[1]) * 3600 + parseInt(durMatch[2]) * 60 + parseInt(durMatch[3]) + parseInt(durMatch[4]) / 100;
   }
 
-  return { hasAudio, hasSubtitles, subtitleCount, subtitles, duration };
+  // Try to parse video resolution
+  let width = 0, height = 0;
+  const resMatch = log.match(/Stream.*Video.*?,\s*(\d{2,})x(\d{2,})/);
+  if (resMatch) {
+    width = parseInt(resMatch[1]);
+    height = parseInt(resMatch[2]);
+  }
+
+  return { hasAudio, hasSubtitles, subtitleCount, subtitles, duration, width, height };
 }
 
 /**
@@ -288,6 +317,82 @@ export async function addSubtitlesToVideo(
 
   const suffix = options.mode === "mux" ? "_subbed" : "_burned";
   return { name: `${baseName}${suffix}.${ext}`, bytes: result };
+}
+
+/**
+ * Merge multiple video files via FFmpeg concat demuxer.
+ * Default: stream copy for speed. Set reEncode=true for mixed-format files.
+ * Auto-retries with re-encode if stream copy fails.
+ */
+export async function mergeVideos(
+  files: File[],
+  reEncode: boolean = false,
+  onProgress?: (pct: number) => void,
+): Promise<FileData> {
+  if (files.length < 2) throw new Error("Need at least 2 files to merge");
+
+  const ff = await getFFmpeg();
+  const ext = files[0].name.split(".").pop()?.toLowerCase() ?? "mp4";
+  const baseName = files[0].name.replace(/\.[^.]+$/, "");
+  const tmpOut = "merge_out." + ext;
+
+  // Write all files to FS
+  const tmpNames: string[] = [];
+  for (let i = 0; i < files.length; i++) {
+    const name = `merge_${i}.${files[i].name.split(".").pop()?.toLowerCase() ?? ext}`;
+    tmpNames.push(name);
+    const buf = await files[i].arrayBuffer();
+    await ff.writeFile(name, new Uint8Array(buf));
+  }
+
+  // Build concat list
+  const listContent = tmpNames.map(n => `file '${n}'`).join("\n");
+  await ff.writeFile("concat_list.txt", new TextEncoder().encode(listContent));
+
+  const progressHandler = (e: { progress?: number }) => {
+    onProgress?.(Math.min(Math.round((e.progress ?? 0) * 100), 99));
+  };
+  ff.on("progress", progressHandler);
+
+  const buildArgs = (encode: boolean) => {
+    const a = ["-f", "concat", "-safe", "0", "-i", "concat_list.txt"];
+    if (encode) {
+      // Re-encode for compatibility
+      a.push("-c:a", "aac");
+    } else {
+      a.push("-c", "copy");
+    }
+    a.push(tmpOut);
+    return a;
+  };
+
+  try {
+    try {
+      await ffExec(buildArgs(reEncode));
+    } catch (e) {
+      if (!reEncode) {
+        // Auto-retry with re-encode
+        try { await ff.deleteFile(tmpOut); } catch {}
+        await ffExec(buildArgs(true));
+      } else {
+        throw e;
+      }
+    }
+  } finally {
+    ff.off("progress", progressHandler);
+  }
+
+  const data = await ff.readFile(tmpOut);
+  const result = data instanceof Uint8Array ? data : new TextEncoder().encode(data as string);
+
+  // Cleanup
+  for (const name of tmpNames) {
+    try { await ff.deleteFile(name); } catch {}
+  }
+  try { await ff.deleteFile("concat_list.txt"); } catch {}
+  try { await ff.deleteFile(tmpOut); } catch {}
+
+  return { name: `${baseName}_merged.${ext}`, bytes: result };
 }
 
 /**

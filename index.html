@@ -105,7 +105,7 @@
           </svg>
         </div>
         <h3>Video Editor</h3>
-        <p>Trim clips, remove audio, extract or generate subtitles — all processed in your browser.</p>
+        <p>Trim, crop, merge, remove audio, and manage subtitles — all processed in your browser.</p>
         <span class="home-card-tag">New</span>
       </button>
     </div>
@@ -481,7 +481,7 @@
   <section id="video-page" class="tool-page hidden">
     <div class="vid-page-header">
       <h2>Video Editor</h2>
-      <p>Trim, remove audio, and manage subtitles — everything runs locally.</p>
+      <p>Trim, crop, merge, remove audio, and manage subtitles — everything runs locally.</p>
     </div>
 
     <div id="vid-layout">
@@ -497,6 +497,19 @@
             <span class="vid-drop-sub">or click to browse</span>
           </div>
           <video id="vid-preview" class="hidden"></video>
+          <!-- Crop overlay -->
+          <div id="vid-crop-overlay" class="hidden">
+            <div id="vid-crop-box">
+              <div class="vid-crop-handle" data-pos="nw"></div>
+              <div class="vid-crop-handle" data-pos="n"></div>
+              <div class="vid-crop-handle" data-pos="ne"></div>
+              <div class="vid-crop-handle" data-pos="w"></div>
+              <div class="vid-crop-handle" data-pos="e"></div>
+              <div class="vid-crop-handle" data-pos="sw"></div>
+              <div class="vid-crop-handle" data-pos="s"></div>
+              <div class="vid-crop-handle" data-pos="se"></div>
+            </div>
+          </div>
         </div>
 
         <div id="vid-workspace" class="hidden">
@@ -534,6 +547,25 @@
         <div class="vid-settings">
           <h4 class="vid-settings-title">Settings</h4>
 
+          <!-- Merge section -->
+          <div class="vid-settings-group">
+            <div class="vid-collapsible" id="vid-merge-collapsible">
+              <button id="vid-merge-toggle" class="vid-collapsible-header">
+                <span class="vid-collapsible-arrow">&#9656;</span>
+                <span>Merge videos</span>
+              </button>
+              <div id="vid-merge-body" class="vid-collapsible-body">
+                <div id="vid-merge-list" class="vid-merge-list"></div>
+                <button id="vid-merge-add" class="sm-btn">+ Add video</button>
+                <label class="sm-switch-row">
+                  <span class="sm-switch-label">Re-encode</span>
+                  <button id="vid-merge-reencode" class="sm-switch" role="switch"></button>
+                </label>
+                <p class="sm-hint">Enable re-encode for files with different codecs.</p>
+              </div>
+            </div>
+          </div>
+
           <div class="vid-settings-group">
             <span class="sm-label">Trim</span>
             <div class="vid-trim-inputs">
@@ -547,6 +579,46 @@
               </label>
             </div>
             <button id="vid-trim-reset" class="sm-btn">Reset trim</button>
+          </div>
+
+          <!-- Crop section -->
+          <div class="vid-settings-group">
+            <span class="sm-label">Crop</span>
+            <div class="vid-crop-presets">
+              <button class="vid-crop-preset active" data-ratio="free">Free</button>
+              <button class="vid-crop-preset" data-ratio="16:9">16:9</button>
+              <button class="vid-crop-preset" data-ratio="4:3">4:3</button>
+              <button class="vid-crop-preset" data-ratio="1:1">1:1</button>
+              <button class="vid-crop-preset" data-ratio="9:16">9:16</button>
+            </div>
+            <div class="vid-collapsible" id="vid-crop-manual-collapsible">
+              <button id="vid-crop-manual-toggle" class="vid-collapsible-header">
+                <span class="vid-collapsible-arrow">&#9656;</span>
+                <span>Manual crop</span>
+              </button>
+              <div id="vid-crop-manual-body" class="vid-collapsible-body">
+                <div class="vid-crop-inputs">
+                  <label class="vid-crop-field">
+                    <span>X</span>
+                    <input type="number" id="vid-crop-x" min="0" step="2" value="0">
+                  </label>
+                  <label class="vid-crop-field">
+                    <span>Y</span>
+                    <input type="number" id="vid-crop-y" min="0" step="2" value="0">
+                  </label>
+                  <label class="vid-crop-field">
+                    <span>W</span>
+                    <input type="number" id="vid-crop-w" min="2" step="2" value="0">
+                  </label>
+                  <label class="vid-crop-field">
+                    <span>H</span>
+                    <input type="number" id="vid-crop-h" min="2" step="2" value="0">
+                  </label>
+                </div>
+              </div>
+            </div>
+            <span id="vid-crop-info" class="vid-crop-info"></span>
+            <button id="vid-crop-reset" class="sm-btn">Reset crop</button>
           </div>
 
           <div class="vid-settings-group">
@@ -661,6 +733,7 @@
 
     <input id="vid-file-input" type="file" accept="video/*" style="display:none">
     <input id="vid-sub-file-input" type="file" accept=".srt,.ass,.vtt,.ssa" style="display:none">
+    <input id="vid-merge-file-input" type="file" accept="video/*" multiple style="display:none">
   </section>
 
   <div id="format-containers">
