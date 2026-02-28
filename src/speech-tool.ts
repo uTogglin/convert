@@ -1,5 +1,3 @@
-import { SimpleTTS } from "./handlers/espeakng.js/js/espeakng-simple.js";
-import { WaveFile } from "wavefile";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 
 // ── FFmpeg instance for WAV→MP3 ────────────────────────────────────────────
@@ -13,24 +11,37 @@ async function getSpeechFFmpeg(): Promise<FFmpeg> {
   return speechFFmpeg;
 }
 
-// ── Lazy TTS instance ──────────────────────────────────────────────────────
-let ttsInstance: SimpleTTS | undefined;
-let ttsVoiceKey: string = "en";
+// ── Lazy Kokoro TTS instance ───────────────────────────────────────────────
+let kokoroInstance: any = null;
+let kokoroLoading: Promise<any> | null = null;
 
-async function getTTS(voice: string = "en"): Promise<SimpleTTS> {
-  if (!ttsInstance || ttsVoiceKey !== voice) {
-    ttsVoiceKey = voice;
-    await new Promise<void>(resolve => {
-      ttsInstance = new SimpleTTS({
-        defaultVoice: voice,
-        defaultRate: 220,
-        defaultPitch: 200,
-        enhanceAudio: true,
-      });
-      ttsInstance.onReady(() => resolve());
-    });
+async function getKokoro(onProgress?: (pct: number, msg: string) => void): Promise<any> {
+  if (kokoroInstance) return kokoroInstance;
+  if (kokoroLoading) { await kokoroLoading; return kokoroInstance; }
+
+  kokoroLoading = (async () => {
+    const { KokoroTTS } = await import("kokoro-js");
+    kokoroInstance = await KokoroTTS.from_pretrained(
+      "onnx-community/Kokoro-82M-v1.0-ONNX",
+      {
+        dtype: "q8" as any,
+        device: "wasm" as any,
+        progress_callback: (info: any) => {
+          if (info.status === "progress" && typeof info.progress === "number") {
+            onProgress?.(Math.round(info.progress), "Downloading Kokoro model...");
+          }
+        },
+      },
+    );
+  })();
+
+  try {
+    await kokoroLoading;
+  } catch (err) {
+    kokoroLoading = null;
+    throw err;
   }
-  return ttsInstance!;
+  return kokoroInstance;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -102,7 +113,7 @@ export function initSpeechTool() {
   const sttCopy = document.getElementById("speech-stt-copy") as HTMLButtonElement;
 
   // State
-  let currentWavBytes: Uint8Array | null = null;
+  let currentWavBlob: Blob | null = null;
   let currentAudioUrl: string | null = null;
   let sttFile: File | null = null;
   let recognition: any = null;
@@ -135,7 +146,7 @@ export function initSpeechTool() {
     ttsSpeedLabel.textContent = `${parseFloat(ttsSpeed.value).toFixed(1)}x`;
   });
 
-  // ── TTS Generate ───────────────────────────────────────────────────────
+  // ── TTS Generate (Kokoro) ─────────────────────────────────────────────
   let generating = false;
 
   generateBtn.addEventListener("click", async () => {
@@ -146,52 +157,40 @@ export function initSpeechTool() {
     generateBtn.classList.add("disabled");
     ttsProgress.classList.remove("hidden");
     ttsProgressFill.style.width = "0%";
-    ttsProgressText.textContent = "Loading speech engine...";
+    ttsProgressText.textContent = "Loading Kokoro TTS model...";
     player.classList.add("hidden");
 
     try {
-      ttsProgressFill.style.width = "20%";
-      const voice = ttsVoice.value;
-      const tts = await getTTS(voice);
-
-      ttsProgressText.textContent = "Generating speech...";
-      ttsProgressFill.style.width = "50%";
-
-      // Generate audio
-      const audioBuffer = await new Promise<AudioBuffer>(resolve => {
-        tts.speak(text, (samples: Float32Array, _sampleRate: number) => {
-          resolve(SimpleTTS.createAudioBuffer(samples, tts.sampleRate) as AudioBuffer);
-        });
+      const tts = await getKokoro((pct, msg) => {
+        ttsProgressFill.style.width = `${Math.round(pct * 0.6)}%`;
+        ttsProgressText.textContent = msg;
       });
 
-      ttsProgressFill.style.width = "80%";
-      ttsProgressText.textContent = "Encoding WAV...";
+      ttsProgressText.textContent = "Generating speech...";
+      ttsProgressFill.style.width = "65%";
 
-      // Encode to WAV
-      const channelData = audioBuffer.getChannelData(0);
-      const wav = new WaveFile();
-      wav.fromScratch(1, tts.sampleRate * 1.4, "32f", channelData);
-      currentWavBytes = wav.toBuffer() as Uint8Array;
-
-      // Apply speed via playback rate
+      const voice = ttsVoice.value;
       const speed = parseFloat(ttsSpeed.value);
 
-      // Create audio blob and load into player
+      const result = await tts.generate(text, { voice, speed });
+
+      ttsProgressFill.style.width = "90%";
+      ttsProgressText.textContent = "Encoding audio...";
+
+      // Get WAV blob from Kokoro output
+      currentWavBlob = result.toBlob();
+
+      // Load into audio player
       if (currentAudioUrl) URL.revokeObjectURL(currentAudioUrl);
-      const blob = new Blob([currentWavBytes as BlobPart], { type: "audio/wav" });
-      currentAudioUrl = URL.createObjectURL(blob);
+      currentAudioUrl = URL.createObjectURL(currentWavBlob);
       audio.src = currentAudioUrl;
-      audio.playbackRate = speed;
       audio.load();
 
       ttsProgressFill.style.width = "100%";
       ttsProgressText.textContent = "Done!";
 
-      // Show player
       player.classList.remove("hidden");
-      setTimeout(() => {
-        ttsProgress.classList.add("hidden");
-      }, 600);
+      setTimeout(() => { ttsProgress.classList.add("hidden"); }, 600);
 
     } catch (err) {
       console.error("TTS generation failed:", err);
@@ -266,13 +265,16 @@ export function initSpeechTool() {
   let downloading = false;
 
   downloadBtn.addEventListener("click", async () => {
-    if (!currentWavBytes || downloading) return;
+    if (!currentWavBlob || downloading) return;
     downloading = true;
     downloadBtn.textContent = "Converting...";
 
     try {
+      // Convert Blob to Uint8Array for FFmpeg
+      const wavBytes = new Uint8Array(await currentWavBlob.arrayBuffer());
+
       const ff = await getSpeechFFmpeg();
-      await ff.writeFile("input.wav", currentWavBytes);
+      await ff.writeFile("input.wav", wavBytes);
       const code = await ff.exec(["-i", "input.wav", "-codec:a", "libmp3lame", "-qscale:a", "2", "output.mp3"]);
       if (typeof code === "number" && code !== 0) throw new Error(`FFmpeg exit code ${code}`);
       const mp3Data = await ff.readFile("output.mp3") as Uint8Array;
@@ -314,10 +316,6 @@ export function initSpeechTool() {
     recognition.onstart = () => {
       isRecording = true;
       recordBtn.classList.add("recording");
-      recordBtn.querySelector("span:last-child")?.remove();
-      const label = document.createTextNode(" Stop Recording");
-      recordBtn.appendChild(label);
-      // Re-structure the button text
       const dot = recordBtn.querySelector(".speech-record-dot");
       if (dot) {
         recordBtn.textContent = "";
@@ -405,7 +403,6 @@ export function initSpeechTool() {
     sttProgressText.textContent = "Extracting audio...";
 
     try {
-      // Reuse Whisper pipeline from subtitle-generator
       const { generateSubtitles } = await import("./subtitle-generator.ts");
 
       const language = sttFileLang.value || undefined;
@@ -421,7 +418,6 @@ export function initSpeechTool() {
       const plainText = srtText
         .split("\n")
         .filter(line => {
-          // Skip index numbers, timestamps, and empty lines
           if (/^\d+$/.test(line.trim())) return false;
           if (/-->/.test(line)) return false;
           if (!line.trim()) return false;
