@@ -113,9 +113,9 @@ body {
 
 .home-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 20px;
-  max-width: 900px;
+  max-width: 1000px;
   width: 100%;
 }
 
@@ -230,11 +230,21 @@ body {
 }
 
 body[data-tool="compress"] #format-containers,
-body[data-tool="image"] #format-containers { display: none !important; }
+body[data-tool="image"] #format-containers,
+body[data-tool="video"] #format-containers { display: none !important; }
 body[data-tool="compress"] #image-page,
+body[data-tool="compress"] #video-page,
 body[data-tool="image"] #compress-page,
+body[data-tool="image"] #video-page,
+body[data-tool="video"] #compress-page,
+body[data-tool="video"] #image-page,
 body[data-tool="convert"] #compress-page,
-body[data-tool="convert"] #image-page { display: none !important; }
+body[data-tool="convert"] #image-page,
+body[data-tool="convert"] #video-page { display: none !important; }
+body[data-tool="video"] #file-area { display: none !important; }
+body[data-tool="video"] #archive-panel { display: none !important; }
+body[data-tool="video"] #output-tray { display: none !important; }
+body[data-tool="video"] #convert-button { display: none !important; }
 
 /* =========================================
    TOOL PAGES (Compress & Image) — header only
@@ -1793,6 +1803,307 @@ body[data-tool="image"] #convert-button { display: none !important; }
 }
 
 /* =========================================
+   9c. VIDEO EDITOR PAGE
+   ========================================= */
+
+/* ── Video page header ── */
+.vid-page-header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+.vid-page-header h2 {
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+.vid-page-header p {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* ── Layout: canvas column + settings side by side, centered ── */
+#vid-layout {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+#vid-canvas-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* Canvas / drop zone */
+#vid-canvas {
+  width: 640px;
+  height: 360px;
+  flex-shrink: 0;
+  border: 2px dashed var(--dashed-border);
+  border-radius: var(--radius);
+  background: var(--surface-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition);
+  overflow: hidden;
+}
+#vid-canvas:hover {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+#vid-canvas.has-video {
+  border-style: solid;
+  border-color: var(--input-border);
+  background: #000;
+  cursor: default;
+}
+#vid-canvas.has-video:hover {
+  background: #000;
+}
+
+/* Drop prompt */
+#vid-drop-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  user-select: none;
+}
+#vid-drop-prompt.hidden { display: none; }
+.vid-drop-icon { color: var(--text-muted); opacity: 0.4; }
+.vid-drop-text { font-size: 1.1rem; font-weight: 600; color: var(--text-main); }
+.vid-drop-sub { font-size: 0.84rem; color: var(--text-muted); }
+
+/* Video preview */
+#vid-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+#vid-preview.hidden { display: none; }
+
+/* Workspace (below canvas) */
+#vid-workspace {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+#vid-workspace.hidden { display: none; }
+
+/* ── Timeline ── */
+.vid-timeline-container {
+  width: 100%;
+  padding: 12px 0 4px;
+}
+.vid-timeline {
+  position: relative;
+  width: 100%;
+  height: 32px;
+  cursor: pointer;
+  user-select: none;
+}
+.vid-timeline-bar {
+  position: absolute;
+  top: 12px;
+  left: 0;
+  right: 0;
+  height: 8px;
+  background: var(--input-bg);
+  border-radius: 4px;
+  border: 1px solid var(--input-border);
+}
+.vid-trim-region {
+  position: absolute;
+  top: 12px;
+  height: 8px;
+  background: var(--accent-dim);
+  border-radius: 4px;
+  left: 0;
+  right: 0;
+}
+.vid-handle {
+  position: absolute;
+  top: 4px;
+  width: 10px;
+  height: 24px;
+  background: var(--accent);
+  border-radius: 3px;
+  cursor: ew-resize;
+  z-index: 2;
+  transition: background 0.15s ease;
+}
+.vid-handle:hover {
+  background: var(--accent-hover);
+}
+.vid-handle-left {
+  left: -5px;
+}
+.vid-handle-right {
+  right: -5px;
+}
+.vid-playhead {
+  position: absolute;
+  top: 6px;
+  width: 2px;
+  height: 20px;
+  background: var(--text-main);
+  border-radius: 1px;
+  z-index: 3;
+  pointer-events: none;
+  left: 0;
+}
+
+/* ── Controls ── */
+.vid-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  width: 100%;
+}
+.vid-play-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all var(--transition);
+}
+.vid-play-btn:hover {
+  background: var(--accent-hover);
+}
+.vid-play-btn svg.hidden { display: none; }
+.vid-time-display {
+  font-size: 0.82rem;
+  font-family: 'Courier New', monospace;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.vid-trim-info {
+  font-size: 0.78rem;
+  color: var(--accent);
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* ── Sidebar ── */
+.vid-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.vid-settings {
+  background: var(--surface-color);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.vid-settings-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  margin: 0 0 14px;
+  color: var(--text-main);
+}
+.vid-settings-group { margin-bottom: 14px; }
+.vid-settings-group:last-child { margin-bottom: 0; }
+
+/* Trim time inputs */
+.vid-trim-inputs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.vid-time-label {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.vid-time-label span {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.vid-time-input {
+  padding: 7px 8px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg);
+  color: var(--text-main);
+  font-size: 0.82rem;
+  font-family: 'Courier New', monospace;
+  width: 100%;
+}
+.vid-time-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+  outline: none;
+}
+
+/* Progress bar for subtitle generation */
+.vid-generate-progress {
+  margin-top: 6px;
+}
+.vid-generate-progress.hidden { display: none; }
+.vid-progress-bar {
+  width: 100%;
+  height: 6px;
+  background: var(--input-bg);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+.vid-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  width: 0%;
+  transition: width 0.3s ease;
+}
+.vid-progress-text {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+/* Action button */
+.vid-download-btn {
+  width: 100%;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 50px;
+  background: var(--accent);
+  color: white;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  letter-spacing: 0.3px;
+  box-shadow: 0 4px 16px var(--accent-dim);
+  transition: all var(--transition);
+}
+.vid-download-btn:hover:not(.disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px var(--accent-dim);
+}
+.vid-download-btn.disabled {
+  filter: grayscale(1) opacity(0.5);
+  pointer-events: none;
+}
+
+/* =========================================
    10. RESPONSIVE
    ========================================= */
 @media only screen and (max-width: 800px) {
@@ -1828,4 +2139,11 @@ body[data-tool="image"] #convert-button { display: none !important; }
   .img-sidebar { width: 100%; }
   #img-canvas { width: 100%; height: auto; aspect-ratio: 1; }
   #img-workspace { width: 100%; }
+
+  /* Video editor responsive */
+  #vid-layout { flex-direction: column; align-items: center; }
+  #vid-canvas-col { width: 100%; }
+  .vid-sidebar { width: 100%; }
+  #vid-canvas { width: 100%; height: auto; aspect-ratio: 16/9; }
+  #vid-workspace { width: 100%; }
 }

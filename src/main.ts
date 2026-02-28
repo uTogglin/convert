@@ -6,6 +6,8 @@ import JSZip from "jszip";
 import { gzip as pakoGzip } from "pako";
 import { createTar } from "./handlers/archive.js";
 import { applyFileCompression } from "./compress.js";
+import { processVideo, probeVideoInfo, extractSubtitles } from "./video-editor.js";
+import { generateSubtitles } from "./subtitle-generator.js";
 
 // ── In-app console log capture ─────────────────────────────────────────────
 interface AppLogEntry { level: "error" | "warn" | "info"; msg: string; time: string; }
@@ -163,6 +165,21 @@ let imgOriginalUrls: Map<number, string> = new Map();
 let imgProcessedUrls: Map<number, string> = new Map();
 let imgShowAfter: boolean = false;
 
+/** Video editor state */
+let vidFile: File | null = null;
+let vidDuration: number = 0;
+let vidTrimStart: number = 0;
+let vidTrimEnd: number = 0;
+let vidRemoveAudio: boolean = false;
+let vidRemoveSubtitles: boolean = false;
+let vidHasAudio: boolean = false;
+let vidHasSubtitles: boolean = false;
+let vidSubtitleCount: number = 0;
+let vidProcessedData: FileData | null = null;
+let vidObjectUrl: string | null = null;
+let vidProcessedUrl: string | null = null;
+let vidIsProcessing: boolean = false;
+
 /** Returns the broad media category from a file's MIME type */
 function getMediaCategory(file: File): string {
   return file.type.split("/")[0] || "unknown";
@@ -262,18 +279,45 @@ const ui = {
   imgRescaleWidthInput: document.querySelector("#img-rescale-width") as HTMLInputElement,
   imgRescaleHeightInput: document.querySelector("#img-rescale-height") as HTMLInputElement,
   imgRescaleLockInput: document.querySelector("#img-rescale-lock-ratio") as HTMLInputElement,
+  // Video editor UI
+  vidCanvas: document.querySelector("#vid-canvas") as HTMLDivElement,
+  vidDropPrompt: document.querySelector("#vid-drop-prompt") as HTMLDivElement,
+  vidPreview: document.querySelector("#vid-preview") as HTMLVideoElement,
+  vidWorkspace: document.querySelector("#vid-workspace") as HTMLDivElement,
+  vidPlayBtn: document.querySelector("#vid-play-btn") as HTMLButtonElement,
+  vidTimeDisplay: document.querySelector("#vid-time-display") as HTMLSpanElement,
+  vidTrimInfo: document.querySelector("#vid-trim-info") as HTMLSpanElement,
+  vidTimeline: document.querySelector(".vid-timeline") as HTMLDivElement,
+  vidTrimRegion: document.querySelector(".vid-trim-region") as HTMLDivElement,
+  vidHandleLeft: document.querySelector(".vid-handle-left") as HTMLDivElement,
+  vidHandleRight: document.querySelector(".vid-handle-right") as HTMLDivElement,
+  vidPlayhead: document.querySelector(".vid-playhead") as HTMLDivElement,
+  vidTrimStartInput: document.querySelector("#vid-trim-start") as HTMLInputElement,
+  vidTrimEndInput: document.querySelector("#vid-trim-end") as HTMLInputElement,
+  vidTrimReset: document.querySelector("#vid-trim-reset") as HTMLButtonElement,
+  vidRemoveAudioToggle: document.querySelector("#vid-remove-audio") as HTMLButtonElement,
+  vidExtractSubs: document.querySelector("#vid-extract-subs") as HTMLButtonElement,
+  vidRemoveSubsToggle: document.querySelector("#vid-remove-subs") as HTMLButtonElement,
+  vidGenerateSubs: document.querySelector("#vid-generate-subs") as HTMLButtonElement,
+  vidGenerateProgress: document.querySelector("#vid-generate-progress") as HTMLDivElement,
+  vidProgressFill: document.querySelector(".vid-progress-fill") as HTMLDivElement,
+  vidProgressText: document.querySelector(".vid-progress-text") as HTMLSpanElement,
+  vidDownloadBtn: document.querySelector("#vid-download-btn") as HTMLButtonElement,
+  vidFileInput: document.querySelector("#vid-file-input") as HTMLInputElement,
 };
 
 // ── Home page / tool navigation ──────────────────────────────────────────────
 /** Which tool view is active, or null when on the home page */
-let activeTool: "convert" | "compress" | "image" | null = null;
+let activeTool: "convert" | "compress" | "image" | "video" | null = null;
 
 const compressPage = document.querySelector("#compress-page") as HTMLElement;
 const imagePage = document.querySelector("#image-page") as HTMLElement;
+const videoPage = document.querySelector("#video-page") as HTMLElement;
 
 function showHomePage() {
-  // Clean up image tools state when navigating away
+  // Clean up tool state when navigating away
   if (activeTool === "image") imgResetState();
+  if (activeTool === "video") vidResetState();
   activeTool = null;
   document.body.classList.add("tool-view-hidden");
   document.body.removeAttribute("data-tool");
@@ -281,11 +325,13 @@ function showHomePage() {
   ui.backToHome.classList.add("hidden");
   compressPage.classList.add("hidden");
   imagePage.classList.add("hidden");
+  videoPage.classList.add("hidden");
 }
 
-function showToolView(tool: "convert" | "compress" | "image") {
-  // Clean up image tools state when switching away
+function showToolView(tool: "convert" | "compress" | "image" | "video") {
+  // Clean up tool state when switching away
   if (activeTool === "image" && tool !== "image") imgResetState();
+  if (activeTool === "video" && tool !== "video") vidResetState();
   activeTool = tool;
   document.body.classList.remove("tool-view-hidden");
   document.body.setAttribute("data-tool", tool);
@@ -294,6 +340,7 @@ function showToolView(tool: "convert" | "compress" | "image") {
 
   compressPage.classList.add("hidden");
   imagePage.classList.add("hidden");
+  videoPage.classList.add("hidden");
 
   if (tool === "compress") {
     compressPage.classList.remove("hidden");
@@ -305,6 +352,8 @@ function showToolView(tool: "convert" | "compress" | "image") {
   } else if (tool === "image") {
     imagePage.classList.remove("hidden");
     syncImageSettingsUI();
+  } else if (tool === "video") {
+    videoPage.classList.remove("hidden");
   }
   updateProcessButton();
 }
@@ -318,7 +367,7 @@ ui.backToHome.addEventListener("click", showHomePage);
 // Home card clicks
 for (const card of document.querySelectorAll<HTMLButtonElement>(".home-card")) {
   card.addEventListener("click", () => {
-    const tool = card.dataset.tool as "convert" | "compress" | "image";
+    const tool = card.dataset.tool as "convert" | "compress" | "image" | "video";
     if (tool) showToolView(tool);
   });
 }
@@ -337,7 +386,7 @@ function openSettings(panel?: string) {
     sidebar.classList.add("hidden");
     ui.settingsModal.classList.add("sm-no-sidebar");
     // Build a simple tab bar for the two panels
-    const toolPanel = activeTool === "compress" ? "compress" : activeTool === "image" ? "image" : "convert";
+    const toolPanel = activeTool === "compress" ? "compress" : activeTool === "image" ? "image" : activeTool === "video" ? "video" : "convert";
     switchSettingsPanel(panel || toolPanel);
     // Show only relevant nav items
     smNavBtns.forEach(b => {
@@ -745,8 +794,8 @@ function presentQueueGroup(index: number) {
 // the window as a drag-and-drop event, and to the clipboard paste event.
 ui.fileInput.addEventListener("change", fileSelectHandler);
 window.addEventListener("drop", (e) => {
-  // On image page, let the image tools handle drops
-  if (activeTool === "image") return;
+  // On image/video page, let those tools handle drops
+  if (activeTool === "image" || activeTool === "video") return;
   fileSelectHandler(e);
 });
 window.addEventListener("dragover", e => e.preventDefault());
@@ -755,6 +804,14 @@ window.addEventListener("paste", (e) => {
   if (activeTool === "image" && e.clipboardData?.files.length) {
     e.preventDefault();
     imgLoadFiles(Array.from(e.clipboardData.files));
+    return;
+  }
+  // On video page, redirect paste to video tools
+  if (activeTool === "video" && e.clipboardData?.files.length) {
+    e.preventDefault();
+    const files = Array.from(e.clipboardData.files);
+    const videoFile = files.find(f => f.type.startsWith("video/"));
+    if (videoFile) vidLoadFile(videoFile);
     return;
   }
   fileSelectHandler(e);
@@ -1089,6 +1146,7 @@ if (ui.settingsToggle) {
       // Auto-select panel matching current tool page
       const panel = activeTool === "compress" ? "compress"
                   : activeTool === "image" ? "image"
+                  : activeTool === "video" ? "video"
                   : undefined;
       openSettings(panel);
     } else {
@@ -1941,7 +1999,8 @@ function getRedirectSuggestionHtml(files: FileData[]): string {
     return `<br><button class="popup-redirect-btn" data-redirect-tool="image">Continue to Image Tools &rarr;</button>`;
   }
   if (allVideos) {
-    return `<br><button class="popup-redirect-btn" data-redirect-tool="compress">Continue to Compress &rarr;</button>`;
+    return `<br><button class="popup-redirect-btn" data-redirect-tool="compress">Continue to Compress &rarr;</button>` +
+           `<br><button class="popup-redirect-btn" data-redirect-tool="video">Continue to Video Editor &rarr;</button>`;
   }
   return "";
 }
@@ -1950,14 +2009,14 @@ function getRedirectSuggestionHtml(files: FileData[]): string {
 function attachRedirectHandlers() {
   for (const btn of document.querySelectorAll<HTMLButtonElement>(".popup-redirect-btn[data-redirect-tool]")) {
     btn.addEventListener("click", () => {
-      const tool = btn.dataset.redirectTool as "image" | "compress";
+      const tool = btn.dataset.redirectTool as "image" | "compress" | "video";
       redirectToToolWithFiles(tool);
     });
   }
 }
 
 /** Navigate to a tool and load the last converted files as input */
-function redirectToToolWithFiles(tool: "image" | "compress") {
+function redirectToToolWithFiles(tool: "image" | "compress" | "video") {
   window.hidePopup();
   // Create File objects from the FileData
   const newFiles: File[] = lastConvertedFiles.map(f => {
@@ -1980,6 +2039,9 @@ function redirectToToolWithFiles(tool: "image" | "compress") {
     // Use image tools workspace
     imgResetState();
     imgLoadFiles(newFiles);
+  } else if (tool === "video") {
+    vidResetState();
+    if (newFiles.length > 0) vidLoadFile(newFiles[0]);
   } else {
     selectedFiles = newFiles;
     allUploadedFiles = newFiles;
@@ -2611,6 +2673,486 @@ ui.imgDownloadBtn?.addEventListener("click", () => {
 
 // Initialize compare labels
 imgUpdateCompareLabels();
+
+// ── Video Editor: Upload, Preview, Timeline, Processing ─────────────────────
+
+/** Format seconds as M:SS.mmm */
+function vidFormatTime(s: number): string {
+  if (!isFinite(s) || s < 0) return "0:00.000";
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${m}:${sec.toFixed(3).padStart(6, "0")}`;
+}
+
+/** Format seconds as M:SS for display */
+function vidFormatTimeShort(s: number): string {
+  if (!isFinite(s) || s < 0) return "0:00";
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${m}:${String(sec).padStart(2, "0")}`;
+}
+
+/** Parse time string (M:SS.mmm or M:SS) to seconds */
+function vidParseTime(str: string): number | null {
+  str = str.trim();
+  const match = str.match(/^(\d+):(\d+(?:\.\d+)?)$/);
+  if (!match) {
+    // Try just seconds
+    const n = parseFloat(str);
+    return isFinite(n) && n >= 0 ? n : null;
+  }
+  return parseInt(match[1]) * 60 + parseFloat(match[2]);
+}
+
+/** Update the timeline visuals based on trim state */
+function vidUpdateTimeline() {
+  if (!ui.vidTimeline || vidDuration <= 0) return;
+  const startPct = (vidTrimStart / vidDuration) * 100;
+  const endPct = (vidTrimEnd / vidDuration) * 100;
+  if (ui.vidTrimRegion) {
+    ui.vidTrimRegion.style.left = startPct + "%";
+    ui.vidTrimRegion.style.width = (endPct - startPct) + "%";
+  }
+}
+
+/** Update the playhead position */
+function vidUpdatePlayhead() {
+  if (!ui.vidPreview || !ui.vidPlayhead || vidDuration <= 0) return;
+  const pct = (ui.vidPreview.currentTime / vidDuration) * 100;
+  ui.vidPlayhead.style.left = pct + "%";
+}
+
+/** Determine if any edits are pending */
+function vidHasEdits(): boolean {
+  return vidTrimStart > 0.01 ||
+    (vidDuration > 0 && vidTrimEnd < vidDuration - 0.01) ||
+    vidRemoveAudio ||
+    vidRemoveSubtitles;
+}
+
+/** Update the action button state */
+function vidUpdateActionButton() {
+  if (!ui.vidDownloadBtn) return;
+  if (!vidFile) {
+    ui.vidDownloadBtn.textContent = "Process";
+    ui.vidDownloadBtn.classList.add("disabled");
+    return;
+  }
+  if (vidProcessedData) {
+    ui.vidDownloadBtn.textContent = "Download";
+    ui.vidDownloadBtn.classList.remove("disabled");
+  } else if (vidHasEdits()) {
+    ui.vidDownloadBtn.textContent = "Process";
+    ui.vidDownloadBtn.classList.remove("disabled");
+  } else {
+    ui.vidDownloadBtn.textContent = "Process";
+    ui.vidDownloadBtn.classList.add("disabled");
+  }
+}
+
+/** Update trim info display */
+function vidUpdateTrimInfo() {
+  if (!ui.vidTrimInfo || vidDuration <= 0) return;
+  if (vidTrimStart > 0.01 || vidTrimEnd < vidDuration - 0.01) {
+    const dur = vidTrimEnd - vidTrimStart;
+    ui.vidTrimInfo.textContent = `Trim: ${vidFormatTimeShort(dur)} of ${vidFormatTimeShort(vidDuration)}`;
+  } else {
+    ui.vidTrimInfo.textContent = "";
+  }
+}
+
+/** Load a video file into the editor */
+function vidLoadFile(file: File) {
+  // Clean up previous state
+  if (vidObjectUrl) URL.revokeObjectURL(vidObjectUrl);
+  if (vidProcessedUrl) URL.revokeObjectURL(vidProcessedUrl);
+  vidProcessedData = null;
+  vidProcessedUrl = null;
+  vidRemoveAudio = false;
+  vidRemoveSubtitles = false;
+  vidHasAudio = false;
+  vidHasSubtitles = false;
+  vidSubtitleCount = 0;
+
+  vidFile = file;
+  vidObjectUrl = URL.createObjectURL(file);
+
+  // Show preview
+  ui.vidCanvas?.classList.add("has-video");
+  ui.vidDropPrompt?.classList.add("hidden");
+  ui.vidPreview?.classList.remove("hidden");
+  if (ui.vidPreview) ui.vidPreview.src = vidObjectUrl;
+
+  // Reset toggle states in UI
+  ui.vidRemoveAudioToggle?.classList.remove("active");
+  ui.vidRemoveSubsToggle?.classList.remove("active");
+
+  // Probe for audio/subtitles in background
+  probeVideoInfo(file).then(info => {
+    vidHasAudio = info.hasAudio;
+    vidHasSubtitles = info.hasSubtitles;
+    vidSubtitleCount = info.subtitleCount;
+  }).catch(() => {});
+}
+
+/** Reset video editor state */
+function vidResetState() {
+  if (vidObjectUrl) URL.revokeObjectURL(vidObjectUrl);
+  if (vidProcessedUrl) URL.revokeObjectURL(vidProcessedUrl);
+  vidFile = null;
+  vidDuration = 0;
+  vidTrimStart = 0;
+  vidTrimEnd = 0;
+  vidRemoveAudio = false;
+  vidRemoveSubtitles = false;
+  vidHasAudio = false;
+  vidHasSubtitles = false;
+  vidSubtitleCount = 0;
+  vidProcessedData = null;
+  vidObjectUrl = null;
+  vidProcessedUrl = null;
+  vidIsProcessing = false;
+
+  if (ui.vidCanvas) ui.vidCanvas.classList.remove("has-video");
+  if (ui.vidDropPrompt) ui.vidDropPrompt.classList.remove("hidden");
+  if (ui.vidPreview) { ui.vidPreview.classList.add("hidden"); ui.vidPreview.src = ""; ui.vidPreview.pause(); }
+  if (ui.vidWorkspace) ui.vidWorkspace.classList.add("hidden");
+  if (ui.vidRemoveAudioToggle) ui.vidRemoveAudioToggle.classList.remove("active");
+  if (ui.vidRemoveSubsToggle) ui.vidRemoveSubsToggle.classList.remove("active");
+  if (ui.vidTrimStartInput) ui.vidTrimStartInput.value = "";
+  if (ui.vidTrimEndInput) ui.vidTrimEndInput.value = "";
+  if (ui.vidGenerateProgress) ui.vidGenerateProgress.classList.add("hidden");
+  vidUpdateActionButton();
+}
+
+// Video loadedmetadata: set duration, show workspace
+ui.vidPreview?.addEventListener("loadedmetadata", () => {
+  vidDuration = ui.vidPreview.duration;
+  vidTrimStart = 0;
+  vidTrimEnd = vidDuration;
+
+  if (ui.vidTrimStartInput) ui.vidTrimStartInput.value = vidFormatTime(0);
+  if (ui.vidTrimEndInput) ui.vidTrimEndInput.value = vidFormatTime(vidDuration);
+  if (ui.vidTimeDisplay) ui.vidTimeDisplay.textContent = `${vidFormatTimeShort(0)} / ${vidFormatTimeShort(vidDuration)}`;
+
+  ui.vidWorkspace?.classList.remove("hidden");
+  vidUpdateTimeline();
+  vidUpdateTrimInfo();
+  vidUpdateActionButton();
+});
+
+// Video timeupdate: update playhead and time display
+ui.vidPreview?.addEventListener("timeupdate", () => {
+  vidUpdatePlayhead();
+  if (ui.vidTimeDisplay) {
+    ui.vidTimeDisplay.textContent = `${vidFormatTimeShort(ui.vidPreview.currentTime)} / ${vidFormatTimeShort(vidDuration)}`;
+  }
+});
+
+// Play/pause button
+ui.vidPlayBtn?.addEventListener("click", () => {
+  if (!ui.vidPreview || !vidFile) return;
+  if (ui.vidPreview.paused) {
+    ui.vidPreview.play();
+  } else {
+    ui.vidPreview.pause();
+  }
+});
+
+ui.vidPreview?.addEventListener("play", () => {
+  const playIcon = ui.vidPlayBtn?.querySelector(".vid-icon-play");
+  const pauseIcon = ui.vidPlayBtn?.querySelector(".vid-icon-pause");
+  playIcon?.classList.add("hidden");
+  pauseIcon?.classList.remove("hidden");
+});
+
+ui.vidPreview?.addEventListener("pause", () => {
+  const playIcon = ui.vidPlayBtn?.querySelector(".vid-icon-play");
+  const pauseIcon = ui.vidPlayBtn?.querySelector(".vid-icon-pause");
+  playIcon?.classList.remove("hidden");
+  pauseIcon?.classList.add("hidden");
+});
+
+// Timeline click → seek
+ui.vidTimeline?.addEventListener("click", (e) => {
+  if (!ui.vidPreview || vidDuration <= 0) return;
+  const rect = ui.vidTimeline.getBoundingClientRect();
+  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  ui.vidPreview.currentTime = pct * vidDuration;
+  vidUpdatePlayhead();
+});
+
+// Handle drag for trim handles
+function vidSetupHandleDrag(handle: HTMLElement, isLeft: boolean) {
+  if (!handle) return;
+  handle.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    handle.setPointerCapture(e.pointerId);
+    const timeline = ui.vidTimeline;
+    if (!timeline || vidDuration <= 0) return;
+
+    const onMove = (me: PointerEvent) => {
+      const rect = timeline.getBoundingClientRect();
+      const pct = Math.max(0, Math.min(1, (me.clientX - rect.left) / rect.width));
+      const time = pct * vidDuration;
+
+      if (isLeft) {
+        vidTrimStart = Math.min(time, vidTrimEnd - 0.1);
+        if (ui.vidTrimStartInput) ui.vidTrimStartInput.value = vidFormatTime(vidTrimStart);
+      } else {
+        vidTrimEnd = Math.max(time, vidTrimStart + 0.1);
+        if (ui.vidTrimEndInput) ui.vidTrimEndInput.value = vidFormatTime(vidTrimEnd);
+      }
+
+      vidProcessedData = null;
+      if (vidProcessedUrl) { URL.revokeObjectURL(vidProcessedUrl); vidProcessedUrl = null; }
+      vidUpdateTimeline();
+      vidUpdateTrimInfo();
+      vidUpdateActionButton();
+    };
+
+    const onUp = () => {
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", onUp);
+    };
+
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", onUp);
+  });
+}
+vidSetupHandleDrag(ui.vidHandleLeft, true);
+vidSetupHandleDrag(ui.vidHandleRight, false);
+
+// Trim input fields
+ui.vidTrimStartInput?.addEventListener("change", () => {
+  const t = vidParseTime(ui.vidTrimStartInput.value);
+  if (t !== null && t >= 0 && t < vidTrimEnd) {
+    vidTrimStart = t;
+    vidProcessedData = null;
+    if (vidProcessedUrl) { URL.revokeObjectURL(vidProcessedUrl); vidProcessedUrl = null; }
+    vidUpdateTimeline();
+    vidUpdateTrimInfo();
+    vidUpdateActionButton();
+  }
+  ui.vidTrimStartInput.value = vidFormatTime(vidTrimStart);
+});
+
+ui.vidTrimEndInput?.addEventListener("change", () => {
+  const t = vidParseTime(ui.vidTrimEndInput.value);
+  if (t !== null && t > vidTrimStart && t <= vidDuration) {
+    vidTrimEnd = t;
+    vidProcessedData = null;
+    if (vidProcessedUrl) { URL.revokeObjectURL(vidProcessedUrl); vidProcessedUrl = null; }
+    vidUpdateTimeline();
+    vidUpdateTrimInfo();
+    vidUpdateActionButton();
+  }
+  ui.vidTrimEndInput.value = vidFormatTime(vidTrimEnd);
+});
+
+// Reset trim
+ui.vidTrimReset?.addEventListener("click", () => {
+  vidTrimStart = 0;
+  vidTrimEnd = vidDuration;
+  if (ui.vidTrimStartInput) ui.vidTrimStartInput.value = vidFormatTime(0);
+  if (ui.vidTrimEndInput) ui.vidTrimEndInput.value = vidFormatTime(vidDuration);
+  vidProcessedData = null;
+  if (vidProcessedUrl) { URL.revokeObjectURL(vidProcessedUrl); vidProcessedUrl = null; }
+  vidUpdateTimeline();
+  vidUpdateTrimInfo();
+  vidUpdateActionButton();
+});
+
+// Remove audio toggle
+ui.vidRemoveAudioToggle?.addEventListener("click", () => {
+  vidRemoveAudio = !vidRemoveAudio;
+  ui.vidRemoveAudioToggle.classList.toggle("active", vidRemoveAudio);
+  vidProcessedData = null;
+  if (vidProcessedUrl) { URL.revokeObjectURL(vidProcessedUrl); vidProcessedUrl = null; }
+  vidUpdateActionButton();
+});
+
+// Remove subtitles toggle
+ui.vidRemoveSubsToggle?.addEventListener("click", () => {
+  vidRemoveSubtitles = !vidRemoveSubtitles;
+  ui.vidRemoveSubsToggle.classList.toggle("active", vidRemoveSubtitles);
+  vidProcessedData = null;
+  if (vidProcessedUrl) { URL.revokeObjectURL(vidProcessedUrl); vidProcessedUrl = null; }
+  vidUpdateActionButton();
+});
+
+// Extract subtitles button
+ui.vidExtractSubs?.addEventListener("click", async () => {
+  if (!vidFile) return;
+  ui.vidExtractSubs.textContent = "Extracting...";
+  ui.vidExtractSubs.classList.add("disabled");
+  try {
+    const subs = await extractSubtitles(vidFile);
+    if (subs.length === 0) {
+      window.showPopup(
+        `<h2>No subtitles found</h2>` +
+        `<p>This video doesn't contain embedded subtitle tracks.</p>` +
+        `<button onclick="window.hidePopup()">OK</button>`
+      );
+    } else {
+      for (const sub of subs) {
+        const blob = new Blob([sub.bytes as BlobPart], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = sub.name;
+        link.click();
+        URL.revokeObjectURL(url);
+      }
+      window.showPopup(
+        `<h2>Extracted ${subs.length} subtitle track${subs.length > 1 ? "s" : ""}!</h2>` +
+        `<button onclick="window.hidePopup()">OK</button>`
+      );
+    }
+  } catch (e) {
+    console.error("Subtitle extraction error:", e);
+    window.showPopup(
+      `<h2>Extraction failed</h2>` +
+      `<p>${e instanceof Error ? e.message : String(e)}</p>` +
+      `<button onclick="window.hidePopup()">OK</button>`
+    );
+  } finally {
+    ui.vidExtractSubs.textContent = "Extract subtitles";
+    ui.vidExtractSubs.classList.remove("disabled");
+  }
+});
+
+// Generate subtitles button (Whisper AI)
+ui.vidGenerateSubs?.addEventListener("click", async () => {
+  if (!vidFile || vidIsProcessing) return;
+  vidIsProcessing = true;
+  ui.vidGenerateSubs.classList.add("disabled");
+  ui.vidGenerateProgress?.classList.remove("hidden");
+
+  try {
+    const result = await generateSubtitles(vidFile, (stage, pct) => {
+      if (ui.vidProgressFill) ui.vidProgressFill.style.width = pct + "%";
+      if (ui.vidProgressText) ui.vidProgressText.textContent = stage;
+    });
+
+    // Download the SRT file
+    const blob = new Blob([result.bytes as BlobPart], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = result.name;
+    link.click();
+    URL.revokeObjectURL(url);
+
+    window.showPopup(
+      `<h2>Subtitles generated!</h2>` +
+      `<p>Downloaded ${result.name}</p>` +
+      `<button onclick="window.hidePopup()">OK</button>`
+    );
+  } catch (e) {
+    console.error("Subtitle generation error:", e);
+    window.showPopup(
+      `<h2>Generation failed</h2>` +
+      `<p>${e instanceof Error ? e.message : String(e)}</p>` +
+      `<button onclick="window.hidePopup()">OK</button>`
+    );
+  } finally {
+    vidIsProcessing = false;
+    ui.vidGenerateSubs.classList.remove("disabled");
+    ui.vidGenerateProgress?.classList.add("hidden");
+  }
+});
+
+// Canvas click → file input (empty state only)
+ui.vidCanvas?.addEventListener("click", () => {
+  if (ui.vidCanvas.classList.contains("has-video")) return;
+  ui.vidFileInput?.click();
+});
+
+// Canvas drag-and-drop
+ui.vidCanvas?.addEventListener("dragover", (e) => e.preventDefault());
+ui.vidCanvas?.addEventListener("drop", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  if (e.dataTransfer?.files) {
+    const files = Array.from(e.dataTransfer.files);
+    const videoFile = files.find(f => f.type.startsWith("video/"));
+    if (videoFile) vidLoadFile(videoFile);
+  }
+});
+
+// File input change
+ui.vidFileInput?.addEventListener("change", () => {
+  const files = ui.vidFileInput.files;
+  if (files && files.length > 0) {
+    const videoFile = Array.from(files).find(f => f.type.startsWith("video/"));
+    if (videoFile) vidLoadFile(videoFile);
+    ui.vidFileInput.value = "";
+  }
+});
+
+// Action button: Process or Download
+ui.vidDownloadBtn?.addEventListener("click", async () => {
+  if (ui.vidDownloadBtn.classList.contains("disabled") || !vidFile) return;
+
+  if (vidProcessedData) {
+    // Download mode
+    const blob = new Blob([vidProcessedData.bytes as BlobPart], { type: "application/octet-stream" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = vidProcessedData.name;
+    link.click();
+    URL.revokeObjectURL(url);
+    return;
+  }
+
+  // Process mode
+  if (vidIsProcessing) return;
+  vidIsProcessing = true;
+  ui.vidDownloadBtn.textContent = "Processing...";
+  ui.vidDownloadBtn.classList.add("disabled");
+
+  try {
+    window.showPopup("<h2>Processing video...</h2><p>This may take a moment.</p>");
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+    const result = await processVideo(vidFile, {
+      trimStart: vidTrimStart,
+      trimEnd: vidTrimEnd,
+      removeAudio: vidRemoveAudio,
+      removeSubtitles: vidRemoveSubtitles,
+    }, (pct) => {
+      const popup = document.getElementById("popup");
+      if (popup) {
+        const p = popup.querySelector("p");
+        if (p) p.textContent = `Processing... ${pct}%`;
+      }
+    });
+
+    vidProcessedData = result;
+    if (vidProcessedUrl) URL.revokeObjectURL(vidProcessedUrl);
+    vidProcessedUrl = URL.createObjectURL(new Blob([result.bytes as BlobPart], { type: "video/mp4" }));
+
+    const sizeStr = formatFileSize(result.bytes.length);
+    window.showPopup(
+      `<h2>Video processed!</h2>` +
+      `<p>Output: ${result.name} (${sizeStr})</p>` +
+      `<button onclick="window.hidePopup()">OK</button>`
+    );
+  } catch (e) {
+    console.error("Video processing error:", e);
+    window.showPopup(
+      `<h2>Processing failed</h2>` +
+      `<p>${e instanceof Error ? e.message : String(e)}</p>` +
+      `<button onclick="window.hidePopup()">OK</button>`
+    );
+  } finally {
+    vidIsProcessing = false;
+    vidUpdateActionButton();
+  }
+});
 
 ui.convertButton.onclick = async function () {
 
