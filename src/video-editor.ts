@@ -45,6 +45,7 @@ export interface VideoProcessOptions {
   trimEnd?: number;
   removeAudio?: boolean;
   removeSubtitles?: boolean;
+  eqBands?: { freq: number; gain: number }[];
 }
 
 /**
@@ -55,9 +56,10 @@ export async function processVideo(
   options: VideoProcessOptions,
   onProgress?: (pct: number) => void,
 ): Promise<FileData> {
+  const hasEq = options.eqBands?.some(b => b.gain !== 0) ?? false;
   const hasEdits = (options.trimStart !== undefined && options.trimStart > 0) ||
     (options.trimEnd !== undefined && options.trimEnd < Infinity) ||
-    options.removeAudio || options.removeSubtitles;
+    options.removeAudio || options.removeSubtitles || hasEq;
 
   if (!hasEdits) {
     const buf = await file.arrayBuffer();
@@ -96,7 +98,19 @@ async function processWithFFmpeg(
     if (duration > 0) args.push("-t", String(duration));
   }
 
-  args.push("-c", "copy");
+  // Build EQ audio filter chain (only non-zero bands, only if not removing audio)
+  const eqActive = !options.removeAudio && options.eqBands?.some(b => b.gain !== 0);
+  if (eqActive) {
+    // Must re-encode audio for filters; video stays stream-copied
+    args.push("-c:v", "copy", "-c:a", "aac");
+    const filters = options.eqBands!
+      .filter(b => b.gain !== 0)
+      .map(b => `equalizer=f=${b.freq}:width_type=o:width=2:g=${b.gain}`)
+      .join(",");
+    args.push("-af", filters);
+  } else {
+    args.push("-c", "copy");
+  }
   if (options.removeAudio) args.push("-an");
   if (options.removeSubtitles) args.push("-sn");
 

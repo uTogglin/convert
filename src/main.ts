@@ -184,6 +184,8 @@ let vidSubStreams: SubtitleStreamInfo[] = [];
 let vidSubFile: File | null = null;
 let vidAddSubMux: boolean = false;
 let vidAddSubBurn: boolean = false;
+const vidEqFreqs = [60, 230, 910, 3600, 14000];
+let vidEqBands: number[] = [0, 0, 0, 0, 0];
 
 /** Returns the broad media category from a file's MIME type */
 function getMediaCategory(file: File): string {
@@ -320,6 +322,13 @@ const ui = {
   vidSubFileInput: document.querySelector("#vid-sub-file-input") as HTMLInputElement,
   vidGenLangSelect: document.querySelector("#vid-gen-lang") as HTMLSelectElement,
   vidGenModelSelect: document.querySelector("#vid-gen-model") as HTMLSelectElement,
+  vidEqCollapsible: document.querySelector("#vid-eq-collapsible") as HTMLDivElement,
+  vidEqToggle: document.querySelector("#vid-eq-toggle") as HTMLButtonElement,
+  vidEqSliders: document.querySelectorAll(".vid-eq-slider") as NodeListOf<HTMLInputElement>,
+  vidEqValues: document.querySelectorAll(".vid-eq-value") as NodeListOf<HTMLSpanElement>,
+  vidEqReset: document.querySelector("#vid-eq-reset") as HTMLButtonElement,
+  vidFullscreenBtn: document.querySelector("#vid-fullscreen-btn") as HTMLButtonElement,
+  vidCanvasCol: document.querySelector("#vid-canvas-col") as HTMLDivElement,
 };
 
 // ── Home page / tool navigation ──────────────────────────────────────────────
@@ -2744,6 +2753,7 @@ function vidHasEdits(): boolean {
     (vidDuration > 0 && vidTrimEnd < vidDuration - 0.01) ||
     vidRemoveAudio ||
     vidRemoveSubtitles ||
+    vidEqBands.some(g => g !== 0) ||
     (vidSubFile !== null && (vidAddSubMux || vidAddSubBurn));
 }
 
@@ -2808,9 +2818,12 @@ function vidLoadFile(file: File) {
   vidSubFile = null;
   vidAddSubMux = false;
   vidAddSubBurn = false;
+  vidEqBands = [0, 0, 0, 0, 0];
   vidSubStreams = [];
   if (ui.vidSubFileName) ui.vidSubFileName.textContent = "";
   if (ui.vidAddSubsCollapsible) ui.vidAddSubsCollapsible.classList.remove("open");
+  if (ui.vidEqCollapsible) ui.vidEqCollapsible.classList.remove("open");
+  ui.vidEqSliders?.forEach((s, i) => { s.value = "0"; if (ui.vidEqValues[i]) ui.vidEqValues[i].textContent = "0 dB"; });
 
   // Reset language dropdown
   if (ui.vidSubLangSelect) {
@@ -2868,11 +2881,14 @@ function vidResetState() {
   vidSubFile = null;
   vidAddSubMux = false;
   vidAddSubBurn = false;
+  vidEqBands = [0, 0, 0, 0, 0];
   vidSubStreams = [];
   if (ui.vidMuxToggle) ui.vidMuxToggle.classList.remove("active");
   if (ui.vidBurnToggle) ui.vidBurnToggle.classList.remove("active");
   if (ui.vidSubFileName) ui.vidSubFileName.textContent = "";
   if (ui.vidAddSubsCollapsible) ui.vidAddSubsCollapsible.classList.remove("open");
+  if (ui.vidEqCollapsible) ui.vidEqCollapsible.classList.remove("open");
+  ui.vidEqSliders?.forEach((s, i) => { s.value = "0"; if (ui.vidEqValues[i]) ui.vidEqValues[i].textContent = "0 dB"; });
   if (ui.vidSubLangSelect) ui.vidSubLangSelect.innerHTML = '<option value="all">All tracks</option>';
   vidUpdateActionButton();
 }
@@ -3136,6 +3152,54 @@ ui.vidAddSubsToggle?.addEventListener("click", () => {
   ui.vidAddSubsCollapsible?.classList.toggle("open");
 });
 
+// Collapsible EQ toggle
+ui.vidEqToggle?.addEventListener("click", () => {
+  ui.vidEqCollapsible?.classList.toggle("open");
+});
+
+// EQ slider handlers
+ui.vidEqSliders?.forEach((slider, i) => {
+  slider.addEventListener("input", () => {
+    const val = parseInt(slider.value);
+    vidEqBands[i] = val;
+    if (ui.vidEqValues[i]) {
+      ui.vidEqValues[i].textContent = (val > 0 ? "+" : "") + val + " dB";
+    }
+    vidProcessedData = null;
+    if (vidProcessedUrl) { URL.revokeObjectURL(vidProcessedUrl); vidProcessedUrl = null; }
+    vidUpdateActionButton();
+  });
+});
+
+// EQ reset button
+ui.vidEqReset?.addEventListener("click", () => {
+  vidEqBands = [0, 0, 0, 0, 0];
+  ui.vidEqSliders?.forEach((s, i) => {
+    s.value = "0";
+    if (ui.vidEqValues[i]) ui.vidEqValues[i].textContent = "0 dB";
+  });
+  vidProcessedData = null;
+  if (vidProcessedUrl) { URL.revokeObjectURL(vidProcessedUrl); vidProcessedUrl = null; }
+  vidUpdateActionButton();
+});
+
+// Fullscreen toggle
+ui.vidFullscreenBtn?.addEventListener("click", () => {
+  const col = ui.vidCanvasCol;
+  if (!col) return;
+  if (document.fullscreenElement) {
+    document.exitFullscreen();
+  } else {
+    (col.requestFullscreen?.() ?? (col as any).webkitRequestFullscreen?.());
+  }
+});
+
+document.addEventListener("fullscreenchange", () => {
+  const isFs = !!document.fullscreenElement;
+  ui.vidFullscreenBtn?.querySelector(".vid-icon-expand")?.classList.toggle("hidden", isFs);
+  ui.vidFullscreenBtn?.querySelector(".vid-icon-collapse")?.classList.toggle("hidden", !isFs);
+});
+
 // Choose subtitle file button
 ui.vidSubFileBtn?.addEventListener("click", () => {
   ui.vidSubFileInput?.click();
@@ -3236,9 +3300,10 @@ ui.vidDownloadBtn?.addEventListener("click", async () => {
     window.showPopup("<h2>Processing video...</h2><p>This may take a moment.</p>");
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
+    const hasEq = vidEqBands.some(g => g !== 0);
     const hasStandardEdits = vidTrimStart > 0.01 ||
       (vidDuration > 0 && vidTrimEnd < vidDuration - 0.01) ||
-      vidRemoveAudio || vidRemoveSubtitles;
+      vidRemoveAudio || vidRemoveSubtitles || hasEq;
     const hasSubAdd = vidSubFile && (vidAddSubMux || vidAddSubBurn);
 
     let result: FileData;
@@ -3249,6 +3314,7 @@ ui.vidDownloadBtn?.addEventListener("click", async () => {
         trimEnd: vidTrimEnd,
         removeAudio: vidRemoveAudio,
         removeSubtitles: vidRemoveSubtitles,
+        eqBands: hasEq ? vidEqFreqs.map((freq, i) => ({ freq, gain: vidEqBands[i] })) : undefined,
       }, (pct) => {
         const popup = document.getElementById("popup");
         if (popup) {

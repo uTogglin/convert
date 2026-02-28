@@ -475,6 +475,10 @@
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
               <input type="range" id="vid-volume-slider" class="vid-volume-slider" min="0" max="1" step="0.05" value="1">
             </div>
+            <button id="vid-fullscreen-btn" class="vid-control-btn" title="Fullscreen">
+              <svg class="vid-icon-expand" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
+              <svg class="vid-icon-collapse hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"></polyline><polyline points="20 10 14 10 14 4"></polyline><line x1="14" y1="10" x2="21" y2="3"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
+            </button>
             <span id="vid-trim-info" class="vid-trim-info"></span>
           </div>
         </div>
@@ -506,6 +510,42 @@
               <span class="sm-switch-label">Remove audio</span>
               <button id="vid-remove-audio" class="sm-switch" role="switch"></button>
             </label>
+            <div class="vid-collapsible" id="vid-eq-collapsible">
+              <button id="vid-eq-toggle" class="vid-collapsible-header">
+                <span class="vid-collapsible-arrow">&#9656;</span>
+                <span>Equalizer</span>
+              </button>
+              <div id="vid-eq-body" class="vid-collapsible-body">
+                <div class="vid-eq-bands">
+                  <div class="vid-eq-band">
+                    <span class="vid-eq-label">60 Hz</span>
+                    <input type="range" class="vid-eq-slider" data-freq="60" min="-12" max="12" step="1" value="0">
+                    <span class="vid-eq-value">0 dB</span>
+                  </div>
+                  <div class="vid-eq-band">
+                    <span class="vid-eq-label">230 Hz</span>
+                    <input type="range" class="vid-eq-slider" data-freq="230" min="-12" max="12" step="1" value="0">
+                    <span class="vid-eq-value">0 dB</span>
+                  </div>
+                  <div class="vid-eq-band">
+                    <span class="vid-eq-label">910 Hz</span>
+                    <input type="range" class="vid-eq-slider" data-freq="910" min="-12" max="12" step="1" value="0">
+                    <span class="vid-eq-value">0 dB</span>
+                  </div>
+                  <div class="vid-eq-band">
+                    <span class="vid-eq-label">3.6k</span>
+                    <input type="range" class="vid-eq-slider" data-freq="3600" min="-12" max="12" step="1" value="0">
+                    <span class="vid-eq-value">0 dB</span>
+                  </div>
+                  <div class="vid-eq-band">
+                    <span class="vid-eq-label">14k</span>
+                    <input type="range" class="vid-eq-slider" data-freq="14000" min="-12" max="12" step="1" value="0">
+                    <span class="vid-eq-value">0 dB</span>
+                  </div>
+                </div>
+                <button id="vid-eq-reset" class="sm-btn">Reset EQ</button>
+              </div>
+            </div>
           </div>
 
           <div class="vid-settings-group">

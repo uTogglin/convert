@@ -2217,6 +2217,110 @@ body[data-tool="image"] #convert-button { display: none !important; }
   margin-bottom: 0;
 }
 
+/* ── EQ band sliders ── */
+.vid-eq-bands {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.vid-eq-band {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.vid-eq-label {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  width: 42px;
+  flex-shrink: 0;
+  text-align: right;
+  font-weight: 500;
+}
+.vid-eq-slider {
+  flex: 1;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--input-border);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+.vid-eq-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+.vid-eq-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  cursor: pointer;
+}
+.vid-eq-value {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  width: 38px;
+  flex-shrink: 0;
+  text-align: left;
+  font-family: 'Courier New', monospace;
+}
+
+/* ── Fullscreen button ── */
+.vid-control-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.18s ease;
+  padding: 0;
+}
+.vid-control-btn:hover {
+  background: var(--input-bg);
+  color: var(--accent);
+}
+
+/* ── Fullscreen mode ── */
+#vid-canvas-col:fullscreen,
+#vid-canvas-col:-webkit-full-screen {
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+#vid-canvas-col:fullscreen #vid-canvas,
+#vid-canvas-col:-webkit-full-screen #vid-canvas {
+  width: 100%;
+  height: auto;
+  max-height: calc(100vh - 80px);
+  aspect-ratio: auto;
+}
+#vid-canvas-col:fullscreen #vid-preview,
+#vid-canvas-col:-webkit-full-screen #vid-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+#vid-canvas-col:fullscreen #vid-workspace,
+#vid-canvas-col:-webkit-full-screen #vid-workspace {
+  width: 100%;
+  max-width: 100%;
+  padding: 0 16px 8px;
+}
+
 /* =========================================
    10. RESPONSIVE
    ========================================= */
