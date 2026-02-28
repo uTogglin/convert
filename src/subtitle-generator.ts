@@ -8,7 +8,7 @@ let detectedDevice: "webgpu" | "wasm" | null = null;
 const MODEL_IDS: Record<string, string> = {
   base: "onnx-community/whisper-base",
   small: "onnx-community/whisper-small",
-  medium: "onnx-community/whisper-medium",
+  medium: "Xenova/whisper-medium",
   "large-v3-turbo": "onnx-community/whisper-large-v3-turbo",
 };
 
