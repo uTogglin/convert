@@ -1,8 +1,4 @@
 import type { FileData } from "./FormatHandler.ts";
-import {
-  Input, Output, Conversion, BufferSource, BufferTarget,
-  Mp4OutputFormat, ALL_FORMATS,
-} from "mediabunny";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import type { LogEvent } from "@ffmpeg/ffmpeg";
 
@@ -59,74 +55,19 @@ export async function processVideo(
   options: VideoProcessOptions,
   onProgress?: (pct: number) => void,
 ): Promise<FileData> {
-  const { trimStart, trimEnd, removeAudio, removeSubtitles } = options;
-  const hasTrim = trimStart !== undefined && trimEnd !== undefined && (trimStart > 0 || trimEnd < Infinity);
-  const needsMediaBunny = hasTrim || removeAudio;
-  const needsFFmpeg = removeSubtitles;
+  const hasEdits = (options.trimStart !== undefined && options.trimStart > 0) ||
+    (options.trimEnd !== undefined && options.trimEnd < Infinity) ||
+    options.removeAudio || options.removeSubtitles;
 
-  let resultBytes: Uint8Array;
-  let resultName = file.name;
+  if (!hasEdits) {
+    const buf = await file.arrayBuffer();
+    return { name: file.name, bytes: new Uint8Array(buf) };
+  }
+
   const baseName = file.name.replace(/\.[^.]+$/, "");
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "mp4";
-
-  if (needsMediaBunny) {
-    // Try MediaBunny first for trim + audio removal (frame-accurate)
-    try {
-      const buf = await file.arrayBuffer();
-      const target = new BufferTarget();
-      const input = new Input({ formats: ALL_FORMATS, source: new BufferSource(buf) });
-      const output = new Output({ format: new Mp4OutputFormat(), target });
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const convOpts: any = { input, output };
-
-      if (hasTrim) {
-        convOpts.trim = { start: trimStart, end: trimEnd };
-      }
-      if (removeAudio) {
-        convOpts.audio = { discard: true };
-      }
-
-      const conversion = await Conversion.init(convOpts);
-
-      if (conversion.isValid) {
-        conversion.onProgress = (p: number) => onProgress?.(Math.round(p * 100));
-        await conversion.execute();
-        resultBytes = new Uint8Array(target.buffer!);
-        resultName = baseName + "_edited.mp4";
-      } else {
-        // Fallback to FFmpeg
-        resultBytes = await processWithFFmpeg(file, options, onProgress);
-        resultName = baseName + "_edited." + ext;
-      }
-    } catch {
-      // Fallback to FFmpeg
-      resultBytes = await processWithFFmpeg(file, options, onProgress);
-      resultName = baseName + "_edited." + ext;
-    }
-  } else if (needsFFmpeg) {
-    resultBytes = await processWithFFmpeg(file, options, onProgress);
-    resultName = baseName + "_edited." + ext;
-  } else {
-    // No processing needed, return as-is
-    const buf = await file.arrayBuffer();
-    resultBytes = new Uint8Array(buf);
-  }
-
-  // If we used MediaBunny but also need subtitle removal, run FFmpeg on the result
-  if (needsMediaBunny && needsFFmpeg && resultBytes) {
-    const ff = await getFFmpeg();
-    const tmpIn = "vid_sub_in." + ext;
-    const tmpOut = "vid_sub_out." + ext;
-    await ff.writeFile(tmpIn, resultBytes);
-    await ffExec(["-i", tmpIn, "-c", "copy", "-sn", tmpOut]);
-    const data = await ff.readFile(tmpOut);
-    resultBytes = data instanceof Uint8Array ? data : new TextEncoder().encode(data as string);
-    await ff.deleteFile(tmpIn);
-    await ff.deleteFile(tmpOut);
-  }
-
-  return { name: resultName, bytes: resultBytes };
+  const resultBytes = await processWithFFmpeg(file, options, onProgress);
+  return { name: baseName + "_edited." + ext, bytes: resultBytes };
 }
 
 /** FFmpeg fallback for all operations */
