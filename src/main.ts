@@ -514,8 +514,9 @@ for (const btn of smNavBtns) {
   });
 }
 
-// Close on overlay click or Escape
+// Close on overlay click, close button, or Escape
 ui.settingsOverlay.addEventListener("click", closeSettings);
+document.getElementById("settings-close-btn")?.addEventListener("click", closeSettings);
 window.addEventListener("keydown", e => {
   if (e.key === "Escape") {
     if (!ui.settingsModal.classList.contains("hidden")) closeSettings();
@@ -1273,6 +1274,7 @@ const logsPopoutClose = document.getElementById("logs-popout-close");
 if (logsPopoutClose) {
   logsPopoutClose.addEventListener("click", closeLogs);
 }
+document.getElementById("logs-close-mobile")?.addEventListener("click", closeLogs);
 
 // ──── Accent Color Picker ────
 const customSlot1 = document.getElementById("custom-slot-1") as HTMLButtonElement;
