@@ -167,6 +167,13 @@ let imgProcessedUrls: Map<number, string> = new Map();
 let imgShowAfter: boolean = false;
 
 /** Video editor state */
+let vidFiles: File[] = [];
+let vidActiveIndex: number = 0;
+let vidProcessedResults: Map<number, FileData> = new Map();
+let vidApplyAll: boolean = (() => {
+  try { return localStorage.getItem("convert-vid-apply-all") === "true"; } catch { return false; }
+})();
+let vidThumbUrls: Map<number, string> = new Map();
 let vidFile: File | null = null;
 let vidDuration: number = 0;
 let vidTrimStart: number = 0;
@@ -376,6 +383,11 @@ const ui = {
   vidPrefBurn: document.querySelector("#vid-pref-burn") as HTMLButtonElement,
   vidPrefGenModel: document.querySelector("#vid-pref-gen-model") as HTMLSelectElement,
   vidPrefGenLang: document.querySelector("#vid-pref-gen-lang") as HTMLSelectElement,
+  // Multi-video filmstrip
+  vidFilmstrip: document.querySelector("#vid-filmstrip") as HTMLDivElement,
+  vidFilmstripGrid: document.querySelector("#vid-filmstrip-grid") as HTMLDivElement,
+  vidAddMore: document.querySelector("#vid-add-more") as HTMLButtonElement,
+  vidApplyAllToggle: document.querySelector("#vid-apply-all-toggle") as HTMLButtonElement,
 };
 
 // ── Home page / tool navigation ──────────────────────────────────────────────
@@ -881,9 +893,7 @@ window.addEventListener("paste", (e) => {
   // On video page, redirect paste to video tools
   if (activeTool === "video" && e.clipboardData?.files.length) {
     e.preventDefault();
-    const files = Array.from(e.clipboardData.files);
-    const videoFile = files.find(f => f.type.startsWith("video/"));
-    if (videoFile) vidLoadFile(videoFile);
+    vidLoadFiles(Array.from(e.clipboardData.files));
     return;
   }
   fileSelectHandler(e);
@@ -2113,7 +2123,7 @@ function redirectToToolWithFiles(tool: "image" | "compress" | "video") {
     imgLoadFiles(newFiles);
   } else if (tool === "video") {
     vidResetState();
-    if (newFiles.length > 0) vidLoadFile(newFiles[0]);
+    if (newFiles.length > 0) vidLoadFiles(newFiles);
   } else {
     selectedFiles = newFiles;
     allUploadedFiles = newFiles;
@@ -2806,6 +2816,79 @@ function vidHasEdits(): boolean {
     (vidSubFile !== null && (vidAddSubMux || vidAddSubBurn));
 }
 
+/** Load multiple video files into the editor */
+function vidLoadFiles(files: File[]) {
+  const videoFiles = files.filter(f => f.type.startsWith("video/"));
+  if (videoFiles.length === 0) return;
+
+  // Deduplicate by name|size
+  const existing = new Set(vidFiles.map(f => `${f.name}|${f.size}`));
+  const merged = [...vidFiles, ...videoFiles.filter(f => !existing.has(`${f.name}|${f.size}`))];
+  vidFiles = merged;
+
+  // Clear processed results for fresh processing
+  vidProcessedResults.clear();
+
+  vidRenderFilmstrip();
+  vidShowVideo(vidFiles.length > 1 ? vidFiles.length - 1 : 0);
+
+  // Show filmstrip when we have files
+  if (vidFiles.length > 0) {
+    ui.vidFilmstrip?.classList.remove("hidden");
+  }
+}
+
+/** Show video at index in the player */
+function vidShowVideo(index: number) {
+  if (index < 0 || index >= vidFiles.length) return;
+  vidActiveIndex = index;
+
+  // Load the file (this resets vidProcessedData/vidProcessedUrl)
+  vidLoadFile(vidFiles[index]);
+
+  // Restore processed data if this video was already processed
+  if (vidProcessedResults.has(index)) {
+    vidProcessedData = vidProcessedResults.get(index)!;
+    if (vidProcessedUrl) URL.revokeObjectURL(vidProcessedUrl);
+    vidProcessedUrl = URL.createObjectURL(new Blob([vidProcessedData.bytes as BlobPart], { type: "video/mp4" }));
+  }
+
+  // Update filmstrip active state
+  const thumbs = ui.vidFilmstripGrid?.querySelectorAll(".vid-filmstrip-thumb");
+  thumbs?.forEach((t, i) => t.classList.toggle("active", i === index));
+
+  vidUpdateActionButton();
+}
+
+/** Render filmstrip thumbnails */
+function vidRenderFilmstrip() {
+  if (!ui.vidFilmstripGrid) return;
+  ui.vidFilmstripGrid.innerHTML = "";
+
+  // Revoke old thumbnail URLs
+  for (const url of vidThumbUrls.values()) URL.revokeObjectURL(url);
+  vidThumbUrls.clear();
+
+  for (let i = 0; i < vidFiles.length; i++) {
+    const thumb = document.createElement("div");
+    thumb.className = "vid-filmstrip-thumb" + (i === vidActiveIndex ? " active" : "");
+
+    const vid = document.createElement("video");
+    const url = URL.createObjectURL(vidFiles[i]);
+    vidThumbUrls.set(i, url);
+    vid.src = url;
+    vid.muted = true;
+    vid.preload = "metadata";
+    // Seek to 1s for a poster-like frame
+    vid.addEventListener("loadedmetadata", () => { vid.currentTime = Math.min(1, vid.duration * 0.1); });
+    thumb.appendChild(vid);
+
+    const idx = i;
+    thumb.addEventListener("click", () => vidShowVideo(idx));
+    ui.vidFilmstripGrid.appendChild(thumb);
+  }
+}
+
 /** Update the action button state */
 function vidUpdateActionButton() {
   if (!ui.vidDownloadBtn) return;
@@ -2814,14 +2897,18 @@ function vidUpdateActionButton() {
     ui.vidDownloadBtn.classList.add("disabled");
     return;
   }
-  if (vidProcessedData) {
+  const multi = vidApplyAll && vidFiles.length > 1;
+  if (multi && vidProcessedResults.size === vidFiles.length) {
+    ui.vidDownloadBtn.textContent = "Download All";
+    ui.vidDownloadBtn.classList.remove("disabled");
+  } else if (vidProcessedData) {
     ui.vidDownloadBtn.textContent = "Download";
     ui.vidDownloadBtn.classList.remove("disabled");
   } else if (vidHasEdits()) {
-    ui.vidDownloadBtn.textContent = "Process";
+    ui.vidDownloadBtn.textContent = multi ? "Process All" : "Process";
     ui.vidDownloadBtn.classList.remove("disabled");
   } else {
-    ui.vidDownloadBtn.textContent = "Process";
+    ui.vidDownloadBtn.textContent = multi ? "Process All" : "Process";
     ui.vidDownloadBtn.classList.add("disabled");
   }
 }
@@ -2934,6 +3021,16 @@ function vidLoadFile(file: File) {
 function vidResetState() {
   if (vidObjectUrl) URL.revokeObjectURL(vidObjectUrl);
   if (vidProcessedUrl) URL.revokeObjectURL(vidProcessedUrl);
+
+  // Clear multi-video state
+  vidFiles = [];
+  vidActiveIndex = 0;
+  vidProcessedResults.clear();
+  for (const url of vidThumbUrls.values()) URL.revokeObjectURL(url);
+  vidThumbUrls.clear();
+  if (ui.vidFilmstrip) ui.vidFilmstrip.classList.add("hidden");
+  if (ui.vidFilmstripGrid) ui.vidFilmstripGrid.innerHTML = "";
+
   vidFile = null;
   vidDuration = 0;
   vidTrimStart = 0;
@@ -3896,8 +3993,7 @@ ui.vidCanvas?.addEventListener("drop", (e) => {
   e.stopPropagation();
   if (e.dataTransfer?.files) {
     const files = Array.from(e.dataTransfer.files);
-    const videoFile = files.find(f => f.type.startsWith("video/"));
-    if (videoFile) vidLoadFile(videoFile);
+    vidLoadFiles(files);
   }
 });
 
@@ -3905,18 +4001,120 @@ ui.vidCanvas?.addEventListener("drop", (e) => {
 ui.vidFileInput?.addEventListener("change", () => {
   const files = ui.vidFileInput.files;
   if (files && files.length > 0) {
-    const videoFile = Array.from(files).find(f => f.type.startsWith("video/"));
-    if (videoFile) vidLoadFile(videoFile);
+    vidLoadFiles(Array.from(files));
     ui.vidFileInput.value = "";
   }
 });
+
+// Add more button
+ui.vidAddMore?.addEventListener("click", () => {
+  ui.vidFileInput?.click();
+});
+
+// Apply-all toggle
+if (ui.vidApplyAllToggle) {
+  ui.vidApplyAllToggle.classList.toggle("active", vidApplyAll);
+  ui.vidApplyAllToggle.addEventListener("click", () => {
+    vidApplyAll = !vidApplyAll;
+    ui.vidApplyAllToggle.classList.toggle("active", vidApplyAll);
+    try { localStorage.setItem("convert-vid-apply-all", String(vidApplyAll)); } catch {}
+    vidUpdateActionButton();
+  });
+}
+
+/** Process a single video file with current settings, returning the result */
+async function vidProcessSingleFile(file: File, label: string): Promise<FileData> {
+  const hasEq = vidEqBands.some(g => g !== 0);
+  const hasCrop = vidCropEnabled;
+  const hasStandardEdits = vidTrimStart > 0.01 ||
+    (vidDuration > 0 && vidTrimEnd < vidDuration - 0.01) ||
+    vidRemoveAudio || vidRemoveSubtitles || hasEq || hasCrop;
+  const hasSubAdd = vidSubFile && (vidAddSubMux || vidAddSubBurn);
+  const hasMerge = vidMergeFiles.length > 0;
+
+  let result: FileData;
+
+  if (hasStandardEdits) {
+    result = await processVideo(file, {
+      trimStart: vidTrimStart,
+      trimEnd: vidTrimEnd,
+      removeAudio: vidRemoveAudio,
+      removeSubtitles: vidRemoveSubtitles,
+      eqBands: hasEq ? vidEqFreqs.map((freq, i) => ({ freq, gain: vidEqBands[i] })) : undefined,
+      crop: hasCrop ? { x: vidCropX, y: vidCropY, w: vidCropW, h: vidCropH } : undefined,
+    }, (pct) => {
+      const popup = document.getElementById("popup");
+      if (popup) {
+        const p = popup.querySelector("p");
+        if (p) p.textContent = `${label} ${pct}%`;
+      }
+    });
+  } else {
+    const buf = await file.arrayBuffer();
+    result = { name: file.name, bytes: new Uint8Array(buf) };
+  }
+
+  // Add subtitles if configured
+  if (hasSubAdd && vidSubFile) {
+    const mode = vidAddSubBurn ? "burn" : "mux";
+    const popup = document.getElementById("popup");
+    if (popup) {
+      const p = popup.querySelector("p");
+      if (p) p.textContent = `${label} ${mode === "burn" ? "Burning" : "Muxing"} subtitles...`;
+    }
+    const tmpFile = new File([result.bytes as BlobPart], result.name, { type: "video/mp4" });
+    result = await addSubtitlesToVideo(tmpFile, vidSubFile, { mode }, (pct) => {
+      const popup2 = document.getElementById("popup");
+      if (popup2) {
+        const p = popup2.querySelector("p");
+        if (p) p.textContent = `${label} ${mode === "burn" ? "Burning" : "Muxing"} subtitles... ${pct}%`;
+      }
+    });
+  }
+
+  // Merge with additional files if configured
+  if (hasMerge) {
+    const popup = document.getElementById("popup");
+    if (popup) {
+      const p = popup.querySelector("p");
+      if (p) p.textContent = `${label} Merging...`;
+    }
+    const primaryFile = new File([result.bytes as BlobPart], result.name, { type: "video/mp4" });
+    const allFiles = [primaryFile, ...vidMergeFiles];
+    result = await mergeVideos(allFiles, vidMergeReEncode, (pct) => {
+      const popup2 = document.getElementById("popup");
+      if (popup2) {
+        const p = popup2.querySelector("p");
+        if (p) p.textContent = `${label} Merging... ${pct}%`;
+      }
+    });
+  }
+
+  return result;
+}
 
 // Action button: Process or Download
 ui.vidDownloadBtn?.addEventListener("click", async () => {
   if (ui.vidDownloadBtn.classList.contains("disabled") || !vidFile) return;
 
-  if (vidProcessedData) {
-    // Download mode
+  const batchMode = vidApplyAll && vidFiles.length > 1;
+
+  // Download mode — all results ready
+  if (batchMode && vidProcessedResults.size === vidFiles.length) {
+    const results = Array.from(vidProcessedResults.values());
+    if (archiveMultiOutput) {
+      const zip = new JSZip();
+      for (const f of results) zip.file(f.name, f.bytes);
+      const zipBytes = await zip.generateAsync({ type: "uint8array" });
+      downloadFile(zipBytes, "edited_videos.zip");
+    } else {
+      for (const f of results) downloadFile(f.bytes, f.name);
+    }
+    return;
+  }
+
+  if (vidProcessedData && !batchMode) {
+    // Single download mode
     const blob = new Blob([vidProcessedData.bytes as BlobPart], { type: "application/octet-stream" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -3934,86 +4132,67 @@ ui.vidDownloadBtn?.addEventListener("click", async () => {
   ui.vidDownloadBtn.classList.add("disabled");
 
   try {
-    window.showPopup("<h2>Processing video...</h2><p>This may take a moment.</p>");
-    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    if (batchMode) {
+      // Batch process all videos
+      window.showPopup(`<h2>Processing ${vidFiles.length} videos...</h2><p>Starting...</p>`);
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-    const hasEq = vidEqBands.some(g => g !== 0);
-    const hasCrop = vidCropEnabled;
-    const hasStandardEdits = vidTrimStart > 0.01 ||
-      (vidDuration > 0 && vidTrimEnd < vidDuration - 0.01) ||
-      vidRemoveAudio || vidRemoveSubtitles || hasEq || hasCrop;
-    const hasSubAdd = vidSubFile && (vidAddSubMux || vidAddSubBurn);
-    const hasMerge = vidMergeFiles.length > 0;
-
-    let result: FileData;
-
-    if (hasStandardEdits) {
-      result = await processVideo(vidFile, {
-        trimStart: vidTrimStart,
-        trimEnd: vidTrimEnd,
-        removeAudio: vidRemoveAudio,
-        removeSubtitles: vidRemoveSubtitles,
-        eqBands: hasEq ? vidEqFreqs.map((freq, i) => ({ freq, gain: vidEqBands[i] })) : undefined,
-        crop: hasCrop ? { x: vidCropX, y: vidCropY, w: vidCropW, h: vidCropH } : undefined,
-      }, (pct) => {
+      const results: FileData[] = [];
+      for (let i = 0; i < vidFiles.length; i++) {
+        const label = `[${i + 1}/${vidFiles.length}]`;
         const popup = document.getElementById("popup");
         if (popup) {
           const p = popup.querySelector("p");
-          if (p) p.textContent = `Processing... ${pct}%`;
+          if (p) p.textContent = `${label} Processing ${vidFiles[i].name}...`;
         }
-      });
+        const result = await vidProcessSingleFile(vidFiles[i], label);
+        results.push(result);
+        vidProcessedResults.set(i, result);
+      }
+
+      // Set current video's processed data
+      if (vidProcessedResults.has(vidActiveIndex)) {
+        vidProcessedData = vidProcessedResults.get(vidActiveIndex)!;
+        if (vidProcessedUrl) URL.revokeObjectURL(vidProcessedUrl);
+        vidProcessedUrl = URL.createObjectURL(new Blob([vidProcessedData.bytes as BlobPart], { type: "video/mp4" }));
+      }
+
+      // Download
+      if (archiveMultiOutput) {
+        const zip = new JSZip();
+        for (const f of results) zip.file(f.name, f.bytes);
+        const zipBytes = await zip.generateAsync({ type: "uint8array" });
+        downloadFile(zipBytes, "edited_videos.zip");
+      } else {
+        for (const f of results) downloadFile(f.bytes, f.name);
+      }
+
+      const totalSize = results.reduce((s, f) => s + f.bytes.length, 0);
+      window.showPopup(
+        `<h2>${results.length} videos processed!</h2>` +
+        `<p>Total size: ${formatFileSize(totalSize)}</p>` +
+        (archiveMultiOutput ? `<p>Delivered as ZIP archive.</p>` : ``) +
+        `<button onclick="window.hidePopup()">OK</button>`
+      );
     } else {
-      // No standard edits — use original file as-is
-      const buf = await vidFile.arrayBuffer();
-      result = { name: vidFile.name, bytes: new Uint8Array(buf) };
+      // Single video process
+      window.showPopup("<h2>Processing video...</h2><p>This may take a moment.</p>");
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+      const result = await vidProcessSingleFile(vidFile, "Processing...");
+
+      vidProcessedData = result;
+      vidProcessedResults.set(vidActiveIndex, result);
+      if (vidProcessedUrl) URL.revokeObjectURL(vidProcessedUrl);
+      vidProcessedUrl = URL.createObjectURL(new Blob([result.bytes as BlobPart], { type: "video/mp4" }));
+
+      const sizeStr = formatFileSize(result.bytes.length);
+      window.showPopup(
+        `<h2>Video processed!</h2>` +
+        `<p>Output: ${result.name} (${sizeStr})</p>` +
+        `<button onclick="window.hidePopup()">OK</button>`
+      );
     }
-
-    // Add subtitles if configured
-    if (hasSubAdd && vidSubFile) {
-      const mode = vidAddSubBurn ? "burn" : "mux";
-      const popup = document.getElementById("popup");
-      if (popup) {
-        const p = popup.querySelector("p");
-        if (p) p.textContent = mode === "burn" ? "Burning subtitles..." : "Muxing subtitles...";
-      }
-      const tmpFile = new File([result.bytes as BlobPart], result.name, { type: "video/mp4" });
-      result = await addSubtitlesToVideo(tmpFile, vidSubFile, { mode }, (pct) => {
-        const popup2 = document.getElementById("popup");
-        if (popup2) {
-          const p = popup2.querySelector("p");
-          if (p) p.textContent = `${mode === "burn" ? "Burning" : "Muxing"} subtitles... ${pct}%`;
-        }
-      });
-    }
-
-    // Merge with additional files if configured
-    if (hasMerge) {
-      const popup = document.getElementById("popup");
-      if (popup) {
-        const p = popup.querySelector("p");
-        if (p) p.textContent = "Merging videos...";
-      }
-      const primaryFile = new File([result.bytes as BlobPart], result.name, { type: "video/mp4" });
-      const allFiles = [primaryFile, ...vidMergeFiles];
-      result = await mergeVideos(allFiles, vidMergeReEncode, (pct) => {
-        const popup2 = document.getElementById("popup");
-        if (popup2) {
-          const p = popup2.querySelector("p");
-          if (p) p.textContent = `Merging... ${pct}%`;
-        }
-      });
-    }
-
-    vidProcessedData = result;
-    if (vidProcessedUrl) URL.revokeObjectURL(vidProcessedUrl);
-    vidProcessedUrl = URL.createObjectURL(new Blob([result.bytes as BlobPart], { type: "video/mp4" }));
-
-    const sizeStr = formatFileSize(result.bytes.length);
-    window.showPopup(
-      `<h2>Video processed!</h2>` +
-      `<p>Output: ${result.name} (${sizeStr})</p>` +
-      `<button onclick="window.hidePopup()">OK</button>`
-    );
   } catch (e) {
     console.error("Video processing error:", e);
     window.showPopup(

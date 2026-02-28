@@ -334,7 +334,11 @@
         </div>
         <div class="sm-group">
           <span class="sm-label">Processing</span>
-          <p class="sm-hint">Runs locally via FFmpeg WASM. No files leave your device.</p>
+          <label class="sm-switch-row">
+            <span class="sm-switch-label">Apply to all</span>
+            <button id="vid-apply-all-toggle" class="sm-switch" role="switch"></button>
+          </label>
+          <p class="sm-hint">Apply current settings to all loaded videos when processing.</p>
         </div>
       </div>
 
@@ -540,6 +544,11 @@
             </button>
           </div>
         </div>
+      </div>
+
+      <div id="vid-filmstrip" class="vid-filmstrip hidden">
+        <div id="vid-filmstrip-grid" class="vid-filmstrip-grid"></div>
+        <button id="vid-add-more" class="vid-filmstrip-add" title="Add more videos">+</button>
       </div>
 
       <!-- Right sidebar: settings + action button -->
@@ -751,7 +760,7 @@
       </aside>
     </div>
 
-    <input id="vid-file-input" type="file" accept="video/*" style="display:none">
+    <input id="vid-file-input" type="file" multiple accept="video/*" style="display:none">
     <input id="vid-sub-file-input" type="file" accept=".srt,.ass,.vtt,.ssa" style="display:none">
     <input id="vid-merge-file-input" type="file" accept="video/*" multiple style="display:none">
   </section>
