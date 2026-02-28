@@ -174,7 +174,9 @@ export function initSpeechTool() {
   const seekBar = document.getElementById("speech-seek-bar") as HTMLDivElement;
   const seekFill = document.getElementById("speech-seek-fill") as HTMLDivElement;
   const seekThumb = document.getElementById("speech-seek-thumb") as HTMLDivElement;
-  const timeDisplay = document.getElementById("speech-time-display") as HTMLSpanElement;
+  const timeCurrent = document.getElementById("speech-time-current") as HTMLSpanElement;
+  const timeDuration = document.getElementById("speech-time-duration") as HTMLSpanElement;
+  const speedDisplay = document.getElementById("speech-tts-speed-display") as HTMLSpanElement;
   const downloadBtn = document.getElementById("speech-download-mp3") as HTMLButtonElement;
 
   // STT refs
@@ -236,7 +238,9 @@ export function initSpeechTool() {
 
   // ── Speed slider ───────────────────────────────────────────────────────
   ttsSpeed.addEventListener("input", () => {
-    ttsSpeedLabel.textContent = `${parseFloat(ttsSpeed.value).toFixed(1)}x`;
+    const val = `${parseFloat(ttsSpeed.value).toFixed(1)}x`;
+    ttsSpeedLabel.textContent = val;
+    speedDisplay.textContent = val;
   });
 
   // ── Build word display with spans ──────────────────────────────────────
@@ -489,12 +493,14 @@ export function initSpeechTool() {
     const pct = (audio.currentTime / audio.duration) * 100;
     seekFill.style.width = `${pct}%`;
     seekThumb.style.left = `${pct}%`;
-    timeDisplay.textContent = `${formatTime(audio.currentTime)} / ${formatTime(audio.duration)}`;
+    timeCurrent.textContent = formatTime(audio.currentTime);
+    timeDuration.textContent = formatTime(audio.duration);
     updateWordHighlight();
   });
 
   audio.addEventListener("loadedmetadata", () => {
-    timeDisplay.textContent = `0:00 / ${formatTime(audio.duration)}`;
+    timeCurrent.textContent = "0:00";
+    timeDuration.textContent = formatTime(audio.duration);
   });
 
   let seeking = false;
@@ -525,7 +531,7 @@ export function initSpeechTool() {
   downloadBtn.addEventListener("click", async () => {
     if (!currentWavBlob || downloading) return;
     downloading = true;
-    downloadBtn.textContent = "Converting...";
+    downloadBtn.classList.add("converting");
 
     try {
       const wavBytes = new Uint8Array(await currentWavBlob.arrayBuffer());
@@ -544,7 +550,7 @@ export function initSpeechTool() {
       console.error("MP3 conversion failed:", err);
     } finally {
       downloading = false;
-      downloadBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Download MP3`;
+      downloadBtn.classList.remove("converting");
     }
   });
 
