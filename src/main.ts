@@ -82,6 +82,11 @@ let archiveMultiOutput: boolean = (() => {
   try { return localStorage.getItem("convert-archive-multi") !== "false"; } catch { return true; }
 })();
 
+/** Apply edits to all files: when true, current settings are applied to every loaded file during processing */
+let applyAll: boolean = (() => {
+  try { return localStorage.getItem("convert-apply-all") === "true"; } catch { return false; }
+})();
+
 /** Remove background: when true, image outputs have their background removed */
 let removeBg: boolean = (() => {
   try { return localStorage.getItem("convert-remove-bg") === "true"; } catch { return false; }
@@ -170,9 +175,6 @@ let imgShowAfter: boolean = false;
 let vidFiles: File[] = [];
 let vidActiveIndex: number = 0;
 let vidProcessedResults: Map<number, FileData> = new Map();
-let vidApplyAll: boolean = (() => {
-  try { return localStorage.getItem("convert-vid-apply-all") === "true"; } catch { return false; }
-})();
 let vidThumbUrls: Map<number, string> = new Map();
 let vidFile: File | null = null;
 let vidDuration: number = 0;
@@ -387,7 +389,7 @@ const ui = {
   vidFilmstrip: document.querySelector("#vid-filmstrip") as HTMLDivElement,
   vidFilmstripGrid: document.querySelector("#vid-filmstrip-grid") as HTMLDivElement,
   vidAddMore: document.querySelector("#vid-add-more") as HTMLButtonElement,
-  vidApplyAllToggle: document.querySelector("#vid-apply-all-toggle") as HTMLButtonElement,
+  applyAllToggle: document.querySelector("#apply-all-toggle") as HTMLButtonElement,
 };
 
 // ── Home page / tool navigation ──────────────────────────────────────────────
@@ -2553,12 +2555,16 @@ function imgUpdateActionButton() {
     return;
   }
 
-  if (currentHasProcessed) {
-    // Current image is processed — offer download
-    ui.imgDownloadBtn.textContent = imgProcessedData.size > 1 ? "Download All" : "Download";
+  const multi = applyAll && imgToolFiles.length > 1;
+
+  if (multi && imgProcessedData.size === imgToolFiles.length) {
+    ui.imgDownloadBtn.textContent = "Download All";
+    ui.imgDownloadBtn.classList.remove("disabled");
+  } else if (currentHasProcessed && !multi) {
+    ui.imgDownloadBtn.textContent = "Download";
     ui.imgDownloadBtn.classList.remove("disabled");
   } else {
-    // Current image needs processing — check if processing is possible
+    // Check if processing is possible
     const hasImageFiles = imgToolFiles.some(f => {
       const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
       return rescaleExts.has(ext) || bgRemovalExts.has(ext);
@@ -2570,7 +2576,8 @@ function imgUpdateActionButton() {
       const labels: string[] = [];
       if (rescaleReady) labels.push("Resize");
       if (removeBg) labels.push("Remove BG");
-      ui.imgDownloadBtn.textContent = labels.join(" & ") || "Process";
+      const base = labels.join(" & ") || "Process";
+      ui.imgDownloadBtn.textContent = multi ? base + " All" : base;
       ui.imgDownloadBtn.classList.remove("disabled");
     } else {
       ui.imgDownloadBtn.textContent = "Process";
@@ -2737,15 +2744,17 @@ ui.imgCompareSwitch?.addEventListener("click", () => {
 ui.imgDownloadBtn?.addEventListener("click", () => {
   if (ui.imgDownloadBtn.classList.contains("disabled")) return;
   const currentHasProcessed = imgProcessedData.has(imgActiveIndex);
+  const multi = applyAll && imgToolFiles.length > 1;
 
-  if (currentHasProcessed) {
-    // Download mode
-    if (imgProcessedData.size === 1) {
-      const data = imgProcessedData.values().next().value as FileData;
-      const blob = new Blob([data.bytes as BlobPart], { type: "application/octet-stream" });
-      const url = URL.createObjectURL(blob);
-      triggerDownload(url, data.name);
-      URL.revokeObjectURL(url);
+  // Download mode — all results ready
+  if (multi && imgProcessedData.size === imgToolFiles.length) {
+    if (archiveMultiOutput) {
+      (async () => {
+        const zip = new JSZip();
+        for (const [, data] of imgProcessedData) zip.file(data.name, data.bytes);
+        const zipBytes = await zip.generateAsync({ type: "uint8array" });
+        downloadFile(zipBytes, "edited_images.zip");
+      })();
     } else {
       for (const [, data] of imgProcessedData) {
         const blob = new Blob([data.bytes as BlobPart], { type: "application/octet-stream" });
@@ -2754,8 +2763,24 @@ ui.imgDownloadBtn?.addEventListener("click", () => {
         URL.revokeObjectURL(url);
       }
     }
+    return;
+  }
+
+  if (currentHasProcessed && !multi) {
+    // Single download
+    const data = imgProcessedData.get(imgActiveIndex)!;
+    const blob = new Blob([data.bytes as BlobPart], { type: "application/octet-stream" });
+    const url = URL.createObjectURL(blob);
+    triggerDownload(url, data.name);
+    URL.revokeObjectURL(url);
   } else {
-    // Process mode — trigger the shared convert button logic
+    // Process mode
+    if (!multi) {
+      // Only process active image — set selectedFiles to just the active file
+      selectedFiles = [imgToolFiles[imgActiveIndex]];
+    } else {
+      selectedFiles = imgToolFiles;
+    }
     ui.convertButton.click();
   }
 });
@@ -2904,7 +2929,7 @@ function vidUpdateActionButton() {
     ui.vidDownloadBtn.classList.add("disabled");
     return;
   }
-  const multi = vidApplyAll && vidFiles.length > 1;
+  const multi = applyAll && vidFiles.length > 1;
   if (multi && vidProcessedResults.size === vidFiles.length) {
     ui.vidDownloadBtn.textContent = "Download All";
     ui.vidDownloadBtn.classList.remove("disabled");
@@ -4019,13 +4044,14 @@ ui.vidAddMore?.addEventListener("click", () => {
 });
 
 // Apply-all toggle
-if (ui.vidApplyAllToggle) {
-  ui.vidApplyAllToggle.classList.toggle("active", vidApplyAll);
-  ui.vidApplyAllToggle.addEventListener("click", () => {
-    vidApplyAll = !vidApplyAll;
-    ui.vidApplyAllToggle.classList.toggle("active", vidApplyAll);
-    try { localStorage.setItem("convert-vid-apply-all", String(vidApplyAll)); } catch {}
+if (ui.applyAllToggle) {
+  ui.applyAllToggle.classList.toggle("active", applyAll);
+  ui.applyAllToggle.addEventListener("click", () => {
+    applyAll = !applyAll;
+    ui.applyAllToggle.classList.toggle("active", applyAll);
+    try { localStorage.setItem("convert-apply-all", String(applyAll)); } catch {}
     vidUpdateActionButton();
+    imgUpdateActionButton();
   });
 }
 
@@ -4104,7 +4130,7 @@ async function vidProcessSingleFile(file: File, label: string): Promise<FileData
 ui.vidDownloadBtn?.addEventListener("click", async () => {
   if (ui.vidDownloadBtn.classList.contains("disabled") || !vidFile) return;
 
-  const batchMode = vidApplyAll && vidFiles.length > 1;
+  const batchMode = applyAll && vidFiles.length > 1;
 
   // Download mode — all results ready
   if (batchMode && vidProcessedResults.size === vidFiles.length) {
@@ -4237,16 +4263,24 @@ ui.convertButton.onclick = async function () {
 
       // Image tools: store processed data for before/after preview
       if (activeTool === "image" && imgToolFiles.length > 0) {
-        imgProcessedData.clear();
-        for (const url of imgProcessedUrls.values()) URL.revokeObjectURL(url);
-        imgProcessedUrls.clear();
+        const singleMode = !applyAll && imgToolFiles.length > 1;
+        if (!singleMode) {
+          imgProcessedData.clear();
+          for (const url of imgProcessedUrls.values()) URL.revokeObjectURL(url);
+          imgProcessedUrls.clear();
+        }
 
         for (let i = 0; i < fileData.length; i++) {
           const f = fileData[i];
-          imgProcessedData.set(i, f);
+          // Map result to correct index: single mode uses activeIndex, batch uses sequential
+          const idx = singleMode ? imgActiveIndex : i;
+          imgProcessedData.set(idx, f);
+          if (imgProcessedUrls.has(idx)) URL.revokeObjectURL(imgProcessedUrls.get(idx)!);
           const blob = new Blob([f.bytes as BlobPart], { type: "application/octet-stream" });
-          imgProcessedUrls.set(i, URL.createObjectURL(blob));
+          imgProcessedUrls.set(idx, URL.createObjectURL(blob));
         }
+        // Restore selectedFiles to all images
+        selectedFiles = imgToolFiles;
 
         // Auto-switch to "After" view
         imgShowAfter = true;
