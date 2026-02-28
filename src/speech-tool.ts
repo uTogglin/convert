@@ -194,6 +194,7 @@ export function initSpeechTool() {
   const sttProgress = document.getElementById("speech-stt-progress") as HTMLDivElement;
   const sttProgressFill = sttProgress.querySelector(".speech-progress-fill") as HTMLDivElement;
   const sttProgressText = sttProgress.querySelector(".speech-progress-text") as HTMLSpanElement;
+  const sttFreezeWarning = sttProgress.querySelector(".speech-freeze-warning") as HTMLParagraphElement;
   const sttOutput = document.getElementById("speech-stt-output") as HTMLDivElement;
   const sttResult = document.getElementById("speech-stt-result") as HTMLTextAreaElement;
   const sttCopy = document.getElementById("speech-stt-copy") as HTMLButtonElement;
@@ -662,6 +663,7 @@ export function initSpeechTool() {
 
     transcribeBtn.classList.add("disabled");
     sttProgress.classList.remove("hidden");
+    sttFreezeWarning.classList.add("hidden");
     sttProgressFill.style.width = "0%";
     sttProgressText.textContent = "Extracting audio...";
 
@@ -669,11 +671,17 @@ export function initSpeechTool() {
       const { generateSubtitles } = await import("./subtitle-generator.ts");
 
       const language = sttFileLang.value || undefined;
-      const model = sttFileModel.value as "base" | "small";
+      const model = sttFileModel.value as "base" | "small" | "medium" | "large-v3-turbo";
 
       const result = await generateSubtitles(sttFile, (stage, pct) => {
         sttProgressFill.style.width = `${pct}%`;
         sttProgressText.textContent = stage;
+        // Show freeze warning during model loading phase
+        if (pct < 50 && pct > 5) {
+          sttFreezeWarning.classList.remove("hidden");
+        } else if (pct >= 50) {
+          sttFreezeWarning.classList.add("hidden");
+        }
       }, { language, model });
 
       const srtText = new TextDecoder().decode(result.bytes);
@@ -692,14 +700,16 @@ export function initSpeechTool() {
       sttOutput.classList.remove("hidden");
       sttResult.value = plainText || "(No speech detected)";
 
-    } catch (err) {
+    } catch (err: any) {
       console.error("Transcription failed:", err);
-      sttProgressText.textContent = "Error during transcription.";
+      const msg = err?.message || "Unknown error";
+      sttProgressText.textContent = `Error: ${msg}`;
+      sttFreezeWarning.classList.add("hidden");
       sttOutput.classList.remove("hidden");
-      sttResult.value = "Transcription failed. Check the error log for details.";
+      sttResult.value = `Transcription failed: ${msg}\n\nTry a smaller model or check browser console for details.`;
     } finally {
       transcribeBtn.classList.remove("disabled");
-      setTimeout(() => sttProgress.classList.add("hidden"), 800);
+      setTimeout(() => sttProgress.classList.add("hidden"), 1500);
     }
   });
 

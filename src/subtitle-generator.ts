@@ -5,11 +5,17 @@ const whisperPipelines: Map<string, any> = new Map();
 let whisperLoadingKey: string | null = null;
 let detectedDevice: "webgpu" | "wasm" | null = null;
 
-const MODEL_IDS: Record<string, string> = {
-  base: "onnx-community/whisper-base",
-  small: "onnx-community/whisper-small",
-  medium: "Xenova/whisper-medium",
-  "large-v3-turbo": "onnx-community/whisper-large-v3-turbo",
+interface ModelConfig {
+  id: string;
+  label: string;
+  size: string;
+}
+
+const MODELS: Record<string, ModelConfig> = {
+  base: { id: "onnx-community/whisper-base", label: "Base", size: "~50 MB" },
+  small: { id: "onnx-community/whisper-small", label: "Small", size: "~160 MB" },
+  medium: { id: "Xenova/whisper-medium", label: "Medium", size: "~500 MB" },
+  "large-v3-turbo": { id: "onnx-community/whisper-large-v3-turbo", label: "Large V3 Turbo", size: "~550 MB" },
 };
 
 async function getWhisperDevice(): Promise<"webgpu" | "wasm"> {
@@ -22,17 +28,19 @@ async function getWhisperDevice(): Promise<"webgpu" | "wasm"> {
 }
 
 function getWhisperDtype(modelKey: string, device: "webgpu" | "wasm"): any {
-  // Large models need quantization to fit in browser memory
-  if (modelKey === "large-v3-turbo") {
-    return device === "webgpu"
-      ? { encoder_model: "fp32", decoder_model_merged: "q4" }
-      : "q8";
+  // Whisper encoder is very sensitive to quantization — keep it at fp16 minimum.
+  // Decoder can be aggressively quantized to q4 with minimal quality loss.
+  if (device === "webgpu") {
+    if (modelKey === "large-v3-turbo" || modelKey === "medium") {
+      // Per-module dtype: fp16 encoder saves ~50% VRAM vs fp32, q4 decoder for speed
+      return { encoder_model: "fp16", decoder_model_merged: "q4" };
+    }
+    // base / small are small enough for fp32 on GPU
+    return "fp32";
   }
-  if (modelKey === "medium") {
-    return device === "webgpu" ? "fp32" : "q8";
-  }
-  // base / small
-  return device === "webgpu" ? "fp32" : "q8";
+  // WASM fallback — q8 for smaller models, q4 for large ones
+  if (modelKey === "large-v3-turbo") return "q4";
+  return "q8";
 }
 
 /**
@@ -73,7 +81,9 @@ export async function generateSubtitles(
   options?: GenerateSubtitleOptions,
 ): Promise<FileData> {
   const modelKey = options?.model || "large-v3-turbo";
-  const modelId = MODEL_IDS[modelKey];
+  const cfg = MODELS[modelKey];
+  if (!cfg) throw new Error(`Unknown Whisper model: ${modelKey}`);
+  const modelId = cfg.id;
   const language = options?.language || undefined;
 
   // Step 1: Extract audio as WAV (16kHz mono)
@@ -91,13 +101,17 @@ export async function generateSubtitles(
       whisperPipeline = whisperPipelines.get(modelKey);
     } else {
       whisperLoadingKey = modelKey;
-      onProgress?.(`Downloading ${modelKey} model...`, 10);
+      onProgress?.(`Loading ${cfg.label} model...`, 10);
 
       try {
         const { pipeline } = await import("@huggingface/transformers");
         const device = await getWhisperDevice();
         const dtype = getWhisperDtype(modelKey, device);
-        onProgress?.(`Downloading ${modelKey} model (${device})...`, 10);
+        const dtypeLabel = typeof dtype === "string" ? dtype : "mixed";
+        onProgress?.(`Loading ${cfg.label} model (${device}, ${dtypeLabel})...`, 10);
+
+        // Track whether files are coming from cache or network
+        let fromCache = true;
 
         whisperPipeline = await pipeline(
           "automatic-speech-recognition",
@@ -107,23 +121,28 @@ export async function generateSubtitles(
             device: device as any,
             progress_callback: (info: any) => {
               if (info.status === "progress" && typeof info.progress === "number") {
+                // If we see slow progress (loaded < total for a while), it's a real download
+                if (info.loaded && info.total && info.loaded < info.total * 0.99) {
+                  fromCache = false;
+                }
                 const pct = Math.round(10 + (info.progress * 0.4));
                 const file = info.file ? info.file.split("/").pop() : "";
                 const loaded = info.loaded ? (info.loaded / 1024 / 1024).toFixed(1) : "?";
                 const total = info.total ? (info.total / 1024 / 1024).toFixed(1) : "?";
-                const msg = `Downloading ${modelKey} model — ${file} (${loaded}/${total} MB)`;
+                const action = fromCache ? "Loading" : "Downloading";
+                const msg = `${action} ${cfg.label} — ${file} (${loaded}/${total} MB)`;
                 console.log(`[Whisper STT] ${msg} [${Math.round(info.progress)}%]`);
                 onProgress?.(msg, pct);
               } else if (info.status === "initiate") {
                 const file = info.file ? info.file.split("/").pop() : "";
-                console.log(`[Whisper STT] Starting download: ${file}`);
-                onProgress?.(`Downloading ${modelKey} model — ${file}...`, 10);
+                console.log(`[Whisper STT] Loading: ${file}`);
+                onProgress?.(`Loading ${cfg.label} — ${file}...`, 10);
               } else if (info.status === "done") {
                 const file = info.file ? info.file.split("/").pop() : "";
-                console.log(`[Whisper STT] Finished: ${file}`);
+                console.log(`[Whisper STT] Ready: ${file}`);
               } else if (info.status === "ready") {
-                console.log(`[Whisper STT] Model ${modelKey} ready`);
-                onProgress?.(`Model ${modelKey} loaded!`, 50);
+                console.log(`[Whisper STT] Model ${cfg.label} ready (${device}, ${dtypeLabel})`);
+                onProgress?.(`${cfg.label} model loaded!`, 50);
               }
             },
           },
