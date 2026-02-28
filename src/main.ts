@@ -314,7 +314,7 @@ const ui = {
   vidVolumeSlider: document.querySelector("#vid-volume-slider") as HTMLInputElement,
   vidSubLangSelect: document.querySelector("#vid-sub-lang") as HTMLSelectElement,
   vidAddSubsToggle: document.querySelector("#vid-add-subs-toggle") as HTMLButtonElement,
-  vidAddSubsCollapsible: document.querySelector(".vid-collapsible") as HTMLDivElement,
+  vidAddSubsCollapsible: document.querySelector("#vid-add-subs-collapsible") as HTMLDivElement,
   vidSubFileBtn: document.querySelector("#vid-sub-file-btn") as HTMLButtonElement,
   vidSubFileName: document.querySelector("#vid-sub-file-name") as HTMLSpanElement,
   vidMuxToggle: document.querySelector("#vid-mux-toggle") as HTMLButtonElement,
