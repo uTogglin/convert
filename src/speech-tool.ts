@@ -79,6 +79,41 @@ export async function getKokoro(onProgress?: (pct: number, msg: string) => void)
 const PLAY_SVG = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
 const PAUSE_SVG = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`;
 
+// ── Spoken-weight: estimate how long TTS takes to say a word ────────────────
+// CJK characters are single chars but full syllables; digits expand to words;
+// punctuation is near-silent; Latin length roughly maps to duration.
+function isCJK(code: number): boolean {
+  return (code >= 0x4E00 && code <= 0x9FFF)   // CJK Unified Ideographs
+      || (code >= 0x3400 && code <= 0x4DBF)   // CJK Extension A
+      || (code >= 0x3040 && code <= 0x309F)   // Hiragana
+      || (code >= 0x30A0 && code <= 0x30FF)   // Katakana
+      || (code >= 0xAC00 && code <= 0xD7AF);  // Hangul Syllables
+}
+
+// Average spoken syllable counts for digit words (0-9)
+const DIGIT_WEIGHTS: Record<string, number> = {
+  "0": 4, "1": 3, "2": 3, "3": 5, "4": 4,
+  "5": 4, "6": 5, "7": 5, "8": 3, "9": 4,
+};
+
+export function spokenWeight(word: string): number {
+  let w = 0;
+  for (let i = 0; i < word.length; i++) {
+    const ch = word[i];
+    const code = word.charCodeAt(i);
+    if (isCJK(code)) {
+      w += 4; // each CJK char ≈ a full syllable spoken aloud
+    } else if (ch >= "0" && ch <= "9") {
+      w += DIGIT_WEIGHTS[ch] || 4; // digit spoken as word
+    } else if (/[a-zA-Z\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u0900-\u097F]/.test(ch)) {
+      w += 1; // Latin, Cyrillic, Arabic, Devanagari letters
+    } else {
+      w += 0.3; // punctuation, symbols — small pause
+    }
+  }
+  return Math.max(w, 2);
+}
+
 // ── WAV encoder for concatenated Float32Array chunks ───────────────────────
 export function encodeWav(samples: Float32Array, sampleRate: number): Blob {
   const numChannels = 1;
@@ -362,8 +397,8 @@ export function initSpeechTool() {
         continue;
       }
 
-      // Weight each word's duration by character length (min 2 chars effective)
-      const weights = chunkWords.map(w => Math.max(w.length, 2));
+      // Weight each word's duration by estimated spoken length
+      const weights = chunkWords.map(spokenWeight);
       const totalWeight = weights.reduce((a, b) => a + b, 0);
       const chunkDuration = chunkEnd - chunkStart;
       let t = chunkStart;

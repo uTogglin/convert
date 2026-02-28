@@ -1,5 +1,5 @@
 import JSZip from "jszip";
-import { getKokoro, encodeWav } from "./speech-tool.js";
+import { getKokoro, encodeWav, spokenWeight } from "./speech-tool.js";
 
 // ── Model options ───────────────────────────────────────────────────────────
 const SUM_MODELS: Record<string, { id: string; label: string }> = {
@@ -477,8 +477,8 @@ export function initSummarizeTool() {
       const tStart = sOff / sr, tEnd = (sOff + ch.samples) / sr;
       const words = ch.text.trim().split(/\s+/).filter(Boolean);
       if (words.length === 0) { sOff += ch.samples; continue; }
-      // Weight each word's duration by character length (min 2 chars effective)
-      const weights = words.map(w => Math.max(w.length, 2));
+      // Weight each word's duration by estimated spoken length
+      const weights = words.map(spokenWeight);
       const totalWeight = weights.reduce((a, b) => a + b, 0);
       const chunkDur = tEnd - tStart;
       let t = tStart;
