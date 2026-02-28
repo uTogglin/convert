@@ -121,7 +121,7 @@ export async function processVideo(
     await ff.writeFile(tmpIn, resultBytes);
     await ffExec(["-i", tmpIn, "-c", "copy", "-sn", tmpOut]);
     const data = await ff.readFile(tmpOut);
-    resultBytes = data instanceof Uint8Array ? data : new Uint8Array(data as ArrayBuffer);
+    resultBytes = data instanceof Uint8Array ? data : new TextEncoder().encode(data as string);
     await ff.deleteFile(tmpIn);
     await ff.deleteFile(tmpOut);
   }
@@ -174,7 +174,7 @@ async function processWithFFmpeg(
   }
 
   const data = await ff.readFile(tmpOut);
-  const result = data instanceof Uint8Array ? data : new Uint8Array(data as ArrayBuffer);
+  const result = data instanceof Uint8Array ? data : new TextEncoder().encode(data as string);
   await ff.deleteFile(tmpIn);
   await ff.deleteFile(tmpOut);
   return result;
@@ -246,7 +246,7 @@ export async function extractSubtitles(file: File): Promise<FileData[]> {
     try {
       await ffExec(["-i", tmpIn, "-map", `0:${streamIndex}`, outName]);
       const data = await ff.readFile(outName);
-      const bytes = data instanceof Uint8Array ? data : new Uint8Array(data as ArrayBuffer);
+      const bytes = data instanceof Uint8Array ? data : new TextEncoder().encode(data as string);
       results.push({ name: `${baseName}_track${streamIndex}.${subExt}`, bytes });
       await ff.deleteFile(outName);
     } catch {
@@ -278,7 +278,7 @@ export async function extractAudioAsWav(file: File): Promise<Uint8Array> {
   await ffExec(["-i", tmpIn, "-ar", "16000", "-ac", "1", "-f", "wav", tmpOut]);
 
   const data = await ff.readFile(tmpOut);
-  const result = data instanceof Uint8Array ? data : new Uint8Array(data as ArrayBuffer);
+  const result = data instanceof Uint8Array ? data : new TextEncoder().encode(data as string);
   await ff.deleteFile(tmpIn);
   await ff.deleteFile(tmpOut);
   return result;
