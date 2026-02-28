@@ -1994,7 +1994,7 @@ body[data-tool="image"] #convert-button { display: none !important; }
 .vid-trim-info {
   font-size: 0.78rem;
   color: var(--accent);
-  margin-left: auto;
+  flex: 1;
   white-space: nowrap;
 }
 
@@ -2108,7 +2108,6 @@ body[data-tool="image"] #convert-button { display: none !important; }
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-left: auto;
   color: var(--text-muted);
 }
 .vid-volume-slider {
@@ -2286,6 +2285,8 @@ body[data-tool="image"] #convert-button { display: none !important; }
   cursor: pointer;
   transition: all 0.18s ease;
   padding: 0;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 .vid-control-btn:hover {
   background: var(--input-bg);
