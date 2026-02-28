@@ -342,7 +342,7 @@ export function initSpeechTool() {
     return spans;
   }
 
-  // ── Build timing map from stream chunks ────────────────────────────────
+  // ── Build timing map from stream chunks (character-weighted) ────────────
   function buildTimings(
     chunks: Array<{ text: string; samples: number }>,
     sampleRate: number,
@@ -362,16 +362,23 @@ export function initSpeechTool() {
         continue;
       }
 
-      const timePerWord = (chunkEnd - chunkStart) / chunkWords.length;
+      // Weight each word's duration by character length (min 2 chars effective)
+      const weights = chunkWords.map(w => Math.max(w.length, 2));
+      const totalWeight = weights.reduce((a, b) => a + b, 0);
+      const chunkDuration = chunkEnd - chunkStart;
+      let t = chunkStart;
+
       for (let i = 0; i < chunkWords.length; i++) {
         const el = wordSpans[spanIdx];
         if (!el) break;
+        const dur = (weights[i] / totalWeight) * chunkDuration;
         timings.push({
           word: chunkWords[i],
-          start: chunkStart + i * timePerWord,
-          end: chunkStart + (i + 1) * timePerWord,
+          start: t,
+          end: t + dur,
           el,
         });
+        t += dur;
         spanIdx++;
       }
       sampleOffset += chunk.samples;
@@ -379,37 +386,47 @@ export function initSpeechTool() {
     return timings;
   }
 
-  // ── Highlight current word during playback ─────────────────────────────
+  // ── Highlight current word during playback (binary search + rAF) ─────
+  function findWordAtTime(t: number): number {
+    if (wordTimings.length === 0) return -1;
+    let lo = 0, hi = wordTimings.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (t < wordTimings[mid].start) hi = mid - 1;
+      else if (t >= wordTimings[mid].end) lo = mid + 1;
+      else return mid;
+    }
+    // Past all words — highlight last
+    if (t >= wordTimings[wordTimings.length - 1]?.start) return wordTimings.length - 1;
+    return -1;
+  }
+
   function updateWordHighlight() {
-    if (wordTimings.length === 0) return;
-    const t = audio.currentTime;
-    let newIdx = -1;
-    for (let i = 0; i < wordTimings.length; i++) {
-      if (t >= wordTimings[i].start && t < wordTimings[i].end) {
-        newIdx = i;
-        break;
-      }
-    }
-    // If past all words, highlight last
-    if (newIdx === -1 && t >= wordTimings[wordTimings.length - 1]?.start) {
-      newIdx = wordTimings.length - 1;
-    }
+    const newIdx = findWordAtTime(audio.currentTime);
     if (newIdx !== activeWordIdx) {
       if (activeWordIdx >= 0 && activeWordIdx < wordTimings.length) {
         wordTimings[activeWordIdx].el.classList.remove("active");
       }
       if (newIdx >= 0) {
         wordTimings[newIdx].el.classList.add("active");
-        // Scroll into view if needed
-        const container = wordDisplay;
         const el = wordTimings[newIdx].el;
-        if (el.offsetTop < container.scrollTop || el.offsetTop + el.offsetHeight > container.scrollTop + container.clientHeight) {
+        if (el.offsetTop < wordDisplay.scrollTop || el.offsetTop + el.offsetHeight > wordDisplay.scrollTop + wordDisplay.clientHeight) {
           el.scrollIntoView({ block: "center", behavior: "smooth" });
         }
       }
       activeWordIdx = newIdx;
     }
   }
+
+  // 60fps highlight loop — runs while audio is playing
+  let highlightRaf = 0;
+  function highlightLoop() {
+    updateWordHighlight();
+    highlightRaf = requestAnimationFrame(highlightLoop);
+  }
+  audio.addEventListener("play", () => { cancelAnimationFrame(highlightRaf); highlightLoop(); });
+  audio.addEventListener("pause", () => cancelAnimationFrame(highlightRaf));
+  audio.addEventListener("ended", () => cancelAnimationFrame(highlightRaf));
 
   // ── TTS Generate (Kokoro streaming) ────────────────────────────────────
   let generating = false;
@@ -575,7 +592,6 @@ export function initSpeechTool() {
     seekThumb.style.left = `${pct}%`;
     timeCurrent.textContent = formatTime(audio.currentTime);
     timeDuration.textContent = formatTime(audio.duration);
-    updateWordHighlight();
   });
 
   audio.addEventListener("loadedmetadata", () => {

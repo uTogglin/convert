@@ -477,10 +477,16 @@ export function initSummarizeTool() {
       const tStart = sOff / sr, tEnd = (sOff + ch.samples) / sr;
       const words = ch.text.trim().split(/\s+/).filter(Boolean);
       if (words.length === 0) { sOff += ch.samples; continue; }
-      const tpw = (tEnd - tStart) / words.length;
+      // Weight each word's duration by character length (min 2 chars effective)
+      const weights = words.map(w => Math.max(w.length, 2));
+      const totalWeight = weights.reduce((a, b) => a + b, 0);
+      const chunkDur = tEnd - tStart;
+      let t = tStart;
       for (let i = 0; i < words.length; i++) {
         const el = spans[sIdx]; if (!el) break;
-        timings.push({ word: words[i], start: tStart + i * tpw, end: tStart + (i + 1) * tpw, el });
+        const dur = (weights[i] / totalWeight) * chunkDur;
+        timings.push({ word: words[i], start: t, end: t + dur, el });
+        t += dur;
         sIdx++;
       }
       sOff += ch.samples;
@@ -488,14 +494,21 @@ export function initSummarizeTool() {
     return timings;
   }
 
-  function updateHighlight() {
-    if (wordTimings.length === 0) return;
-    const t = ttsAudio.currentTime;
-    let newIdx = -1;
-    for (let i = 0; i < wordTimings.length; i++) {
-      if (t >= wordTimings[i].start && t < wordTimings[i].end) { newIdx = i; break; }
+  function findWordAtTime(t: number): number {
+    if (wordTimings.length === 0) return -1;
+    let lo = 0, hi = wordTimings.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (t < wordTimings[mid].start) hi = mid - 1;
+      else if (t >= wordTimings[mid].end) lo = mid + 1;
+      else return mid;
     }
-    if (newIdx === -1 && t >= wordTimings[wordTimings.length - 1]?.start) newIdx = wordTimings.length - 1;
+    if (t >= wordTimings[wordTimings.length - 1]?.start) return wordTimings.length - 1;
+    return -1;
+  }
+
+  function updateHighlight() {
+    const newIdx = findWordAtTime(ttsAudio.currentTime);
     if (newIdx !== activeWordIdx) {
       if (activeWordIdx >= 0 && activeWordIdx < wordTimings.length) wordTimings[activeWordIdx].el.classList.remove("active");
       if (newIdx >= 0) {
@@ -509,12 +522,17 @@ export function initSummarizeTool() {
     }
   }
 
+  // 60fps highlight loop
+  let hlRaf = 0;
+  function hlLoop() { updateHighlight(); hlRaf = requestAnimationFrame(hlLoop); }
+
   // Playback controls
   playBtn.addEventListener("click", () => { ttsAudio.paused ? ttsAudio.play() : ttsAudio.pause(); });
-  ttsAudio.addEventListener("play", () => { playBtn.innerHTML = PAUSE_SVG; });
-  ttsAudio.addEventListener("pause", () => { playBtn.innerHTML = PLAY_SVG; });
+  ttsAudio.addEventListener("play", () => { playBtn.innerHTML = PAUSE_SVG; cancelAnimationFrame(hlRaf); hlLoop(); });
+  ttsAudio.addEventListener("pause", () => { playBtn.innerHTML = PLAY_SVG; cancelAnimationFrame(hlRaf); });
   ttsAudio.addEventListener("ended", () => {
     playBtn.innerHTML = PLAY_SVG;
+    cancelAnimationFrame(hlRaf);
     if (activeWordIdx >= 0 && activeWordIdx < wordTimings.length) wordTimings[activeWordIdx].el.classList.remove("active");
     activeWordIdx = -1;
   });
@@ -528,7 +546,6 @@ export function initSummarizeTool() {
     seekThumb.style.left = `${pct}%`;
     timeCurrent.textContent = fmtTime(ttsAudio.currentTime);
     timeDuration.textContent = fmtTime(ttsAudio.duration);
-    updateHighlight();
   });
   ttsAudio.addEventListener("loadedmetadata", () => {
     timeCurrent.textContent = "0:00";
