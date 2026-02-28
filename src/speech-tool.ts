@@ -351,18 +351,40 @@ export function initSpeechTool() {
       let sampleRate = 24000;
 
       console.log("[Kokoro TTS] Starting generation...", { voice, speed, textLength: text.length });
-      const stream = tts.stream(text, { voice, speed });
-      let chunkCount = 0;
-      for await (const chunk of stream) {
-        const data: Float32Array = chunk.audio.data;
-        sampleRate = chunk.audio.sampling_rate || 24000;
-        audioChunks.push(data);
-        chunkMeta.push({ text: chunk.text, samples: data.length });
-        chunkCount++;
-        console.log(`[Kokoro TTS] Chunk ${chunkCount}: "${chunk.text}" (${data.length} samples)`);
-        ttsProgressFill.style.width = `${Math.min(95, 65 + chunkCount * 3)}%`;
+
+      // Split text into sentence-sized chunks for generate()
+      // (stream() hangs on WebGPU, so we chunk manually)
+      const sentences = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [text];
+      const chunks: string[] = [];
+      let current = "";
+      for (const s of sentences) {
+        if (current.length + s.length > 300 && current) {
+          chunks.push(current.trim());
+          current = s;
+        } else {
+          current += s;
+        }
       }
-      console.log(`[Kokoro TTS] Generation complete: ${chunkCount} chunks`);
+      if (current.trim()) chunks.push(current.trim());
+
+      console.log(`[Kokoro TTS] Split into ${chunks.length} chunk(s)`);
+
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        console.log(`[Kokoro TTS] Generating chunk ${i + 1}/${chunks.length}: "${chunk.substring(0, 50)}..."`);
+        ttsProgressText.textContent = chunks.length > 1
+          ? `Generating speech (${i + 1}/${chunks.length})...`
+          : "Generating speech...";
+        ttsProgressFill.style.width = `${Math.min(95, 65 + (i / chunks.length) * 30)}%`;
+
+        const result = await tts.generate(chunk, { voice, speed });
+        const data: Float32Array = result.data;
+        sampleRate = result.sampling_rate || 24000;
+        audioChunks.push(data);
+        chunkMeta.push({ text: chunk, samples: data.length });
+        console.log(`[Kokoro TTS] Chunk ${i + 1} done: ${data.length} samples`);
+      }
+      console.log("[Kokoro TTS] All chunks generated");
 
       ttsProgressFill.style.width = "95%";
       ttsProgressText.textContent = "Encoding audio...";
