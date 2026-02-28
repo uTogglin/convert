@@ -107,9 +107,23 @@ export async function generateSubtitles(
             device: device as any,
             progress_callback: (info: any) => {
               if (info.status === "progress" && typeof info.progress === "number") {
-                // Map model download progress to 10-50% range
                 const pct = Math.round(10 + (info.progress * 0.4));
-                onProgress?.(`Downloading ${modelKey} model (${device})...`, pct);
+                const file = info.file ? info.file.split("/").pop() : "";
+                const loaded = info.loaded ? (info.loaded / 1024 / 1024).toFixed(1) : "?";
+                const total = info.total ? (info.total / 1024 / 1024).toFixed(1) : "?";
+                const msg = `Downloading ${modelKey} model — ${file} (${loaded}/${total} MB)`;
+                console.log(`[Whisper STT] ${msg} [${Math.round(info.progress)}%]`);
+                onProgress?.(msg, pct);
+              } else if (info.status === "initiate") {
+                const file = info.file ? info.file.split("/").pop() : "";
+                console.log(`[Whisper STT] Starting download: ${file}`);
+                onProgress?.(`Downloading ${modelKey} model — ${file}...`, 10);
+              } else if (info.status === "done") {
+                const file = info.file ? info.file.split("/").pop() : "";
+                console.log(`[Whisper STT] Finished: ${file}`);
+              } else if (info.status === "ready") {
+                console.log(`[Whisper STT] Model ${modelKey} ready`);
+                onProgress?.(`Model ${modelKey} loaded!`, 50);
               }
             },
           },
