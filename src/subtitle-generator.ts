@@ -3,11 +3,21 @@ import { extractAudioAsWav } from "./video-editor.ts";
 
 const whisperPipelines: Map<string, any> = new Map();
 let whisperLoadingKey: string | null = null;
+let detectedDevice: "webgpu" | "wasm" | null = null;
 
 const MODEL_IDS: Record<string, string> = {
   base: "onnx-community/whisper-base",
   small: "onnx-community/whisper-small",
 };
+
+async function getWhisperDevice(): Promise<{ device: "webgpu" | "wasm"; dtype: string }> {
+  if (detectedDevice) return { device: detectedDevice, dtype: detectedDevice === "webgpu" ? "fp32" : "q8" };
+  const hasWebGPU = typeof navigator !== "undefined" && "gpu" in navigator &&
+    !!(await navigator.gpu?.requestAdapter().catch(() => null));
+  detectedDevice = hasWebGPU ? "webgpu" : "wasm";
+  console.log(`[Whisper STT] Using device=${detectedDevice}`);
+  return { device: detectedDevice, dtype: detectedDevice === "webgpu" ? "fp32" : "q8" };
+}
 
 /**
  * Check if any Whisper model has been loaded into memory.
@@ -69,19 +79,41 @@ export async function generateSubtitles(
 
       try {
         const { pipeline } = await import("@huggingface/transformers");
+        const { device, dtype } = await getWhisperDevice();
+        onProgress?.(`Downloading ${modelKey} model (${device})...`, 10);
+
         whisperPipeline = await pipeline(
           "automatic-speech-recognition",
           modelId,
           {
+            dtype: dtype as any,
+            device: device as any,
             progress_callback: (info: any) => {
               if (info.status === "progress" && typeof info.progress === "number") {
                 // Map model download progress to 10-50% range
                 const pct = Math.round(10 + (info.progress * 0.4));
-                onProgress?.(`Downloading ${modelKey} model...`, pct);
+                onProgress?.(`Downloading ${modelKey} model (${device})...`, pct);
               }
             },
           },
         );
+
+        // WebGPU fix: ONNX tensors stay on GPU — patch model.__call__ to force CPU readback
+        if (device === "webgpu" && whisperPipeline.model?.__call__) {
+          const origCall = whisperPipeline.model.__call__.bind(whisperPipeline.model);
+          whisperPipeline.model.__call__ = async function (...args: any[]) {
+            const output = await origCall(...args);
+            for (const key of Object.keys(output)) {
+              const tensor = output[key];
+              if (tensor && typeof tensor.getData === "function") {
+                await tensor.getData();
+              }
+            }
+            return output;
+          };
+          console.log("[Whisper STT] Patched model.__call__ for WebGPU tensor readback");
+        }
+
         whisperPipelines.set(modelKey, whisperPipeline);
       } finally {
         whisperLoadingKey = null;
