@@ -12,10 +12,10 @@ interface ModelConfig {
 }
 
 const MODELS: Record<string, ModelConfig> = {
-  base: { id: "onnx-community/whisper-base", label: "Base", size: "~50 MB" },
-  small: { id: "onnx-community/whisper-small", label: "Small", size: "~160 MB" },
-  medium: { id: "Xenova/whisper-medium", label: "Medium", size: "~500 MB" },
-  "large-v3-turbo": { id: "onnx-community/whisper-large-v3-turbo", label: "Large V3 Turbo", size: "~550 MB" },
+  base: { id: "onnx-community/whisper-base", label: "Base", size: "~75 MB" },
+  small: { id: "onnx-community/whisper-small", label: "Small", size: "~250 MB" },
+  medium: { id: "Xenova/whisper-medium", label: "Medium", size: "~1 GB" },
+  "large-v3-turbo": { id: "onnx-community/whisper-large-v3-turbo", label: "Large V3 Turbo", size: "~1.5 GB" },
 };
 
 async function getWhisperDevice(): Promise<"webgpu" | "wasm"> {
@@ -110,7 +110,8 @@ export async function generateSubtitles(
         const dtypeLabel = typeof dtype === "string" ? dtype : "mixed";
         onProgress?.(`Loading ${cfg.label} model (${device}, ${dtypeLabel})...`, 10);
 
-        // Track whether files are coming from cache or network
+        // Track per-file bytes for smooth overall progress
+        const fileProgress: Map<string, { loaded: number; total: number }> = new Map();
         let fromCache = true;
 
         whisperPipeline = await pipeline(
@@ -121,22 +122,30 @@ export async function generateSubtitles(
             device: device as any,
             progress_callback: (info: any) => {
               if (info.status === "progress" && typeof info.progress === "number") {
-                // If we see slow progress (loaded < total for a while), it's a real download
-                if (info.loaded && info.total && info.loaded < info.total * 0.99) {
-                  fromCache = false;
+                const fname = info.file || "";
+                if (info.loaded && info.total) {
+                  fileProgress.set(fname, { loaded: info.loaded, total: info.total });
+                  if (info.loaded < info.total * 0.95) fromCache = false;
                 }
-                const pct = Math.round(10 + (info.progress * 0.4));
-                const file = info.file ? info.file.split("/").pop() : "";
-                const loaded = info.loaded ? (info.loaded / 1024 / 1024).toFixed(1) : "?";
-                const total = info.total ? (info.total / 1024 / 1024).toFixed(1) : "?";
+                // Compute overall progress across all files
+                let totalLoaded = 0, totalSize = 0;
+                for (const fp of fileProgress.values()) {
+                  totalLoaded += fp.loaded;
+                  totalSize += fp.total;
+                }
+                const overallPct = totalSize > 0 ? totalLoaded / totalSize : 0;
+                // Map 0-1 overall to 10-50% progress range
+                const pct = Math.round(10 + overallPct * 40);
+                const file = fname.split("/").pop() || "";
+                const loaded = (totalLoaded / 1024 / 1024).toFixed(0);
+                const total = (totalSize / 1024 / 1024).toFixed(0);
                 const action = fromCache ? "Loading" : "Downloading";
                 const msg = `${action} ${cfg.label} — ${file} (${loaded}/${total} MB)`;
-                console.log(`[Whisper STT] ${msg} [${Math.round(info.progress)}%]`);
+                console.log(`[Whisper STT] ${msg} [${Math.round(overallPct * 100)}%]`);
                 onProgress?.(msg, pct);
               } else if (info.status === "initiate") {
                 const file = info.file ? info.file.split("/").pop() : "";
                 console.log(`[Whisper STT] Loading: ${file}`);
-                onProgress?.(`Loading ${cfg.label} — ${file}...`, 10);
               } else if (info.status === "done") {
                 const file = info.file ? info.file.split("/").pop() : "";
                 console.log(`[Whisper STT] Ready: ${file}`);
