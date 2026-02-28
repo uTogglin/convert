@@ -567,18 +567,25 @@
           </div>
 
           <div class="vid-settings-group">
-            <span class="sm-label">Trim</span>
-            <div class="vid-trim-inputs">
-              <label class="vid-time-label">
-                <span>Start</span>
-                <input type="text" id="vid-trim-start" placeholder="0:00.000" class="vid-time-input">
-              </label>
-              <label class="vid-time-label">
-                <span>End</span>
-                <input type="text" id="vid-trim-end" placeholder="0:00.000" class="vid-time-input">
-              </label>
+            <div class="vid-collapsible" id="vid-trim-collapsible">
+              <button id="vid-trim-col-toggle" class="vid-collapsible-header">
+                <span class="vid-collapsible-arrow">&#9656;</span>
+                <span>Trim</span>
+              </button>
+              <div class="vid-collapsible-body">
+                <div class="vid-trim-inputs">
+                  <label class="vid-time-label">
+                    <span>Start</span>
+                    <input type="text" id="vid-trim-start" placeholder="0:00.000" class="vid-time-input">
+                  </label>
+                  <label class="vid-time-label">
+                    <span>End</span>
+                    <input type="text" id="vid-trim-end" placeholder="0:00.000" class="vid-time-input">
+                  </label>
+                </div>
+                <button id="vid-trim-reset" class="sm-btn">Reset trim</button>
+              </div>
             </div>
-            <button id="vid-trim-reset" class="sm-btn">Reset trim</button>
           </div>
 
           <!-- Crop section -->
@@ -672,64 +679,71 @@
           </div>
 
           <div class="vid-settings-group">
-            <span class="sm-label">Subtitles</span>
-            <div class="vid-extract-row">
-              <select id="vid-sub-lang" class="sm-select vid-lang-select">
-                <option value="all">All tracks</option>
-              </select>
-              <button id="vid-extract-subs" class="sm-btn">Extract</button>
-            </div>
-            <label class="sm-switch-row">
-              <span class="sm-switch-label">Remove subtitles</span>
-              <button id="vid-remove-subs" class="sm-switch" role="switch"></button>
-            </label>
-            <div class="vid-collapsible" id="vid-add-subs-collapsible">
-              <button id="vid-add-subs-toggle" class="vid-collapsible-header">
+            <div class="vid-collapsible" id="vid-subs-collapsible">
+              <button id="vid-subs-col-toggle" class="vid-collapsible-header">
                 <span class="vid-collapsible-arrow">&#9656;</span>
-                <span>Add subtitles</span>
+                <span>Subtitles</span>
               </button>
-              <div id="vid-add-subs-body" class="vid-collapsible-body">
-                <button id="vid-sub-file-btn" class="sm-btn">Choose subtitle file</button>
-                <span id="vid-sub-file-name" class="vid-sub-file-name"></span>
+              <div class="vid-collapsible-body">
+                <div class="vid-extract-row">
+                  <select id="vid-sub-lang" class="sm-select vid-lang-select">
+                    <option value="all">All tracks</option>
+                  </select>
+                  <button id="vid-extract-subs" class="sm-btn">Extract</button>
+                </div>
                 <label class="sm-switch-row">
-                  <span class="sm-switch-label">Mux (embed as track)</span>
-                  <button id="vid-mux-toggle" class="sm-switch" role="switch"></button>
+                  <span class="sm-switch-label">Remove subtitles</span>
+                  <button id="vid-remove-subs" class="sm-switch" role="switch"></button>
                 </label>
-                <label class="sm-switch-row">
-                  <span class="sm-switch-label">Burn (hardcode)</span>
-                  <button id="vid-burn-toggle" class="sm-switch" role="switch"></button>
-                </label>
+                <div class="vid-collapsible" id="vid-add-subs-collapsible">
+                  <button id="vid-add-subs-toggle" class="vid-collapsible-header">
+                    <span class="vid-collapsible-arrow">&#9656;</span>
+                    <span>Add subtitles</span>
+                  </button>
+                  <div id="vid-add-subs-body" class="vid-collapsible-body">
+                    <button id="vid-sub-file-btn" class="sm-btn">Choose subtitle file</button>
+                    <span id="vid-sub-file-name" class="vid-sub-file-name"></span>
+                    <label class="sm-switch-row">
+                      <span class="sm-switch-label">Mux (embed as track)</span>
+                      <button id="vid-mux-toggle" class="sm-switch" role="switch"></button>
+                    </label>
+                    <label class="sm-switch-row">
+                      <span class="sm-switch-label">Burn (hardcode)</span>
+                      <button id="vid-burn-toggle" class="sm-switch" role="switch"></button>
+                    </label>
+                  </div>
+                </div>
+                <div class="vid-generate-row">
+                  <select id="vid-gen-lang" class="sm-select">
+                    <option value="">Auto-detect</option>
+                    <option value="en">English</option>
+                    <option value="es">Spanish</option>
+                    <option value="fr">French</option>
+                    <option value="de">German</option>
+                    <option value="it">Italian</option>
+                    <option value="pt">Portuguese</option>
+                    <option value="nl">Dutch</option>
+                    <option value="ru">Russian</option>
+                    <option value="ja">Japanese</option>
+                    <option value="ko">Korean</option>
+                    <option value="zh">Chinese</option>
+                    <option value="ar">Arabic</option>
+                    <option value="hi">Hindi</option>
+                    <option value="tr">Turkish</option>
+                    <option value="pl">Polish</option>
+                    <option value="sv">Swedish</option>
+                  </select>
+                  <select id="vid-gen-model" class="sm-select">
+                    <option value="small">Quality</option>
+                    <option value="base">Speed</option>
+                  </select>
+                </div>
+                <button id="vid-generate-subs" class="sm-btn">Generate subtitles (AI)</button>
+                <div id="vid-generate-progress" class="vid-generate-progress hidden">
+                  <div class="vid-progress-bar"><div class="vid-progress-fill"></div></div>
+                  <span class="vid-progress-text">Loading model...</span>
+                </div>
               </div>
-            </div>
-            <div class="vid-generate-row">
-              <select id="vid-gen-lang" class="sm-select">
-                <option value="">Auto-detect</option>
-                <option value="en">English</option>
-                <option value="es">Spanish</option>
-                <option value="fr">French</option>
-                <option value="de">German</option>
-                <option value="it">Italian</option>
-                <option value="pt">Portuguese</option>
-                <option value="nl">Dutch</option>
-                <option value="ru">Russian</option>
-                <option value="ja">Japanese</option>
-                <option value="ko">Korean</option>
-                <option value="zh">Chinese</option>
-                <option value="ar">Arabic</option>
-                <option value="hi">Hindi</option>
-                <option value="tr">Turkish</option>
-                <option value="pl">Polish</option>
-                <option value="sv">Swedish</option>
-              </select>
-              <select id="vid-gen-model" class="sm-select">
-                <option value="small">Quality</option>
-                <option value="base">Speed</option>
-              </select>
-            </div>
-            <button id="vid-generate-subs" class="sm-btn">Generate subtitles (AI)</button>
-            <div id="vid-generate-progress" class="vid-generate-progress hidden">
-              <div class="vid-progress-bar"><div class="vid-progress-fill"></div></div>
-              <span class="vid-progress-text">Loading model...</span>
             </div>
           </div>
         </div>

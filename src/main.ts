@@ -314,10 +314,14 @@ const ui = {
   vidHandleLeft: document.querySelector(".vid-handle-left") as HTMLDivElement,
   vidHandleRight: document.querySelector(".vid-handle-right") as HTMLDivElement,
   vidPlayhead: document.querySelector(".vid-playhead") as HTMLDivElement,
+  vidTrimCollapsible: document.querySelector("#vid-trim-collapsible") as HTMLDivElement,
+  vidTrimColToggle: document.querySelector("#vid-trim-col-toggle") as HTMLButtonElement,
   vidTrimStartInput: document.querySelector("#vid-trim-start") as HTMLInputElement,
   vidTrimEndInput: document.querySelector("#vid-trim-end") as HTMLInputElement,
   vidTrimReset: document.querySelector("#vid-trim-reset") as HTMLButtonElement,
   vidRemoveAudioToggle: document.querySelector("#vid-remove-audio") as HTMLButtonElement,
+  vidSubsCollapsible: document.querySelector("#vid-subs-collapsible") as HTMLDivElement,
+  vidSubsColToggle: document.querySelector("#vid-subs-col-toggle") as HTMLButtonElement,
   vidExtractSubs: document.querySelector("#vid-extract-subs") as HTMLButtonElement,
   vidRemoveSubsToggle: document.querySelector("#vid-remove-subs") as HTMLButtonElement,
   vidGenerateSubs: document.querySelector("#vid-generate-subs") as HTMLButtonElement,
@@ -2870,6 +2874,8 @@ function vidLoadFile(file: File) {
   vidEqBands = [0, 0, 0, 0, 0];
   vidSubStreams = [];
   if (ui.vidSubFileName) ui.vidSubFileName.textContent = "";
+  if (ui.vidTrimCollapsible) ui.vidTrimCollapsible.classList.remove("open");
+  if (ui.vidSubsCollapsible) ui.vidSubsCollapsible.classList.remove("open");
   if (ui.vidAddSubsCollapsible) ui.vidAddSubsCollapsible.classList.remove("open");
   if (ui.vidEqCollapsible) ui.vidEqCollapsible.classList.remove("open");
   ui.vidEqSliders?.forEach((s, i) => { s.value = "0"; if (ui.vidEqValues[i]) ui.vidEqValues[i].textContent = "0 dB"; });
@@ -2963,6 +2969,8 @@ function vidResetState() {
   if (ui.vidPrefMux) ui.vidPrefMux.classList.remove("active");
   if (ui.vidPrefBurn) ui.vidPrefBurn.classList.remove("active");
   if (ui.vidSubFileName) ui.vidSubFileName.textContent = "";
+  if (ui.vidTrimCollapsible) ui.vidTrimCollapsible.classList.remove("open");
+  if (ui.vidSubsCollapsible) ui.vidSubsCollapsible.classList.remove("open");
   if (ui.vidAddSubsCollapsible) ui.vidAddSubsCollapsible.classList.remove("open");
   if (ui.vidEqCollapsible) ui.vidEqCollapsible.classList.remove("open");
   ui.vidEqSliders?.forEach((s, i) => { s.value = "0"; if (ui.vidEqValues[i]) ui.vidEqValues[i].textContent = "0 dB"; });
@@ -3674,6 +3682,16 @@ function vidMergeChanged() {
   vidUpdateMergeList();
   vidUpdateActionButton();
 }
+
+// Trim collapsible toggle
+ui.vidTrimColToggle?.addEventListener("click", () => {
+  ui.vidTrimCollapsible?.classList.toggle("open");
+});
+
+// Subtitles collapsible toggle
+ui.vidSubsColToggle?.addEventListener("click", () => {
+  ui.vidSubsCollapsible?.classList.toggle("open");
+});
 
 // Merge collapsible toggle
 ui.vidMergeToggle?.addEventListener("click", () => {
