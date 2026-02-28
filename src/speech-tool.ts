@@ -378,7 +378,12 @@ export function initSpeechTool() {
         }
         const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
 
-        const data: Float32Array = result.data;
+        // RawAudio has .data (Float32Array getter) and .sampling_rate
+        const data: Float32Array | undefined = result?.data;
+        if (!data || data.length === 0) {
+          console.error("[Kokoro TTS] generate() returned no audio data:", result);
+          throw new Error("TTS generated empty audio. Try shorter text or a different voice.");
+        }
         sampleRate = result.sampling_rate || 24000;
         audioChunks.push(data);
         chunkMeta.push({ text: chunk, samples: data.length });
