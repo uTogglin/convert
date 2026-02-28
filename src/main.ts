@@ -10,6 +10,7 @@ import { processVideo, probeVideoInfo, extractSubtitles, addSubtitlesToVideo, me
 import type { SubtitleStreamInfo } from "./video-editor.js";
 import { generateSubtitles } from "./subtitle-generator.js";
 import { initSpeechTool } from "./speech-tool.js";
+import { initSummarizeTool } from "./summarize-tool.js";
 
 // ── In-app console log capture ─────────────────────────────────────────────
 interface AppLogEntry { level: "error" | "warn" | "info"; msg: string; time: string; }
@@ -171,6 +172,11 @@ let sttModelDefault: string = (() => {
 /** Default STT language */
 let sttLanguageDefault: string = (() => {
   try { return localStorage.getItem("convert-stt-language") ?? ""; } catch { return ""; }
+})();
+
+/** Default summarize word limit */
+let sumWordLimitDefault: string = (() => {
+  try { return localStorage.getItem("convert-sum-word-limit") ?? "150"; } catch { return "150"; }
 })();
 
 /** Queue for mixed-category batch conversion */
@@ -417,16 +423,19 @@ const ui = {
   smTtsSpeedLabel: document.querySelector("#sm-tts-speed-label") as HTMLSpanElement,
   smSttModel: document.querySelector("#sm-stt-model") as HTMLSelectElement,
   smSttLanguage: document.querySelector("#sm-stt-language") as HTMLSelectElement,
+  // Summarize settings panel
+  smSumWordLimit: document.querySelector("#sm-sum-word-limit") as HTMLInputElement,
 };
 
 // ── Home page / tool navigation ──────────────────────────────────────────────
 /** Which tool view is active, or null when on the home page */
-let activeTool: "convert" | "compress" | "image" | "video" | "speech" | null = null;
+let activeTool: "convert" | "compress" | "image" | "video" | "speech" | "summarize" | null = null;
 
 const compressPage = document.querySelector("#compress-page") as HTMLElement;
 const imagePage = document.querySelector("#image-page") as HTMLElement;
 const videoPage = document.querySelector("#video-page") as HTMLElement;
 const speechPage = document.querySelector("#speech-page") as HTMLElement;
+const summarizePage = document.querySelector("#summarize-page") as HTMLElement;
 
 function showHomePage() {
   // Clean up tool state when navigating away
@@ -441,9 +450,10 @@ function showHomePage() {
   imagePage.classList.add("hidden");
   videoPage.classList.add("hidden");
   speechPage.classList.add("hidden");
+  summarizePage.classList.add("hidden");
 }
 
-function showToolView(tool: "convert" | "compress" | "image" | "video" | "speech") {
+function showToolView(tool: "convert" | "compress" | "image" | "video" | "speech" | "summarize") {
   // Clean up tool state when switching away
   if (activeTool === "image" && tool !== "image") imgResetState();
   if (activeTool === "video" && tool !== "video") vidResetState();
@@ -457,6 +467,7 @@ function showToolView(tool: "convert" | "compress" | "image" | "video" | "speech
   imagePage.classList.add("hidden");
   videoPage.classList.add("hidden");
   speechPage.classList.add("hidden");
+  summarizePage.classList.add("hidden");
 
   if (tool === "compress") {
     compressPage.classList.remove("hidden");
@@ -472,6 +483,8 @@ function showToolView(tool: "convert" | "compress" | "image" | "video" | "speech
     videoPage.classList.remove("hidden");
   } else if (tool === "speech") {
     speechPage.classList.remove("hidden");
+  } else if (tool === "summarize") {
+    summarizePage.classList.remove("hidden");
   }
   updateProcessButton();
 }
@@ -485,7 +498,7 @@ ui.backToHome.addEventListener("click", showHomePage);
 // Home card clicks
 for (const card of document.querySelectorAll<HTMLButtonElement>(".home-card")) {
   card.addEventListener("click", () => {
-    const tool = card.dataset.tool as "convert" | "compress" | "image" | "video" | "speech";
+    const tool = card.dataset.tool as "convert" | "compress" | "image" | "video" | "speech" | "summarize";
     if (tool) showToolView(tool);
   });
 }
@@ -495,6 +508,9 @@ document.querySelector("#logo")?.addEventListener("click", showHomePage);
 
 // Initialize speech tool
 initSpeechTool();
+
+// Initialize summarize tool
+initSummarizeTool();
 
 // ── Speech settings panel ───────────────────────────────────────────────────
 // Restore saved values into settings selects
@@ -538,6 +554,15 @@ ui.smSttLanguage?.addEventListener("change", () => {
   if (file) file.value = sttLanguageDefault;
 });
 
+// ── Summarize settings panel ─────────────────────────────────────────────────
+if (ui.smSumWordLimit) ui.smSumWordLimit.value = sumWordLimitDefault;
+ui.smSumWordLimit?.addEventListener("change", () => {
+  sumWordLimitDefault = ui.smSumWordLimit.value;
+  try { localStorage.setItem("convert-sum-word-limit", sumWordLimitDefault); } catch {}
+  const toolInput = document.getElementById("sum-word-limit") as HTMLInputElement | null;
+  if (toolInput) toolInput.value = sumWordLimitDefault;
+});
+
 // ── Settings modal ──────────────────────────────────────────────────────────
 const smNavBtns = document.querySelectorAll<HTMLButtonElement>(".sm-nav-btn");
 const smPanels = document.querySelectorAll<HTMLDivElement>(".sm-panel");
@@ -549,7 +574,7 @@ function openSettings(panel?: string) {
     sidebar.classList.add("hidden");
     ui.settingsModal.classList.add("sm-no-sidebar");
     // Build a simple tab bar for the two panels
-    const toolPanel = activeTool === "compress" ? "compress" : activeTool === "image" ? "image" : activeTool === "video" ? "video" : activeTool === "speech" ? "speech" : "convert";
+    const toolPanel = activeTool === "compress" ? "compress" : activeTool === "image" ? "image" : activeTool === "video" ? "video" : activeTool === "speech" ? "speech" : activeTool === "summarize" ? "summarize" : "convert";
     switchSettingsPanel(panel || toolPanel);
     // Show only relevant nav items
     smNavBtns.forEach(b => {
@@ -966,7 +991,7 @@ function presentQueueGroup(index: number) {
 ui.fileInput.addEventListener("change", fileSelectHandler);
 window.addEventListener("drop", (e) => {
   // On image/video/speech page, let those tools handle drops
-  if (activeTool === "image" || activeTool === "video" || activeTool === "speech") return;
+  if (activeTool === "image" || activeTool === "video" || activeTool === "speech" || activeTool === "summarize") return;
   fileSelectHandler(e);
 });
 window.addEventListener("dragover", e => e.preventDefault());
@@ -1317,6 +1342,7 @@ if (ui.settingsToggle) {
                   : activeTool === "image" ? "image"
                   : activeTool === "video" ? "video"
                   : activeTool === "speech" ? "speech"
+                  : activeTool === "summarize" ? "summarize"
                   : undefined;
       openSettings(panel);
     } else {

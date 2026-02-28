@@ -121,6 +121,20 @@
         <p>Read text aloud or transcribe speech to text — all processed locally in your browser.</p>
         <span class="home-card-tag">New</span>
       </button>
+      <button class="home-card" data-tool="summarize">
+        <div class="home-card-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+            <polyline points="10 9 9 9 8 9"></polyline>
+          </svg>
+        </div>
+        <h3>Summarize</h3>
+        <p>Summarize documents and web pages with AI — everything processed locally.</p>
+        <span class="home-card-tag">AI-powered</span>
+      </button>
     </div>
   </section>
 
@@ -149,6 +163,10 @@
         <button class="sm-nav-btn" data-panel="speech">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
           Text & Speech
+        </button>
+        <button class="sm-nav-btn" data-panel="summarize">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+          Summarize
         </button>
       </nav>
     </aside>
@@ -381,6 +399,22 @@
         <div class="sm-group">
           <span class="sm-label">Processing</span>
           <p class="sm-hint">TTS uses Kokoro 82M neural model (~92 MB). STT uses Whisper AI locally — model size depends on selection. Everything runs in-browser; no files leave your device.</p>
+        </div>
+      </div>
+
+      <!-- Summarize panel -->
+      <div class="sm-panel" data-panel="summarize">
+        <h3 class="sm-panel-title">Summarize</h3>
+        <div class="sm-group">
+          <span class="sm-label">Default Word Limit</span>
+          <div class="sm-size-row">
+            <input type="number" id="sm-sum-word-limit" value="150" min="50" max="500" step="10">
+            <span class="sm-unit">words</span>
+          </div>
+        </div>
+        <div class="sm-group">
+          <span class="sm-label">Processing</span>
+          <p class="sm-hint">Uses DistilBART CNN 6-6 (~300 MB). Model is cached after first download. Everything runs in-browser; no files leave your device.</p>
         </div>
       </div>
 
@@ -1135,6 +1169,99 @@
     </div>
 
     <input id="speech-file-input" type="file" accept="audio/*,video/*" style="display:none">
+  </section>
+
+  <section id="summarize-page" class="tool-page hidden">
+    <div class="speech-page-header">
+      <div class="speech-header-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      </div>
+      <h2>Summarize</h2>
+      <p>Extract key points from documents and web pages using AI</p>
+    </div>
+
+    <div id="sum-layout">
+      <div class="speech-tabs">
+        <button class="sum-tab active" data-tab="upload">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Upload File
+        </button>
+        <button class="sum-tab" data-tab="url">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          Enter URL
+        </button>
+      </div>
+
+      <!-- Upload Panel -->
+      <div id="sum-upload-panel" class="sum-panel active">
+        <div class="speech-card">
+          <div id="sum-file-drop" class="speech-file-drop">
+            <div class="speech-file-drop-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            </div>
+            <span class="speech-file-drop-text">Drop a document here</span>
+            <span class="speech-file-drop-sub">PDF, DOCX, TXT, MD, HTML</span>
+          </div>
+          <span id="sum-file-name" class="speech-stt-file-name"></span>
+
+          <div class="sum-word-limit-row">
+            <label class="speech-option-label">Word limit</label>
+            <input type="number" id="sum-word-limit" class="sum-word-limit-input" value="150" min="50" max="500" step="10">
+          </div>
+
+          <button id="sum-summarize-btn" class="speech-generate-btn disabled">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            Summarize
+          </button>
+        </div>
+      </div>
+
+      <!-- URL Panel -->
+      <div id="sum-url-panel" class="sum-panel">
+        <div class="speech-card">
+          <div class="sum-url-row">
+            <input type="url" id="sum-url-input" class="sum-url-field" placeholder="https://example.com/article">
+            <button id="sum-fetch-btn" class="sum-fetch-btn">Fetch</button>
+          </div>
+
+          <div class="sum-word-limit-row">
+            <label class="speech-option-label">Word limit</label>
+            <input type="number" class="sum-word-limit-input sum-url-word-limit" value="150" min="50" max="500" step="10">
+          </div>
+
+          <button class="speech-generate-btn disabled sum-url-summarize-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            Summarize
+          </button>
+        </div>
+      </div>
+
+      <!-- Progress -->
+      <div id="sum-progress" class="speech-progress hidden">
+        <div class="speech-progress-bar"><div class="speech-progress-fill"></div></div>
+        <span class="speech-progress-text">Processing...</span>
+      </div>
+
+      <!-- Output -->
+      <div id="sum-output" class="speech-stt-output hidden">
+        <div class="speech-stt-output-header">
+          <span class="speech-stt-output-label">Summary</span>
+          <div class="sum-output-actions">
+            <button id="sum-copy-btn" class="speech-copy-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              Copy
+            </button>
+            <button id="sum-download-btn" class="speech-copy-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              Download
+            </button>
+          </div>
+        </div>
+        <textarea id="sum-result" class="speech-textarea speech-stt-result-textarea" placeholder="Summary will appear here..." rows="6" readonly></textarea>
+      </div>
+    </div>
+
+    <input id="sum-file-input" type="file" accept=".pdf,.docx,.txt,.md,.html,.htm,.csv,.json,.xml,.log,.yaml,.yml,.toml,.ini,.cfg,.conf" style="display:none">
   </section>
 
   <div id="format-containers">

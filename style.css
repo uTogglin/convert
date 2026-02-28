@@ -3184,6 +3184,116 @@ body[data-tool="image"] #convert-button { display: none !important; }
 }
 
 /* =========================================
+   9b. SUMMARIZE TOOL
+   ========================================= */
+#sum-layout {
+  max-width: 620px;
+  margin: 0 auto;
+}
+
+/* ── Tabs (reuse speech-tabs styling via shared class) ── */
+.sum-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+  font-family: inherit;
+}
+.sum-tab.active {
+  background: var(--surface-color);
+  color: var(--text-main);
+  box-shadow: var(--shadow-sm);
+}
+.sum-tab:not(.active):hover {
+  color: var(--text-main);
+}
+
+/* ── Panels ── */
+.sum-panel { display: none; }
+.sum-panel.active { display: block; }
+
+/* ── URL input row ── */
+.sum-url-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.sum-url-field {
+  flex: 1;
+  padding: 10px 14px;
+  background: var(--input-bg);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.88rem;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.sum-url-field:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+.sum-fetch-btn {
+  padding: 10px 18px;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+  font-family: inherit;
+  white-space: nowrap;
+}
+.sum-fetch-btn:hover {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ── Word limit ── */
+.sum-word-limit-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 0;
+}
+.sum-word-limit-input {
+  width: 80px;
+  padding: 8px 10px;
+  background: var(--input-bg);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.88rem;
+  text-align: center;
+}
+.sum-word-limit-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+/* ── Output actions row ── */
+.sum-output-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* =========================================
    10. RESPONSIVE
    ========================================= */
 @media only screen and (max-width: 800px) {
