@@ -21,14 +21,23 @@ async function getKokoro(onProgress?: (pct: number, msg: string) => void): Promi
 
   kokoroLoading = (async () => {
     const { KokoroTTS } = await import("kokoro-js");
+
+    // Prefer WebGPU (fast, GPU-accelerated) with WASM fallback (slow)
+    const hasWebGPU = typeof navigator !== "undefined" && "gpu" in navigator;
+    const device = hasWebGPU ? "webgpu" : "wasm";
+    // fp32 for WebGPU compatibility, q8 for WASM to reduce memory
+    const dtype = hasWebGPU ? "fp32" : "q8";
+
+    onProgress?.(0, `Loading Kokoro model (${device})...`);
+
     kokoroInstance = await KokoroTTS.from_pretrained(
       "onnx-community/Kokoro-82M-v1.0-ONNX",
       {
-        dtype: "q8" as any,
-        device: "wasm" as any,
+        dtype: dtype as any,
+        device: device as any,
         progress_callback: (info: any) => {
           if (info.status === "progress" && typeof info.progress === "number") {
-            onProgress?.(Math.round(info.progress), "Downloading Kokoro model...");
+            onProgress?.(Math.round(info.progress), `Downloading Kokoro model (${device})...`);
           }
         },
       },
