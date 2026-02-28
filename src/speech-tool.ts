@@ -182,7 +182,7 @@ export function initSpeechTool() {
 
       // Load into audio player
       if (currentAudioUrl) URL.revokeObjectURL(currentAudioUrl);
-      currentAudioUrl = URL.createObjectURL(currentWavBlob);
+      currentAudioUrl = URL.createObjectURL(currentWavBlob!);
       audio.src = currentAudioUrl;
       audio.load();
 
