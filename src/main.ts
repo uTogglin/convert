@@ -425,6 +425,7 @@ const ui = {
   smSttLanguage: document.querySelector("#sm-stt-language") as HTMLSelectElement,
   // Summarize settings panel
   smSumWordLimit: document.querySelector("#sm-sum-word-limit") as HTMLInputElement,
+  smSumCorsProxy: document.querySelector("#sm-sum-cors-proxy") as HTMLButtonElement,
 };
 
 // ── Home page / tool navigation ──────────────────────────────────────────────
@@ -562,6 +563,21 @@ ui.smSumWordLimit?.addEventListener("change", () => {
   const toolInput = document.getElementById("sum-word-limit") as HTMLInputElement | null;
   if (toolInput) toolInput.value = sumWordLimitDefault;
 });
+
+// CORS proxy toggle
+let sumCorsProxy: boolean = (() => {
+  try { return localStorage.getItem("convert-sum-cors-proxy") === "true"; } catch { return false; }
+})();
+if (ui.smSumCorsProxy) {
+  ui.smSumCorsProxy.classList.toggle("active", sumCorsProxy);
+  ui.smSumCorsProxy.addEventListener("click", () => {
+    sumCorsProxy = !sumCorsProxy;
+    ui.smSumCorsProxy.classList.toggle("active", sumCorsProxy);
+    try { localStorage.setItem("convert-sum-cors-proxy", String(sumCorsProxy)); } catch {}
+    // Notify summarize-tool module
+    window.dispatchEvent(new CustomEvent("sum-cors-proxy-change", { detail: sumCorsProxy }));
+  });
+}
 
 // ── Settings modal ──────────────────────────────────────────────────────────
 const smNavBtns = document.querySelectorAll<HTMLButtonElement>(".sm-nav-btn");

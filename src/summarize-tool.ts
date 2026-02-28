@@ -71,11 +71,43 @@ async function extractTextFromDocx(bytes: Uint8Array): Promise<string> {
   return parts.join(" ").replace(/\s+/g, " ").trim();
 }
 
+/** Whether CORS proxy is enabled (opt-in, breaks full privacy) */
+let corsProxyEnabled: boolean = (() => {
+  try { return localStorage.getItem("convert-sum-cors-proxy") === "true"; } catch { return false; }
+})();
+window.addEventListener("sum-cors-proxy-change", ((e: CustomEvent) => {
+  corsProxyEnabled = !!e.detail;
+}) as EventListener);
+
 async function fetchUrlText(url: string): Promise<string> {
-  const resp = await fetch(url);
-  if (!resp.ok) throw new Error(`Failed to fetch URL: ${resp.status} ${resp.statusText}`);
-  const html = await resp.text();
-  return extractTextFromHtml(html);
+  // Try direct fetch first
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const html = await resp.text();
+    const text = extractTextFromHtml(html);
+    if (text) return text;
+  } catch {
+    // Direct fetch blocked by CORS
+  }
+
+  // Fall back to CORS proxy only if user opted in
+  if (corsProxyEnabled) {
+    try {
+      const resp = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
+      if (resp.ok) {
+        const html = await resp.text();
+        const text = extractTextFromHtml(html);
+        if (text) return text;
+      }
+    } catch { /* proxy also failed */ }
+  }
+
+  throw new Error(
+    corsProxyEnabled
+      ? "Could not fetch URL — all methods failed. The site may block external access."
+      : "Blocked by CORS. Enable \"CORS proxy\" in Summarize settings to fetch cross-origin URLs (routes through a third-party server)."
+  );
 }
 
 // ── Chunked summarization ───────────────────────────────────────────────────

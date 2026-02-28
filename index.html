@@ -413,6 +413,14 @@
           </div>
         </div>
         <div class="sm-group">
+          <span class="sm-label">URL Fetching</span>
+          <label class="sm-switch-row">
+            <span class="sm-switch-label">CORS proxy</span>
+            <button id="sm-sum-cors-proxy" class="sm-switch" role="switch"></button>
+          </label>
+          <p class="sm-hint">Most websites block cross-origin requests. Enable this to route URL fetches through a third-party proxy (allorigins.win). Your requested URL will be sent to that server.</p>
+        </div>
+        <div class="sm-group">
           <span class="sm-label">Processing</span>
           <p class="sm-hint">Uses DistilBART CNN 6-6 (~300 MB). Model is cached after first download. Everything runs in-browser; no files leave your device.</p>
         </div>
