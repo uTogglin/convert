@@ -42,6 +42,27 @@ async function getKokoro(onProgress?: (pct: number, msg: string) => void): Promi
         },
       },
     );
+
+    // WebGPU fix: kokoro-js does `new RawAudio(waveform.data, SAMPLE_RATE)` but
+    // on WebGPU the ONNX output tensor keeps data on GPU, so `waveform.data` is
+    // undefined. Patch the model's __call__ to ensure waveform is read back to CPU.
+    if (device === "webgpu" && kokoroInstance.model?.__call__) {
+      const origCall = kokoroInstance.model.__call__.bind(kokoroInstance.model);
+      kokoroInstance.model.__call__ = async function (...args: any[]) {
+        const output = await origCall(...args);
+        // Ensure every output tensor has its data on CPU
+        for (const key of Object.keys(output)) {
+          const tensor = output[key];
+          if (tensor && typeof tensor.getData === "function") {
+            // .getData() reads GPU tensor back to CPU and populates .data
+            await tensor.getData();
+          }
+        }
+        return output;
+      };
+      console.log("[Kokoro TTS] Patched model.__call__ for WebGPU tensor readback");
+    }
+
     console.log("[Kokoro TTS] Model loaded successfully");
   })();
 
@@ -379,30 +400,14 @@ export function initSpeechTool() {
         }
         const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
 
-        // RawAudio has .data getter (Float32Array) and .sampling_rate
-        // On WebGPU, the ONNX tensor data may not transfer to CPU automatically,
-        // so result.data can be undefined. Try multiple fallback approaches.
-        let data: Float32Array | undefined;
-        if (result?.data instanceof Float32Array && result.data.length > 0) {
-          data = result.data;
-        } else if (result?.audio instanceof Float32Array && result.audio.length > 0) {
-          // Internal RawAudio property — direct Float32Array
-          data = result.audio;
-        } else if (result?.audio?.getData) {
-          // WebGPU: internal audio is an ONNX tensor still on GPU — read it back
-          const gpuData = await result.audio.getData();
-          if (gpuData instanceof Float32Array && gpuData.length > 0) data = gpuData;
-        } else if (result?.audio?.data instanceof Float32Array && result.audio.data.length > 0) {
-          // Internal audio might be a tensor with .data property
-          data = result.audio.data;
-        }
-        if (!data || data.length === 0) {
-          console.error("[Kokoro TTS] Could not extract audio from result:", {
-            resultType: typeof result,
-            resultKeys: result ? Object.keys(result) : [],
-            dataType: typeof result?.data,
-            audioType: typeof result?.audio,
-            audioKeys: result?.audio ? Object.keys(result.audio) : [],
+        // RawAudio: .data (Float32Array getter), .sampling_rate
+        // The model.__call__ patch ensures GPU tensors are read back to CPU,
+        // so result.data should work. Fall back to .audio if needed.
+        const data: Float32Array = result?.data ?? result?.audio;
+        if (!data || !(data instanceof Float32Array) || data.length === 0) {
+          console.error("[Kokoro TTS] No audio data from result:", result, {
+            keys: result ? Object.getOwnPropertyNames(result) : [],
+            proto: result ? Object.getOwnPropertyNames(Object.getPrototypeOf(result)) : [],
           });
           throw new Error("TTS generated empty audio. Try shorter text or a different voice.");
         }
