@@ -583,14 +583,20 @@
 
           <!-- Crop section -->
           <div class="vid-settings-group">
-            <span class="sm-label">Crop</span>
+            <label class="sm-switch-row">
+              <span class="sm-switch-label">Crop</span>
+              <button id="vid-crop-toggle" class="sm-switch" role="switch"></button>
+            </label>
             <div class="vid-crop-presets">
-              <button class="vid-crop-preset active" data-ratio="free">Free</button>
               <button class="vid-crop-preset" data-ratio="16:9">16:9</button>
               <button class="vid-crop-preset" data-ratio="4:3">4:3</button>
               <button class="vid-crop-preset" data-ratio="1:1">1:1</button>
               <button class="vid-crop-preset" data-ratio="9:16">9:16</button>
             </div>
+            <label class="sm-switch-row">
+              <span class="sm-switch-label">Lock aspect ratio</span>
+              <button id="vid-crop-lock-ratio" class="sm-switch" role="switch"></button>
+            </label>
             <div class="vid-collapsible" id="vid-crop-manual-collapsible">
               <button id="vid-crop-manual-toggle" class="vid-collapsible-header">
                 <span class="vid-collapsible-arrow">&#9656;</span>

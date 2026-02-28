@@ -195,7 +195,8 @@ let vidCropW: number = 0;
 let vidCropH: number = 0;
 let vidOrigWidth: number = 0;
 let vidOrigHeight: number = 0;
-let vidCropPreset: string = "free";
+let vidCropPreset: string = "";
+let vidCropLockRatio: boolean = false;
 
 /** Merge state */
 let vidMergeFiles: File[] = [];
@@ -344,6 +345,8 @@ const ui = {
   vidFullscreenBtn: document.querySelector("#vid-fullscreen-btn") as HTMLButtonElement,
   vidCanvasCol: document.querySelector("#vid-canvas-col") as HTMLDivElement,
   // Crop UI
+  vidCropToggle: document.querySelector("#vid-crop-toggle") as HTMLButtonElement,
+  vidCropLockRatioToggle: document.querySelector("#vid-crop-lock-ratio") as HTMLButtonElement,
   vidCropOverlay: document.querySelector("#vid-crop-overlay") as HTMLDivElement,
   vidCropBox: document.querySelector("#vid-crop-box") as HTMLDivElement,
   vidCropPresets: document.querySelectorAll(".vid-crop-preset") as NodeListOf<HTMLButtonElement>,
@@ -2873,11 +2876,14 @@ function vidLoadFile(file: File) {
 
   // Reset crop state
   vidCropEnabled = false;
+  vidCropLockRatio = false;
   vidCropX = 0; vidCropY = 0; vidCropW = 0; vidCropH = 0;
   vidOrigWidth = 0; vidOrigHeight = 0;
-  vidCropPreset = "free";
+  vidCropPreset = "";
   ui.vidCropOverlay?.classList.add("hidden");
-  ui.vidCropPresets?.forEach(b => b.classList.toggle("active", b.dataset.ratio === "free"));
+  ui.vidCropToggle?.classList.remove("active");
+  ui.vidCropLockRatioToggle?.classList.remove("active");
+  ui.vidCropPresets?.forEach(b => b.classList.remove("active"));
   if (ui.vidCropInfo) ui.vidCropInfo.textContent = "";
   if (ui.vidCropXInput) ui.vidCropXInput.value = "0";
   if (ui.vidCropYInput) ui.vidCropYInput.value = "0";
@@ -2964,11 +2970,14 @@ function vidResetState() {
 
   // Reset crop
   vidCropEnabled = false;
+  vidCropLockRatio = false;
   vidCropX = 0; vidCropY = 0; vidCropW = 0; vidCropH = 0;
   vidOrigWidth = 0; vidOrigHeight = 0;
-  vidCropPreset = "free";
+  vidCropPreset = "";
   ui.vidCropOverlay?.classList.add("hidden");
-  ui.vidCropPresets?.forEach(b => b.classList.toggle("active", b.dataset.ratio === "free"));
+  ui.vidCropToggle?.classList.remove("active");
+  ui.vidCropLockRatioToggle?.classList.remove("active");
+  ui.vidCropPresets?.forEach(b => b.classList.remove("active"));
   if (ui.vidCropInfo) ui.vidCropInfo.textContent = "";
   if (ui.vidCropManualCollapsible) ui.vidCropManualCollapsible.classList.remove("open");
 
@@ -3369,39 +3378,61 @@ function vidApplyCropPreset(ratio: string) {
   vidCropPreset = ratio;
   ui.vidCropPresets?.forEach(b => b.classList.toggle("active", b.dataset.ratio === ratio));
 
-  if (ratio === "free") {
-    // Reset to full frame
-    vidCropEnabled = false;
-    vidCropX = 0; vidCropY = 0;
-    vidCropW = vidOrigWidth; vidCropH = vidOrigHeight;
+  // Auto-enable crop and lock ratio
+  vidCropEnabled = true;
+  ui.vidCropToggle?.classList.add("active");
+  vidCropLockRatio = true;
+  ui.vidCropLockRatioToggle?.classList.add("active");
+
+  const [rw, rh] = ratio.split(":").map(Number);
+  const targetAspect = rw / rh;
+  const srcAspect = vidOrigWidth / vidOrigHeight;
+  let w: number, h: number;
+  if (targetAspect > srcAspect) {
+    w = vidOrigWidth;
+    h = Math.round(vidOrigWidth / targetAspect);
   } else {
-    vidCropEnabled = true;
-    const [rw, rh] = ratio.split(":").map(Number);
-    const targetAspect = rw / rh;
-    const srcAspect = vidOrigWidth / vidOrigHeight;
-    let w: number, h: number;
-    if (targetAspect > srcAspect) {
-      w = vidOrigWidth;
-      h = Math.round(vidOrigWidth / targetAspect);
-    } else {
-      h = vidOrigHeight;
-      w = Math.round(vidOrigHeight * targetAspect);
-    }
-    w = vidEven(w); h = vidEven(h);
-    w = Math.min(w, vidOrigWidth); h = Math.min(h, vidOrigHeight);
-    vidCropW = w; vidCropH = h;
-    vidCropX = vidEven(Math.floor((vidOrigWidth - w) / 2));
-    vidCropY = vidEven(Math.floor((vidOrigHeight - h) / 2));
+    h = vidOrigHeight;
+    w = Math.round(vidOrigHeight * targetAspect);
   }
+  w = vidEven(w); h = vidEven(h);
+  w = Math.min(w, vidOrigWidth); h = Math.min(h, vidOrigHeight);
+  vidCropW = w; vidCropH = h;
+  vidCropX = vidEven(Math.floor((vidOrigWidth - w) / 2));
+  vidCropY = vidEven(Math.floor((vidOrigHeight - h) / 2));
+
   vidUpdateCropInputs();
   vidCropChanged();
 }
 
+// Crop enable/disable toggle
+ui.vidCropToggle?.addEventListener("click", () => {
+  vidCropEnabled = !vidCropEnabled;
+  ui.vidCropToggle.classList.toggle("active", vidCropEnabled);
+  if (vidCropEnabled && vidOrigWidth > 0) {
+    // If crop matches full frame, default to centered 80% box
+    if (vidCropX === 0 && vidCropY === 0 && vidCropW === vidOrigWidth && vidCropH === vidOrigHeight) {
+      vidCropW = vidEven(Math.round(vidOrigWidth * 0.8));
+      vidCropH = vidEven(Math.round(vidOrigHeight * 0.8));
+      vidCropX = vidEven(Math.floor((vidOrigWidth - vidCropW) / 2));
+      vidCropY = vidEven(Math.floor((vidOrigHeight - vidCropH) / 2));
+      vidUpdateCropInputs();
+    }
+  }
+  vidCropChanged();
+});
+
+// Lock aspect ratio toggle
+ui.vidCropLockRatioToggle?.addEventListener("click", () => {
+  vidCropLockRatio = !vidCropLockRatio;
+  ui.vidCropLockRatioToggle.classList.toggle("active", vidCropLockRatio);
+});
+
 // Crop preset buttons
 ui.vidCropPresets?.forEach(btn => {
   btn.addEventListener("click", () => {
-    const ratio = btn.dataset.ratio ?? "free";
-    vidApplyCropPreset(ratio);
+    const ratio = btn.dataset.ratio ?? "";
+    if (ratio) vidApplyCropPreset(ratio);
   });
 });
 
@@ -3425,9 +3456,10 @@ function vidHandleCropInput() {
   x = Math.max(0, Math.min(x, vidOrigWidth - w));
   y = Math.max(0, Math.min(y, vidOrigHeight - h));
   vidCropX = x; vidCropY = y; vidCropW = w; vidCropH = h;
-  vidCropEnabled = (w < vidOrigWidth || h < vidOrigHeight || x > 0 || y > 0);
-  vidCropPreset = "free";
-  ui.vidCropPresets?.forEach(b => b.classList.toggle("active", b.dataset.ratio === "free"));
+  vidCropEnabled = true;
+  ui.vidCropToggle?.classList.add("active");
+  vidCropPreset = "";
+  ui.vidCropPresets?.forEach(b => b.classList.remove("active"));
   vidUpdateCropInputs();
   vidCropChanged();
 }
@@ -3438,7 +3470,16 @@ ui.vidCropHInput?.addEventListener("change", vidHandleCropInput);
 
 // Crop reset
 ui.vidCropReset?.addEventListener("click", () => {
-  vidApplyCropPreset("free");
+  vidCropEnabled = false;
+  ui.vidCropToggle?.classList.remove("active");
+  vidCropLockRatio = false;
+  ui.vidCropLockRatioToggle?.classList.remove("active");
+  vidCropPreset = "";
+  ui.vidCropPresets?.forEach(b => b.classList.remove("active"));
+  vidCropX = 0; vidCropY = 0;
+  vidCropW = vidOrigWidth; vidCropH = vidOrigHeight;
+  vidUpdateCropInputs();
+  vidCropChanged();
 });
 
 // Crop overlay drag interaction (move box + resize handles)
@@ -3446,6 +3487,7 @@ ui.vidCropReset?.addEventListener("click", () => {
   let dragType: "move" | string | null = null;
   let startMX = 0, startMY = 0;
   let startCropX = 0, startCropY = 0, startCropW = 0, startCropH = 0;
+  let startAspect = 1;
 
   function onPointerDown(e: PointerEvent) {
     if (!vidCropEnabled || vidOrigWidth === 0) return;
@@ -3462,6 +3504,7 @@ ui.vidCropReset?.addEventListener("click", () => {
     startMX = e.clientX; startMY = e.clientY;
     startCropX = vidCropX; startCropY = vidCropY;
     startCropW = vidCropW; startCropH = vidCropH;
+    startAspect = startCropW / startCropH;
     document.addEventListener("pointermove", onPointerMove);
     document.addEventListener("pointerup", onPointerUp);
   }
@@ -3488,6 +3531,35 @@ ui.vidCropReset?.addEventListener("click", () => {
       if (pos.includes("e")) { nw += dx; }
       if (pos.includes("n")) { ny += dy; nh -= dy; }
       if (pos.includes("s")) { nh += dy; }
+
+      // Lock aspect ratio enforcement
+      if (vidCropLockRatio && startAspect > 0) {
+        nw = Math.round(nw); nh = Math.round(nh);
+        const isCorner = (pos.length === 2); // nw, ne, sw, se
+        if (isCorner) {
+          // Use the larger delta to drive both dimensions
+          if (Math.abs(nw - startCropW) >= Math.abs(nh - startCropH)) {
+            nh = Math.round(nw / startAspect);
+          } else {
+            nw = Math.round(nh * startAspect);
+          }
+        } else if (pos === "n" || pos === "s") {
+          nw = Math.round(nh * startAspect);
+        } else { // e or w
+          nh = Math.round(nw / startAspect);
+        }
+        // Recalculate origin for edges that anchor opposite side
+        if (pos.includes("w")) nx = startCropX + startCropW - nw;
+        if (pos.includes("n")) ny = startCropY + startCropH - nh;
+        // Center the adjusted dimension for single-edge handles
+        if (pos === "n" || pos === "s") {
+          nx = startCropX + Math.round((startCropW - nw) / 2);
+        }
+        if (pos === "e" || pos === "w") {
+          ny = startCropY + Math.round((startCropH - nh) / 2);
+        }
+      }
+
       // Enforce minimums
       nw = Math.max(vidEven(Math.round(nw)), 2);
       nh = Math.max(vidEven(Math.round(nh)), 2);
