@@ -2190,6 +2190,17 @@ body[data-tool="image"] #convert-button { display: none !important; }
   min-height: 1em;
 }
 
+/* ── Generate options row (language + model side by side) ── */
+.vid-generate-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.vid-generate-row .sm-select {
+  flex: 1;
+  min-width: 0;
+}
+
 /* ── Extract row (dropdown + button side by side) ── */
 .vid-extract-row {
   display: flex;

@@ -1,14 +1,19 @@
 import type { FileData } from "./FormatHandler.ts";
 import { extractAudioAsWav } from "./video-editor.ts";
 
-let whisperPipeline: any = null;
-let whisperLoading = false;
+const whisperPipelines: Map<string, any> = new Map();
+let whisperLoadingKey: string | null = null;
+
+const MODEL_IDS: Record<string, string> = {
+  base: "onnx-community/whisper-base",
+  small: "onnx-community/whisper-small",
+};
 
 /**
- * Check if the Whisper model has been loaded into memory.
+ * Check if any Whisper model has been loaded into memory.
  */
 export function isWhisperLoaded(): boolean {
-  return whisperPipeline !== null;
+  return whisperPipelines.size > 0;
 }
 
 /**
@@ -27,6 +32,11 @@ function formatSrtTime(seconds: number): string {
   );
 }
 
+export interface GenerateSubtitleOptions {
+  language?: string;
+  model?: "base" | "small";
+}
+
 /**
  * Generate subtitles from a video file using Whisper AI.
  * Returns an SRT file as FileData.
@@ -34,39 +44,47 @@ function formatSrtTime(seconds: number): string {
 export async function generateSubtitles(
   file: File,
   onProgress?: (stage: string, pct: number) => void,
+  options?: GenerateSubtitleOptions,
 ): Promise<FileData> {
+  const modelKey = options?.model || "small";
+  const modelId = MODEL_IDS[modelKey];
+  const language = options?.language || undefined;
+
   // Step 1: Extract audio as WAV (16kHz mono)
   onProgress?.("Extracting audio...", 5);
   const wavBytes = await extractAudioAsWav(file);
 
-  // Step 2: Load Whisper model (lazy, cached by browser)
+  // Step 2: Load Whisper model (lazy, cached per model key)
+  let whisperPipeline = whisperPipelines.get(modelKey);
   if (!whisperPipeline) {
-    if (whisperLoading) {
+    if (whisperLoadingKey === modelKey) {
       // Wait for an in-progress load
-      while (whisperLoading && !whisperPipeline) {
+      while (whisperLoadingKey === modelKey && !whisperPipelines.has(modelKey)) {
         await new Promise(r => setTimeout(r, 200));
       }
+      whisperPipeline = whisperPipelines.get(modelKey);
     } else {
-      whisperLoading = true;
-      onProgress?.("Downloading model...", 10);
+      whisperLoadingKey = modelKey;
+      onProgress?.(`Downloading ${modelKey} model...`, 10);
 
       try {
         const { pipeline } = await import("@huggingface/transformers");
         whisperPipeline = await pipeline(
           "automatic-speech-recognition",
-          "Xenova/whisper-tiny.en",
+          modelId,
           {
             progress_callback: (info: any) => {
               if (info.status === "progress" && typeof info.progress === "number") {
                 // Map model download progress to 10-50% range
                 const pct = Math.round(10 + (info.progress * 0.4));
-                onProgress?.("Downloading model...", pct);
+                onProgress?.(`Downloading ${modelKey} model...`, pct);
               }
             },
           },
         );
+        whisperPipelines.set(modelKey, whisperPipeline);
       } finally {
-        whisperLoading = false;
+        whisperLoadingKey = null;
       }
     }
   }
@@ -84,11 +102,17 @@ export async function generateSubtitles(
     audioData[i] = dataView.getInt16(i * 2, true) / 32768;
   }
 
-  const result = await whisperPipeline(audioData, {
+  const pipelineOpts: any = {
     return_timestamps: true,
     chunk_length_s: 30,
     stride_length_s: 5,
-  });
+  };
+  if (language) {
+    pipelineOpts.language = language;
+    pipelineOpts.task = "transcribe";
+  }
+
+  const result = await whisperPipeline(audioData, pipelineOpts);
 
   onProgress?.("Formatting subtitles...", 90);
 

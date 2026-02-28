@@ -318,6 +318,8 @@ const ui = {
   vidMuxToggle: document.querySelector("#vid-mux-toggle") as HTMLButtonElement,
   vidBurnToggle: document.querySelector("#vid-burn-toggle") as HTMLButtonElement,
   vidSubFileInput: document.querySelector("#vid-sub-file-input") as HTMLInputElement,
+  vidGenLangSelect: document.querySelector("#vid-gen-lang") as HTMLSelectElement,
+  vidGenModelSelect: document.querySelector("#vid-gen-model") as HTMLSelectElement,
 };
 
 // ── Home page / tool navigation ──────────────────────────────────────────────
@@ -3083,10 +3085,12 @@ ui.vidGenerateSubs?.addEventListener("click", async () => {
   ui.vidGenerateProgress?.classList.remove("hidden");
 
   try {
+    const genLang = ui.vidGenLangSelect?.value || undefined;
+    const genModel = (ui.vidGenModelSelect?.value as "base" | "small") || "small";
     const result = await generateSubtitles(vidFile, (stage, pct) => {
       if (ui.vidProgressFill) ui.vidProgressFill.style.width = pct + "%";
       if (ui.vidProgressText) ui.vidProgressText.textContent = stage;
-    });
+    }, { language: genLang, model: genModel });
 
     // Download the SRT file
     const blob = new Blob([result.bytes as BlobPart], { type: "text/plain" });
