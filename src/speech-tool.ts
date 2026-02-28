@@ -15,12 +15,14 @@ async function getSpeechFFmpeg(): Promise<FFmpeg> {
 
 // ── Lazy TTS instance ──────────────────────────────────────────────────────
 let ttsInstance: SimpleTTS | undefined;
+let ttsVoiceKey: string = "en";
 
-async function getTTS(): Promise<SimpleTTS> {
-  if (!ttsInstance) {
+async function getTTS(voice: string = "en"): Promise<SimpleTTS> {
+  if (!ttsInstance || ttsVoiceKey !== voice) {
+    ttsVoiceKey = voice;
     await new Promise<void>(resolve => {
       ttsInstance = new SimpleTTS({
-        defaultVoice: "en",
+        defaultVoice: voice,
         defaultRate: 220,
         defaultPitch: 200,
         enhanceAudio: true,
@@ -149,11 +151,8 @@ export function initSpeechTool() {
 
     try {
       ttsProgressFill.style.width = "20%";
-      const tts = await getTTS();
-
-      // Set voice
       const voice = ttsVoice.value;
-      tts.setVoice(voice);
+      const tts = await getTTS(voice);
 
       ttsProgressText.textContent = "Generating speech...";
       ttsProgressFill.style.width = "50%";
@@ -179,7 +178,7 @@ export function initSpeechTool() {
 
       // Create audio blob and load into player
       if (currentAudioUrl) URL.revokeObjectURL(currentAudioUrl);
-      const blob = new Blob([currentWavBytes], { type: "audio/wav" });
+      const blob = new Blob([currentWavBytes as BlobPart], { type: "audio/wav" });
       currentAudioUrl = URL.createObjectURL(blob);
       audio.src = currentAudioUrl;
       audio.playbackRate = speed;
@@ -280,7 +279,7 @@ export function initSpeechTool() {
       await ff.deleteFile("input.wav").catch(() => {});
       await ff.deleteFile("output.mp3").catch(() => {});
 
-      const blob = new Blob([mp3Data], { type: "audio/mpeg" });
+      const blob = new Blob([mp3Data as BlobPart], { type: "audio/mpeg" });
       downloadBlob(blob, "speech.mp3");
     } catch (err) {
       console.error("MP3 conversion failed:", err);
