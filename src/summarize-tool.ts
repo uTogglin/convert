@@ -167,16 +167,20 @@ export function initSummarizeTool() {
   // DOM refs
   const tabs = document.querySelectorAll<HTMLButtonElement>(".sum-tab");
   const uploadPanel = document.getElementById("sum-upload-panel") as HTMLDivElement;
+  const textPanel = document.getElementById("sum-text-panel") as HTMLDivElement;
   const urlPanel = document.getElementById("sum-url-panel") as HTMLDivElement;
 
   const fileDrop = document.getElementById("sum-file-drop") as HTMLDivElement;
   const fileInput = document.getElementById("sum-file-input") as HTMLInputElement;
   const fileName = document.getElementById("sum-file-name") as HTMLSpanElement;
+  const textInput = document.getElementById("sum-text-input") as HTMLTextAreaElement;
   const urlInput = document.getElementById("sum-url-input") as HTMLInputElement;
   const fetchBtn = document.getElementById("sum-fetch-btn") as HTMLButtonElement;
   const wordLimitInput = document.getElementById("sum-word-limit") as HTMLInputElement;
+  const textWordLimitInput = document.querySelector(".sum-text-word-limit") as HTMLInputElement;
   const urlWordLimitInput = document.querySelector(".sum-url-word-limit") as HTMLInputElement;
   const summarizeBtn = document.getElementById("sum-summarize-btn") as HTMLButtonElement;
+  const textSummarizeBtn = document.querySelector(".sum-text-summarize-btn") as HTMLButtonElement;
   const urlSummarizeBtn = document.querySelector(".sum-url-summarize-btn") as HTMLButtonElement;
 
   const progress = document.getElementById("sum-progress") as HTMLDivElement;
@@ -190,13 +194,14 @@ export function initSummarizeTool() {
 
   let currentFile: File | null = null;
   let extractedText = "";
-  let activeTab: "upload" | "url" = "upload";
+  let activeTab: "upload" | "text" | "url" = "upload";
 
   // Restore word limit from settings
   try {
     const saved = localStorage.getItem("convert-sum-word-limit");
     if (saved) {
       wordLimitInput.value = saved;
+      if (textWordLimitInput) textWordLimitInput.value = saved;
       if (urlWordLimitInput) urlWordLimitInput.value = saved;
     }
   } catch {}
@@ -204,11 +209,12 @@ export function initSummarizeTool() {
   // ── Tab switching ──────────────────────────────────────────────────────
   for (const tab of tabs) {
     tab.addEventListener("click", () => {
-      const target = tab.dataset.tab as "upload" | "url";
+      const target = tab.dataset.tab as "upload" | "text" | "url";
       activeTab = target;
       extractedText = "";
       tabs.forEach(t => t.classList.toggle("active", t === tab));
       uploadPanel.classList.toggle("active", target === "upload");
+      textPanel.classList.toggle("active", target === "text");
       urlPanel.classList.toggle("active", target === "url");
       updateSummarizeBtn();
     });
@@ -234,6 +240,13 @@ export function initSummarizeTool() {
     output.classList.add("hidden");
     updateSummarizeBtn();
   }
+
+  // ── Text input handling ─────────────────────────────────────────────────
+  textInput.addEventListener("input", updateSummarizeBtn);
+  textSummarizeBtn?.addEventListener("click", () => {
+    if (textSummarizeBtn.classList.contains("disabled")) return;
+    doSummarize();
+  });
 
   // ── URL handling ───────────────────────────────────────────────────────
   urlInput.addEventListener("input", updateSummarizeBtn);
@@ -263,8 +276,10 @@ export function initSummarizeTool() {
   // ── Summarize button state ─────────────────────────────────────────────
   function updateSummarizeBtn() {
     const uploadReady = !!currentFile;
+    const textReady = !!textInput.value.trim();
     const urlReady = !!urlInput.value.trim();
     summarizeBtn.classList.toggle("disabled", !uploadReady);
+    textSummarizeBtn?.classList.toggle("disabled", !textReady);
     urlSummarizeBtn?.classList.toggle("disabled", !urlReady);
   }
 
@@ -302,7 +317,7 @@ export function initSummarizeTool() {
 
   // ── Summarize handler ──────────────────────────────────────────────────
   async function doSummarize() {
-    const wlInput = activeTab === "url" ? urlWordLimitInput : wordLimitInput;
+    const wlInput = activeTab === "url" ? urlWordLimitInput : activeTab === "text" ? textWordLimitInput : wordLimitInput;
     const wordLimit = Math.max(50, Math.min(500, parseInt(wlInput?.value || wordLimitInput.value) || 150));
     output.classList.add("hidden");
 
@@ -312,6 +327,8 @@ export function initSummarizeTool() {
         if (activeTab === "upload" && currentFile) {
           showProgress(10, "Extracting text...");
           extractedText = await extractFromFile(currentFile);
+        } else if (activeTab === "text") {
+          extractedText = textInput.value.trim();
         } else if (activeTab === "url") {
           showProgress(10, "Fetching URL...");
           extractedText = await fetchUrlText(urlInput.value.trim());
