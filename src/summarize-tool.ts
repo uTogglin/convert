@@ -1,4 +1,5 @@
 import JSZip from "jszip";
+import { getKokoro, encodeWav } from "./speech-tool.js";
 
 // ── Lazy summarization pipeline ─────────────────────────────────────────────
 let summarizer: any = null;
@@ -383,6 +384,228 @@ export function initSummarizeTool() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  });
+
+  // ── Read Aloud (TTS) ─────────────────────────────────────────────────
+  const readAloudBtn = document.getElementById("sum-read-aloud-btn") as HTMLButtonElement;
+  const ttsProgress = document.getElementById("sum-tts-progress") as HTMLDivElement;
+  const ttsProgressFill = ttsProgress.querySelector(".speech-progress-fill") as HTMLDivElement;
+  const ttsProgressText = ttsProgress.querySelector(".speech-progress-text") as HTMLSpanElement;
+  const ttsFreezeWarn = ttsProgress.querySelector(".speech-freeze-warning") as HTMLParagraphElement;
+  const ttsPlayer = document.getElementById("sum-tts-player") as HTMLDivElement;
+  const wordDisplay = document.getElementById("sum-word-display") as HTMLDivElement;
+  const ttsAudio = document.getElementById("sum-tts-audio") as HTMLAudioElement;
+  const playBtn = document.getElementById("sum-play-btn") as HTMLButtonElement;
+  const skipBack = document.getElementById("sum-skip-back") as HTMLButtonElement;
+  const skipForward = document.getElementById("sum-skip-forward") as HTMLButtonElement;
+  const seekBar = document.getElementById("sum-seek-bar") as HTMLDivElement;
+  const seekFill = document.getElementById("sum-seek-fill") as HTMLDivElement;
+  const seekThumb = document.getElementById("sum-seek-thumb") as HTMLDivElement;
+  const timeCurrent = document.getElementById("sum-time-current") as HTMLSpanElement;
+  const timeDuration = document.getElementById("sum-time-duration") as HTMLSpanElement;
+
+  const PLAY_SVG = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
+  const PAUSE_SVG = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`;
+  playBtn.innerHTML = PLAY_SVG;
+
+  interface WordTiming { word: string; start: number; end: number; el: HTMLSpanElement; }
+  let wordTimings: WordTiming[] = [];
+  let activeWordIdx = -1;
+  let ttsAudioUrl: string | null = null;
+  let ttsGenerating = false;
+
+  function fmtTime(sec: number): string {
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  }
+
+  function buildWordSpans(text: string): HTMLSpanElement[] {
+    wordDisplay.innerHTML = "";
+    const tokens = text.split(/(\s+)/);
+    const spans: HTMLSpanElement[] = [];
+    for (const tok of tokens) {
+      if (/^\s+$/.test(tok)) {
+        wordDisplay.appendChild(document.createTextNode(tok));
+      } else {
+        const sp = document.createElement("span");
+        sp.className = "speech-word";
+        sp.textContent = tok;
+        wordDisplay.appendChild(sp);
+        spans.push(sp);
+      }
+    }
+    return spans;
+  }
+
+  function buildTimings(chunks: Array<{ text: string; samples: number }>, sr: number, spans: HTMLSpanElement[]): WordTiming[] {
+    const timings: WordTiming[] = [];
+    let sOff = 0, sIdx = 0;
+    for (const ch of chunks) {
+      const tStart = sOff / sr, tEnd = (sOff + ch.samples) / sr;
+      const words = ch.text.trim().split(/\s+/).filter(Boolean);
+      if (words.length === 0) { sOff += ch.samples; continue; }
+      const tpw = (tEnd - tStart) / words.length;
+      for (let i = 0; i < words.length; i++) {
+        const el = spans[sIdx]; if (!el) break;
+        timings.push({ word: words[i], start: tStart + i * tpw, end: tStart + (i + 1) * tpw, el });
+        sIdx++;
+      }
+      sOff += ch.samples;
+    }
+    return timings;
+  }
+
+  function updateHighlight() {
+    if (wordTimings.length === 0) return;
+    const t = ttsAudio.currentTime;
+    let newIdx = -1;
+    for (let i = 0; i < wordTimings.length; i++) {
+      if (t >= wordTimings[i].start && t < wordTimings[i].end) { newIdx = i; break; }
+    }
+    if (newIdx === -1 && t >= wordTimings[wordTimings.length - 1]?.start) newIdx = wordTimings.length - 1;
+    if (newIdx !== activeWordIdx) {
+      if (activeWordIdx >= 0 && activeWordIdx < wordTimings.length) wordTimings[activeWordIdx].el.classList.remove("active");
+      if (newIdx >= 0) {
+        wordTimings[newIdx].el.classList.add("active");
+        const el = wordTimings[newIdx].el;
+        if (el.offsetTop < wordDisplay.scrollTop || el.offsetTop + el.offsetHeight > wordDisplay.scrollTop + wordDisplay.clientHeight) {
+          el.scrollIntoView({ block: "center", behavior: "smooth" });
+        }
+      }
+      activeWordIdx = newIdx;
+    }
+  }
+
+  // Playback controls
+  playBtn.addEventListener("click", () => { ttsAudio.paused ? ttsAudio.play() : ttsAudio.pause(); });
+  ttsAudio.addEventListener("play", () => { playBtn.innerHTML = PAUSE_SVG; });
+  ttsAudio.addEventListener("pause", () => { playBtn.innerHTML = PLAY_SVG; });
+  ttsAudio.addEventListener("ended", () => {
+    playBtn.innerHTML = PLAY_SVG;
+    if (activeWordIdx >= 0 && activeWordIdx < wordTimings.length) wordTimings[activeWordIdx].el.classList.remove("active");
+    activeWordIdx = -1;
+  });
+  skipBack.addEventListener("click", () => { ttsAudio.currentTime = Math.max(0, ttsAudio.currentTime - 10); });
+  skipForward.addEventListener("click", () => { ttsAudio.currentTime = Math.min(ttsAudio.duration || 0, ttsAudio.currentTime + 10); });
+
+  ttsAudio.addEventListener("timeupdate", () => {
+    if (!ttsAudio.duration) return;
+    const pct = (ttsAudio.currentTime / ttsAudio.duration) * 100;
+    seekFill.style.width = `${pct}%`;
+    seekThumb.style.left = `${pct}%`;
+    timeCurrent.textContent = fmtTime(ttsAudio.currentTime);
+    timeDuration.textContent = fmtTime(ttsAudio.duration);
+    updateHighlight();
+  });
+  ttsAudio.addEventListener("loadedmetadata", () => {
+    timeCurrent.textContent = "0:00";
+    timeDuration.textContent = fmtTime(ttsAudio.duration);
+  });
+
+  // Seek
+  let ttsSeeking = false;
+  function ttsSeekTo(e: MouseEvent | Touch) {
+    const rect = seekBar.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    if (ttsAudio.duration) ttsAudio.currentTime = pct * ttsAudio.duration;
+  }
+  seekBar.addEventListener("mousedown", (e) => { ttsSeeking = true; ttsSeekTo(e); });
+  window.addEventListener("mousemove", (e) => { if (ttsSeeking) ttsSeekTo(e); });
+  window.addEventListener("mouseup", () => { ttsSeeking = false; });
+  seekBar.addEventListener("touchstart", (e) => { ttsSeeking = true; ttsSeekTo(e.touches[0]); }, { passive: true });
+  window.addEventListener("touchmove", (e) => { if (ttsSeeking) ttsSeekTo(e.touches[0]); }, { passive: true });
+  window.addEventListener("touchend", () => { ttsSeeking = false; });
+
+  // Read Aloud button
+  readAloudBtn.addEventListener("click", async () => {
+    const text = resultArea.value.trim();
+    if (!text || ttsGenerating) return;
+
+    ttsGenerating = true;
+    readAloudBtn.classList.add("disabled");
+    ttsProgress.classList.remove("hidden");
+    ttsProgressFill.style.width = "0%";
+    ttsProgressText.textContent = "Loading Kokoro TTS model...";
+    ttsFreezeWarn.classList.add("hidden");
+    ttsPlayer.classList.add("hidden");
+
+    try {
+      const tts = await getKokoro((pct, msg) => {
+        ttsProgressFill.style.width = `${Math.round(pct * 0.6)}%`;
+        ttsProgressText.textContent = msg;
+      });
+
+      ttsProgressText.textContent = "Generating speech...";
+      ttsProgressFill.style.width = "65%";
+      ttsFreezeWarn.classList.remove("hidden");
+
+      const voice = (() => { try { return localStorage.getItem("convert-tts-voice") ?? "af_heart"; } catch { return "af_heart"; } })();
+      const speed = (() => { try { return parseFloat(localStorage.getItem("convert-tts-speed") ?? "1"); } catch { return 1; } })();
+
+      const wordSpans = buildWordSpans(text);
+      const audioChunks: Float32Array[] = [];
+      const chunkMeta: Array<{ text: string; samples: number }> = [];
+      let sampleRate = 24000;
+
+      // Split into sentence-sized chunks
+      const sentences = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [text];
+      const chunks: string[] = [];
+      let cur = "";
+      for (const s of sentences) {
+        if (cur.length + s.length > 300 && cur) { chunks.push(cur.trim()); cur = s; }
+        else cur += s;
+      }
+      if (cur.trim()) chunks.push(cur.trim());
+
+      for (let i = 0; i < chunks.length; i++) {
+        ttsProgressText.textContent = chunks.length > 1
+          ? `Generating speech (${i + 1}/${chunks.length})...`
+          : "Generating speech (this may take a moment)...";
+        ttsProgressFill.style.width = `${Math.min(95, 65 + (i / chunks.length) * 30)}%`;
+
+        const result = await tts.generate(chunks[i], { voice, speed });
+        const data: Float32Array = result?.data ?? result?.audio;
+        if (!data || !(data instanceof Float32Array) || data.length === 0) {
+          throw new Error("TTS generated empty audio.");
+        }
+        sampleRate = result.sampling_rate || 24000;
+        audioChunks.push(data);
+        chunkMeta.push({ text: chunks[i], samples: data.length });
+      }
+
+      ttsProgressFill.style.width = "95%";
+      ttsProgressText.textContent = "Encoding audio...";
+      ttsFreezeWarn.classList.add("hidden");
+
+      // Concatenate
+      const total = audioChunks.reduce((s, c) => s + c.length, 0);
+      const full = new Float32Array(total);
+      let off = 0;
+      for (const c of audioChunks) { full.set(c, off); off += c.length; }
+
+      wordTimings = buildTimings(chunkMeta, sampleRate, wordSpans);
+      activeWordIdx = -1;
+
+      const wavBlob = encodeWav(full, sampleRate);
+      if (ttsAudioUrl) URL.revokeObjectURL(ttsAudioUrl);
+      ttsAudioUrl = URL.createObjectURL(wavBlob);
+      ttsAudio.src = ttsAudioUrl;
+      ttsAudio.load();
+
+      ttsProgressFill.style.width = "100%";
+      ttsProgressText.textContent = "Done!";
+      ttsPlayer.classList.remove("hidden");
+      setTimeout(() => { ttsProgress.classList.add("hidden"); }, 600);
+
+    } catch (err: any) {
+      console.error("[Summarize TTS] Error:", err);
+      ttsProgressText.textContent = `Error: ${err?.message || "Generation failed."}`;
+      ttsFreezeWarn.classList.add("hidden");
+    } finally {
+      ttsGenerating = false;
+      readAloudBtn.classList.remove("disabled");
+    }
   });
 
   updateSummarizeBtn();

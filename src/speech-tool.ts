@@ -15,7 +15,7 @@ async function getSpeechFFmpeg(): Promise<FFmpeg> {
 let kokoroInstance: any = null;
 let kokoroLoading: Promise<any> | null = null;
 
-async function getKokoro(onProgress?: (pct: number, msg: string) => void): Promise<any> {
+export async function getKokoro(onProgress?: (pct: number, msg: string) => void): Promise<any> {
   if (kokoroInstance) return kokoroInstance;
   if (kokoroLoading) { await kokoroLoading; return kokoroInstance; }
 
@@ -80,7 +80,7 @@ const PLAY_SVG = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentC
 const PAUSE_SVG = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`;
 
 // ── WAV encoder for concatenated Float32Array chunks ───────────────────────
-function encodeWav(samples: Float32Array, sampleRate: number): Blob {
+export function encodeWav(samples: Float32Array, sampleRate: number): Blob {
   const numChannels = 1;
   const bitsPerSample = 16;
   const byteRate = sampleRate * numChannels * (bitsPerSample / 8);

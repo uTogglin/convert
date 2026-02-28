@@ -1284,9 +1284,46 @@
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
               Download
             </button>
+            <button id="sum-read-aloud-btn" class="speech-copy-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+              Read Aloud
+            </button>
           </div>
         </div>
         <textarea id="sum-result" class="speech-textarea speech-stt-result-textarea" placeholder="Summary will appear here..." rows="6" readonly></textarea>
+
+        <!-- Read Aloud: TTS progress + player -->
+        <div id="sum-tts-progress" class="speech-progress hidden">
+          <div class="speech-progress-bar"><div class="speech-progress-fill"></div></div>
+          <span class="speech-progress-text">Loading TTS model...</span>
+          <p class="speech-freeze-warning hidden">The page may become unresponsive while generating — this is normal.</p>
+        </div>
+
+        <div id="sum-tts-player" class="speech-player hidden">
+          <div id="sum-word-display" class="speech-word-display"></div>
+          <div class="speech-player-seek-row">
+            <span id="sum-time-current" class="speech-time-label">0:00</span>
+            <div id="sum-seek-bar" class="speech-seek-bar">
+              <div id="sum-seek-fill" class="speech-seek-fill"></div>
+              <div id="sum-seek-thumb" class="speech-seek-thumb"></div>
+            </div>
+            <span id="sum-time-duration" class="speech-time-label">0:00</span>
+          </div>
+          <div class="speech-player-toolbar">
+            <div class="speech-player-controls">
+              <button id="sum-skip-back" class="speech-player-btn" title="Back 10s">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+                <span class="speech-skip-label">10</span>
+              </button>
+              <button id="sum-play-btn" class="speech-play-btn" title="Play/Pause"></button>
+              <button id="sum-skip-forward" class="speech-player-btn" title="Forward 10s">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                <span class="speech-skip-label">10</span>
+              </button>
+            </div>
+          </div>
+          <audio id="sum-tts-audio" preload="auto"></audio>
+        </div>
       </div>
     </div>
 
