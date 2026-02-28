@@ -22,21 +22,26 @@ async function getKokoro(onProgress?: (pct: number, msg: string) => void): Promi
   kokoroLoading = (async () => {
     const { KokoroTTS } = await import("kokoro-js");
 
-    // Prefer WebGPU (fast, GPU-accelerated) with WASM fallback (slow)
+    // Prefer WebGPU (fast, GPU-accelerated) with WASM fallback
     let device = "wasm";
+    let dtype = "q8"; // q8 for WASM (CPU-optimized, 92MB)
     try {
       if ("gpu" in navigator) {
         const adapter = await (navigator as any).gpu.requestAdapter();
-        if (adapter) device = "webgpu";
+        if (adapter) {
+          device = "webgpu";
+          dtype = "fp16"; // fp16 for WebGPU (GPU-compatible, 163MB)
+        }
       }
     } catch { /* no WebGPU */ }
 
+    console.log(`[Kokoro TTS] Using device=${device}, dtype=${dtype}`);
     onProgress?.(0, `Loading Kokoro model (${device})...`);
 
     kokoroInstance = await KokoroTTS.from_pretrained(
       "onnx-community/Kokoro-82M-v1.0-ONNX",
       {
-        dtype: "q8" as any,
+        dtype: dtype as any,
         device: device as any,
         progress_callback: (info: any) => {
           if (info.status === "progress" && typeof info.progress === "number") {
@@ -45,6 +50,7 @@ async function getKokoro(onProgress?: (pct: number, msg: string) => void): Promi
         },
       },
     );
+    console.log("[Kokoro TTS] Model loaded successfully");
   })();
 
   try {
@@ -344,6 +350,7 @@ export function initSpeechTool() {
       const chunkMeta: Array<{ text: string; samples: number }> = [];
       let sampleRate = 24000;
 
+      console.log("[Kokoro TTS] Starting generation...", { voice, speed, textLength: text.length });
       const stream = tts.stream(text, { voice, speed });
       let chunkCount = 0;
       for await (const chunk of stream) {
@@ -352,8 +359,10 @@ export function initSpeechTool() {
         audioChunks.push(data);
         chunkMeta.push({ text: chunk.text, samples: data.length });
         chunkCount++;
+        console.log(`[Kokoro TTS] Chunk ${chunkCount}: "${chunk.text}" (${data.length} samples)`);
         ttsProgressFill.style.width = `${Math.min(95, 65 + chunkCount * 3)}%`;
       }
+      console.log(`[Kokoro TTS] Generation complete: ${chunkCount} chunks`);
 
       ttsProgressFill.style.width = "95%";
       ttsProgressText.textContent = "Encoding audio...";
