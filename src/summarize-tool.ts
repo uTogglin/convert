@@ -34,18 +34,27 @@ async function getSummarizer(onProgress?: (pct: number, msg: string) => void): P
   summarizerLoading = (async () => {
     const { pipeline } = await import("@huggingface/transformers");
 
-    onProgress?.(0, `Loading ${modelInfo.label} model...`);
+    // Use WebGPU when available, fall back to WASM
+    const hasWebGPU = typeof navigator !== "undefined" && "gpu" in navigator
+      && await (navigator as any).gpu?.requestAdapter().catch(() => null);
+    const device = hasWebGPU ? "webgpu" : "wasm";
+    const dtype = hasWebGPU ? "fp32" : "q8";
+
+    onProgress?.(0, `Loading ${modelInfo.label} (${device})...`);
+    console.log(`[Summarize] Using device=${device}, dtype=${dtype}`);
 
     summarizer = await pipeline("summarization", modelInfo.id, {
+      device,
+      dtype,
       progress_callback: (info: any) => {
         if (info.status === "progress" && typeof info.progress === "number") {
-          onProgress?.(Math.round(info.progress), `Downloading ${modelInfo.label}...`);
+          onProgress?.(Math.round(info.progress), `Downloading ${modelInfo.label} (${device})...`);
         }
       },
-    });
+    } as any);
 
     loadedModelKey = modelKey;
-    console.log(`[Summarize] ${modelInfo.label} loaded successfully`);
+    console.log(`[Summarize] ${modelInfo.label} loaded successfully (${device})`);
   })();
 
   try {
