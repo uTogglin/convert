@@ -407,7 +407,7 @@ const smPanels = document.querySelectorAll<HTMLDivElement>(".sm-panel");
 function openSettings(panel?: string) {
   const sidebar = ui.settingsModal.querySelector(".sm-sidebar") as HTMLElement;
   if (activeTool) {
-    // On a tool page: hide sidebar, show only that tool's panel + appearance
+    // On a tool page: hide sidebar, show only that tool's panel + general
     sidebar.classList.add("hidden");
     ui.settingsModal.classList.add("sm-no-sidebar");
     // Build a simple tab bar for the two panels
@@ -416,7 +416,7 @@ function openSettings(panel?: string) {
     // Show only relevant nav items
     smNavBtns.forEach(b => {
       const p = b.dataset.panel;
-      b.classList.toggle("hidden", p !== toolPanel && p !== "appearance");
+      b.classList.toggle("hidden", p !== toolPanel && p !== "convert");
     });
   } else {
     // Home page: show full sidebar

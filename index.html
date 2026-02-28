@@ -118,8 +118,8 @@
       <h2 class="sm-title">Settings</h2>
       <nav class="sm-nav">
         <button class="sm-nav-btn active" data-panel="convert">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line></svg>
-          Convert
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          General
         </button>
         <button class="sm-nav-btn" data-panel="compress">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="6" y1="10" x2="18" y2="10"></line><line x1="8" y1="14" x2="16" y2="14"></line><line x1="10" y1="18" x2="14" y2="18"></line></svg>
@@ -133,17 +133,13 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
           Video Editor
         </button>
-        <button class="sm-nav-btn" data-panel="appearance">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="2.5"></circle><circle cx="17.5" cy="10.5" r="2.5"></circle><circle cx="8.5" cy="7.5" r="2.5"></circle><circle cx="6.5" cy="12.5" r="2.5"></circle><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12a10 10 0 0 0 6 9.18"></path></svg>
-          Appearance
-        </button>
       </nav>
     </aside>
     <main class="sm-content">
 
-      <!-- Convert panel -->
+      <!-- General panel -->
       <div class="sm-panel active" data-panel="convert">
-        <h3 class="sm-panel-title">Convert</h3>
+        <h3 class="sm-panel-title">General</h3>
         <div class="sm-group">
           <span class="sm-label">Mode</span>
           <button id="mode-button" class="sm-btn">Advanced mode</button>
@@ -165,6 +161,29 @@
             <span class="sm-switch-label">Privacy mode</span>
             <button id="privacy-toggle" class="sm-switch" role="switch"></button>
           </label>
+        </div>
+        <div class="sm-group">
+          <span class="sm-label">Accent color</span>
+          <div id="accent-colors">
+            <button class="color-dot active" data-color="#6C5CE7" style="background:#6C5CE7" title="Purple"></button>
+            <button class="color-dot" data-color="#0984E3" style="background:#0984E3" title="Blue"></button>
+            <button class="color-dot" data-color="#00B894" style="background:#00B894" title="Green"></button>
+            <button class="color-dot" data-color="#E17055" style="background:#E17055" title="Coral"></button>
+            <button class="color-dot" data-color="#FDCB6E" style="background:#FDCB6E" title="Yellow"></button>
+            <button class="color-dot" data-color="#E84393" style="background:#E84393" title="Pink"></button>
+            <button class="color-dot" data-color="#FF6B6B" style="background:#FF6B6B" title="Red"></button>
+            <button class="color-dot" data-color="#1C77FF" style="background:#1C77FF" title="Classic Blue"></button>
+          </div>
+          <div class="custom-slots-row">
+            <span class="custom-slots-label">Custom</span>
+            <button class="color-dot custom-slot" id="custom-slot-1" data-slot="1" title="Custom slot 1"></button>
+            <button class="color-dot custom-slot" id="custom-slot-2" data-slot="2" title="Custom slot 2"></button>
+            <button class="color-dot custom-slot" id="custom-slot-3" data-slot="3" title="Custom slot 3"></button>
+          </div>
+          <div id="custom-color-row">
+            <input type="color" id="custom-accent" value="#6C5CE7">
+            <button id="save-custom-color" title="Save current color to a slot">Save</button>
+          </div>
         </div>
       </div>
 
@@ -262,34 +281,6 @@
         <div class="sm-group">
           <span class="sm-label">Subtitle generation</span>
           <p class="sm-hint">Uses OpenAI Whisper (tiny.en) via Transformers.js. The model (~41 MB) is downloaded on first use and cached by your browser.</p>
-        </div>
-      </div>
-
-      <!-- Appearance panel -->
-      <div class="sm-panel" data-panel="appearance">
-        <h3 class="sm-panel-title">Appearance</h3>
-        <div class="sm-group">
-          <span class="sm-label">Accent color</span>
-          <div id="accent-colors">
-            <button class="color-dot active" data-color="#6C5CE7" style="background:#6C5CE7" title="Purple"></button>
-            <button class="color-dot" data-color="#0984E3" style="background:#0984E3" title="Blue"></button>
-            <button class="color-dot" data-color="#00B894" style="background:#00B894" title="Green"></button>
-            <button class="color-dot" data-color="#E17055" style="background:#E17055" title="Coral"></button>
-            <button class="color-dot" data-color="#FDCB6E" style="background:#FDCB6E" title="Yellow"></button>
-            <button class="color-dot" data-color="#E84393" style="background:#E84393" title="Pink"></button>
-            <button class="color-dot" data-color="#FF6B6B" style="background:#FF6B6B" title="Red"></button>
-            <button class="color-dot" data-color="#1C77FF" style="background:#1C77FF" title="Classic Blue"></button>
-          </div>
-          <div class="custom-slots-row">
-            <span class="custom-slots-label">Custom</span>
-            <button class="color-dot custom-slot" id="custom-slot-1" data-slot="1" title="Custom slot 1"></button>
-            <button class="color-dot custom-slot" id="custom-slot-2" data-slot="2" title="Custom slot 2"></button>
-            <button class="color-dot custom-slot" id="custom-slot-3" data-slot="3" title="Custom slot 3"></button>
-          </div>
-          <div id="custom-color-row">
-            <input type="color" id="custom-accent" value="#6C5CE7">
-            <button id="save-custom-color" title="Save current color to a slot">Save</button>
-          </div>
         </div>
       </div>
 
