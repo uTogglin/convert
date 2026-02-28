@@ -329,6 +329,13 @@ const ui = {
   vidEqReset: document.querySelector("#vid-eq-reset") as HTMLButtonElement,
   vidFullscreenBtn: document.querySelector("#vid-fullscreen-btn") as HTMLButtonElement,
   vidCanvasCol: document.querySelector("#vid-canvas-col") as HTMLDivElement,
+  // Video settings panel prefs
+  vidPrefRemoveAudio: document.querySelector("#vid-pref-remove-audio") as HTMLButtonElement,
+  vidPrefRemoveSubs: document.querySelector("#vid-pref-remove-subs") as HTMLButtonElement,
+  vidPrefMux: document.querySelector("#vid-pref-mux") as HTMLButtonElement,
+  vidPrefBurn: document.querySelector("#vid-pref-burn") as HTMLButtonElement,
+  vidPrefGenModel: document.querySelector("#vid-pref-gen-model") as HTMLSelectElement,
+  vidPrefGenLang: document.querySelector("#vid-pref-gen-lang") as HTMLSelectElement,
 };
 
 // ── Home page / tool navigation ──────────────────────────────────────────────
@@ -2810,11 +2817,15 @@ function vidLoadFile(file: File) {
   ui.vidPreview?.classList.remove("hidden");
   if (ui.vidPreview) ui.vidPreview.src = vidObjectUrl;
 
-  // Reset toggle states in UI
+  // Reset toggle states in UI (sidebar + settings panel)
   ui.vidRemoveAudioToggle?.classList.remove("active");
   ui.vidRemoveSubsToggle?.classList.remove("active");
   ui.vidMuxToggle?.classList.remove("active");
   ui.vidBurnToggle?.classList.remove("active");
+  ui.vidPrefRemoveAudio?.classList.remove("active");
+  ui.vidPrefRemoveSubs?.classList.remove("active");
+  ui.vidPrefMux?.classList.remove("active");
+  ui.vidPrefBurn?.classList.remove("active");
   vidSubFile = null;
   vidAddSubMux = false;
   vidAddSubBurn = false;
@@ -2875,6 +2886,8 @@ function vidResetState() {
   if (ui.vidWorkspace) ui.vidWorkspace.classList.add("hidden");
   if (ui.vidRemoveAudioToggle) ui.vidRemoveAudioToggle.classList.remove("active");
   if (ui.vidRemoveSubsToggle) ui.vidRemoveSubsToggle.classList.remove("active");
+  if (ui.vidPrefRemoveAudio) ui.vidPrefRemoveAudio.classList.remove("active");
+  if (ui.vidPrefRemoveSubs) ui.vidPrefRemoveSubs.classList.remove("active");
   if (ui.vidTrimStartInput) ui.vidTrimStartInput.value = "";
   if (ui.vidTrimEndInput) ui.vidTrimEndInput.value = "";
   if (ui.vidGenerateProgress) ui.vidGenerateProgress.classList.add("hidden");
@@ -2885,6 +2898,8 @@ function vidResetState() {
   vidSubStreams = [];
   if (ui.vidMuxToggle) ui.vidMuxToggle.classList.remove("active");
   if (ui.vidBurnToggle) ui.vidBurnToggle.classList.remove("active");
+  if (ui.vidPrefMux) ui.vidPrefMux.classList.remove("active");
+  if (ui.vidPrefBurn) ui.vidPrefBurn.classList.remove("active");
   if (ui.vidSubFileName) ui.vidSubFileName.textContent = "";
   if (ui.vidAddSubsCollapsible) ui.vidAddSubsCollapsible.classList.remove("open");
   if (ui.vidEqCollapsible) ui.vidEqCollapsible.classList.remove("open");
@@ -3244,6 +3259,102 @@ ui.vidBurnToggle?.addEventListener("click", () => {
   vidProcessedData = null;
   if (vidProcessedUrl) { URL.revokeObjectURL(vidProcessedUrl); vidProcessedUrl = null; }
   vidUpdateActionButton();
+});
+
+// ── Video settings panel prefs (bidirectional sync with sidebar) ─────────────
+
+// Persist generation model/language defaults
+try {
+  const savedModel = localStorage.getItem("vidPrefGenModel");
+  const savedLang = localStorage.getItem("vidPrefGenLang");
+  if (savedModel && ui.vidPrefGenModel) ui.vidPrefGenModel.value = savedModel;
+  if (savedLang !== null && ui.vidPrefGenLang) ui.vidPrefGenLang.value = savedLang;
+  // Apply saved defaults to sidebar selects too
+  if (savedModel && ui.vidGenModelSelect) ui.vidGenModelSelect.value = savedModel;
+  if (savedLang !== null && ui.vidGenLangSelect) ui.vidGenLangSelect.value = savedLang;
+} catch {}
+
+ui.vidPrefGenModel?.addEventListener("change", () => {
+  const v = ui.vidPrefGenModel.value;
+  if (ui.vidGenModelSelect) ui.vidGenModelSelect.value = v;
+  try { localStorage.setItem("vidPrefGenModel", v); } catch {}
+});
+ui.vidPrefGenLang?.addEventListener("change", () => {
+  const v = ui.vidPrefGenLang.value;
+  if (ui.vidGenLangSelect) ui.vidGenLangSelect.value = v;
+  try { localStorage.setItem("vidPrefGenLang", v); } catch {}
+});
+// Reverse sync: sidebar selects → settings panel
+ui.vidGenModelSelect?.addEventListener("change", () => {
+  if (ui.vidPrefGenModel) ui.vidPrefGenModel.value = ui.vidGenModelSelect.value;
+  try { localStorage.setItem("vidPrefGenModel", ui.vidGenModelSelect.value); } catch {}
+});
+ui.vidGenLangSelect?.addEventListener("change", () => {
+  if (ui.vidPrefGenLang) ui.vidPrefGenLang.value = ui.vidGenLangSelect.value;
+  try { localStorage.setItem("vidPrefGenLang", ui.vidGenLangSelect.value); } catch {}
+});
+
+// Sync pref toggles with sidebar toggles (remove audio)
+ui.vidPrefRemoveAudio?.addEventListener("click", () => {
+  vidRemoveAudio = !vidRemoveAudio;
+  ui.vidPrefRemoveAudio.classList.toggle("active", vidRemoveAudio);
+  ui.vidRemoveAudioToggle?.classList.toggle("active", vidRemoveAudio);
+  vidProcessedData = null;
+  if (vidProcessedUrl) { URL.revokeObjectURL(vidProcessedUrl); vidProcessedUrl = null; }
+  vidUpdateActionButton();
+});
+// Sync pref toggles with sidebar toggles (remove subs)
+ui.vidPrefRemoveSubs?.addEventListener("click", () => {
+  vidRemoveSubtitles = !vidRemoveSubtitles;
+  ui.vidPrefRemoveSubs.classList.toggle("active", vidRemoveSubtitles);
+  ui.vidRemoveSubsToggle?.classList.toggle("active", vidRemoveSubtitles);
+  vidProcessedData = null;
+  if (vidProcessedUrl) { URL.revokeObjectURL(vidProcessedUrl); vidProcessedUrl = null; }
+  vidUpdateActionButton();
+});
+// Sync pref toggles with sidebar toggles (mux)
+ui.vidPrefMux?.addEventListener("click", () => {
+  vidAddSubMux = !vidAddSubMux;
+  ui.vidPrefMux.classList.toggle("active", vidAddSubMux);
+  ui.vidMuxToggle?.classList.toggle("active", vidAddSubMux);
+  if (vidAddSubMux && vidAddSubBurn) {
+    vidAddSubBurn = false;
+    ui.vidPrefBurn?.classList.remove("active");
+    ui.vidBurnToggle?.classList.remove("active");
+  }
+  vidProcessedData = null;
+  if (vidProcessedUrl) { URL.revokeObjectURL(vidProcessedUrl); vidProcessedUrl = null; }
+  vidUpdateActionButton();
+});
+// Sync pref toggles with sidebar toggles (burn)
+ui.vidPrefBurn?.addEventListener("click", () => {
+  vidAddSubBurn = !vidAddSubBurn;
+  ui.vidPrefBurn.classList.toggle("active", vidAddSubBurn);
+  ui.vidBurnToggle?.classList.toggle("active", vidAddSubBurn);
+  if (vidAddSubBurn && vidAddSubMux) {
+    vidAddSubMux = false;
+    ui.vidPrefMux?.classList.remove("active");
+    ui.vidMuxToggle?.classList.remove("active");
+  }
+  vidProcessedData = null;
+  if (vidProcessedUrl) { URL.revokeObjectURL(vidProcessedUrl); vidProcessedUrl = null; }
+  vidUpdateActionButton();
+});
+
+// Reverse sync: sidebar → settings panel for toggles
+ui.vidRemoveAudioToggle?.addEventListener("click", () => {
+  ui.vidPrefRemoveAudio?.classList.toggle("active", vidRemoveAudio);
+});
+ui.vidRemoveSubsToggle?.addEventListener("click", () => {
+  ui.vidPrefRemoveSubs?.classList.toggle("active", vidRemoveSubtitles);
+});
+ui.vidMuxToggle?.addEventListener("click", () => {
+  ui.vidPrefMux?.classList.toggle("active", vidAddSubMux);
+  ui.vidPrefBurn?.classList.toggle("active", vidAddSubBurn);
+});
+ui.vidBurnToggle?.addEventListener("click", () => {
+  ui.vidPrefBurn?.classList.toggle("active", vidAddSubBurn);
+  ui.vidPrefMux?.classList.toggle("active", vidAddSubMux);
 });
 
 // Canvas click → file input (empty state only)

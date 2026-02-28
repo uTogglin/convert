@@ -277,10 +277,64 @@
       <!-- Video Editor panel -->
       <div class="sm-panel" data-panel="video">
         <h3 class="sm-panel-title">Video Editor</h3>
-        <p class="sm-hint">Trim, remove audio, and manage subtitles. All processing runs locally in your browser using MediaBunny and FFmpeg WASM.</p>
         <div class="sm-group">
-          <span class="sm-label">Subtitle generation</span>
-          <p class="sm-hint">Uses OpenAI Whisper (tiny.en) via Transformers.js. The model (~41 MB) is downloaded on first use and cached by your browser.</p>
+          <span class="sm-label">Trim</span>
+          <p class="sm-hint">Cut video with timeline handles or precise time inputs.</p>
+        </div>
+        <div class="sm-group">
+          <span class="sm-label">Audio</span>
+          <label class="sm-switch-row">
+            <span class="sm-switch-label">Remove audio</span>
+            <button id="vid-pref-remove-audio" class="sm-switch" role="switch"></button>
+          </label>
+          <p class="sm-hint">5-band equalizer available per video in the editor sidebar.</p>
+        </div>
+        <div class="sm-group">
+          <span class="sm-label">Subtitles</span>
+          <label class="sm-switch-row">
+            <span class="sm-switch-label">Remove subtitles</span>
+            <button id="vid-pref-remove-subs" class="sm-switch" role="switch"></button>
+          </label>
+          <label class="sm-switch-row">
+            <span class="sm-switch-label">Mux as track</span>
+            <button id="vid-pref-mux" class="sm-switch" role="switch"></button>
+          </label>
+          <label class="sm-switch-row">
+            <span class="sm-switch-label">Burn onto video</span>
+            <button id="vid-pref-burn" class="sm-switch" role="switch"></button>
+          </label>
+          <p class="sm-hint">Supports SRT, ASS, VTT, and SSA formats.</p>
+        </div>
+        <div class="sm-group">
+          <span class="sm-label">AI subtitle generation</span>
+          <select id="vid-pref-gen-model" class="sm-select">
+            <option value="small">Quality (small model)</option>
+            <option value="base">Speed (base model)</option>
+          </select>
+          <select id="vid-pref-gen-lang" class="sm-select">
+            <option value="">Auto-detect</option>
+            <option value="en">English</option>
+            <option value="es">Spanish</option>
+            <option value="fr">French</option>
+            <option value="de">German</option>
+            <option value="it">Italian</option>
+            <option value="pt">Portuguese</option>
+            <option value="nl">Dutch</option>
+            <option value="ru">Russian</option>
+            <option value="ja">Japanese</option>
+            <option value="ko">Korean</option>
+            <option value="zh">Chinese</option>
+            <option value="ar">Arabic</option>
+            <option value="hi">Hindi</option>
+            <option value="tr">Turkish</option>
+            <option value="pl">Polish</option>
+            <option value="sv">Swedish</option>
+          </select>
+          <p class="sm-hint">Whisper via Transformers.js — model cached on first use (~41 MB).</p>
+        </div>
+        <div class="sm-group">
+          <span class="sm-label">Processing</span>
+          <p class="sm-hint">Runs locally via FFmpeg WASM. No files leave your device.</p>
         </div>
       </div>
 
