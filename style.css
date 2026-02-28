@@ -2605,9 +2605,10 @@ body[data-tool="image"] #convert-button { display: none !important; }
   .home-title { font-size: 1.5rem; }
   .tool-page { margin: 0 12px 12px; }
   .modal-close-btn { display: block; }
+  #settings-modal .sm-content { position: relative; }
   #settings-modal {
     width: 100vw; height: 100vh; max-width: 100vw; max-height: 100vh;
-    border-radius: 0; position: relative;
+    border-radius: 0;
   }
   .sm-sidebar { width: 140px; padding: 14px 0; }
   .sm-title { font-size: 0.95rem; padding: 0 12px; }
