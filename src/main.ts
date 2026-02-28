@@ -3261,7 +3261,7 @@ ui.vidDownloadBtn?.addEventListener("click", async () => {
         if (p) p.textContent = mode === "burn" ? "Burning subtitles..." : "Muxing subtitles...";
       }
       // Create a temporary File from the result bytes for addSubtitlesToVideo
-      const tmpFile = new File([result.bytes], result.name, { type: "video/mp4" });
+      const tmpFile = new File([result.bytes as BlobPart], result.name, { type: "video/mp4" });
       result = await addSubtitlesToVideo(tmpFile, vidSubFile, { mode }, (pct) => {
         const popup2 = document.getElementById("popup");
         if (popup2) {
