@@ -23,17 +23,20 @@ async function getKokoro(onProgress?: (pct: number, msg: string) => void): Promi
     const { KokoroTTS } = await import("kokoro-js");
 
     // Prefer WebGPU (fast, GPU-accelerated) with WASM fallback (slow)
-    const hasWebGPU = typeof navigator !== "undefined" && "gpu" in navigator;
-    const device = hasWebGPU ? "webgpu" : "wasm";
-    // fp32 for WebGPU compatibility, q8 for WASM to reduce memory
-    const dtype = hasWebGPU ? "fp32" : "q8";
+    let device = "wasm";
+    try {
+      if ("gpu" in navigator) {
+        const adapter = await (navigator as any).gpu.requestAdapter();
+        if (adapter) device = "webgpu";
+      }
+    } catch { /* no WebGPU */ }
 
     onProgress?.(0, `Loading Kokoro model (${device})...`);
 
     kokoroInstance = await KokoroTTS.from_pretrained(
       "onnx-community/Kokoro-82M-v1.0-ONNX",
       {
-        dtype: dtype as any,
+        dtype: "q8" as any,
         device: device as any,
         progress_callback: (info: any) => {
           if (info.status === "progress" && typeof info.progress === "number") {
@@ -384,9 +387,9 @@ export function initSpeechTool() {
       player.classList.remove("hidden");
       setTimeout(() => { ttsProgress.classList.add("hidden"); }, 600);
 
-    } catch (err) {
+    } catch (err: any) {
       console.error("TTS generation failed:", err);
-      ttsProgressText.textContent = "Error generating audio.";
+      ttsProgressText.textContent = `Error: ${err?.message || "Generation failed."}`;
       freezeWarning.classList.add("hidden");
     } finally {
       generating = false;
