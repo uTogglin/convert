@@ -3084,6 +3084,12 @@ ui.vidGenerateSubs?.addEventListener("click", async () => {
   ui.vidGenerateSubs.classList.add("disabled");
   ui.vidGenerateProgress?.classList.remove("hidden");
 
+  window.showPopup(
+    `<h2>Generating subtitles</h2>` +
+    `<p>This may freeze the page for a while, especially with longer videos. Please leave this tab open and do not close it.</p>` +
+    `<button onclick="window.hidePopup()">OK</button>`
+  );
+
   try {
     const genLang = ui.vidGenLangSelect?.value || undefined;
     const genModel = (ui.vidGenModelSelect?.value as "base" | "small") || "small";
