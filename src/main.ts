@@ -495,7 +495,14 @@ function closeSettings() {
 
 function switchSettingsPanel(panelName: string) {
   smNavBtns.forEach(b => b.classList.toggle("active", b.dataset.panel === panelName));
-  smPanels.forEach(p => p.classList.toggle("active", p.dataset.panel === panelName));
+  smPanels.forEach(p => {
+    // General panel stays visible alongside the active tool panel
+    const isGeneral = p.dataset.panel === "convert";
+    const isActive = p.dataset.panel === panelName;
+    const showAsSecondary = isGeneral && activeTool !== null && panelName !== "convert";
+    p.classList.toggle("active", isActive || showAsSecondary);
+    p.classList.toggle("sm-general-secondary", showAsSecondary);
+  });
 }
 
 // Nav button clicks

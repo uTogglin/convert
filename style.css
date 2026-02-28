@@ -349,9 +349,13 @@ body[data-tool="video"] #convert-button { display: none !important; }
   flex: 1;
   overflow-y: auto;
   padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
 }
 .sm-panel { display: none; }
-.sm-panel.active { display: block; }
+.sm-panel.active { display: block; order: 1; }
+.sm-panel.active[data-panel="convert"] { order: 2; }
+.sm-panel.active[data-panel="convert"].sm-general-secondary { margin-top: 8px; padding-top: 16px; border-top: 1px solid var(--input-border); }
 .sm-panel .hidden { display: none; }
 
 .sm-panel-title {

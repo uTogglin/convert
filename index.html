@@ -154,6 +154,11 @@
             <span class="sm-switch-label">Archive multi-file output</span>
             <button id="archive-multi-toggle" class="sm-switch" role="switch"></button>
           </label>
+          <label class="sm-switch-row">
+            <span class="sm-switch-label">Apply edits to all files</span>
+            <button id="vid-apply-all-toggle" class="sm-switch" role="switch"></button>
+          </label>
+          <p class="sm-hint">When enabled, current settings are applied to every loaded file during processing.</p>
         </div>
         <div class="sm-group">
           <span class="sm-label">Privacy</span>
@@ -334,11 +339,7 @@
         </div>
         <div class="sm-group">
           <span class="sm-label">Processing</span>
-          <label class="sm-switch-row">
-            <span class="sm-switch-label">Apply to all</span>
-            <button id="vid-apply-all-toggle" class="sm-switch" role="switch"></button>
-          </label>
-          <p class="sm-hint">Apply current settings to all loaded videos when processing.</p>
+          <p class="sm-hint">Runs locally via FFmpeg WASM. No files leave your device.</p>
         </div>
       </div>
 
