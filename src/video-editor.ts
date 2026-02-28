@@ -1,6 +1,11 @@
 import type { FileData } from "./FormatHandler.ts";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import type { LogEvent } from "@ffmpeg/ffmpeg";
+import {
+  Input, Output, Conversion, BufferSource as MBBufferSource, BufferTarget,
+  Mp4OutputFormat, WebMOutputFormat, MkvOutputFormat,
+  ALL_FORMATS, canEncodeAudio,
+} from "mediabunny";
 
 // ── Own FFmpeg instance (separate from compress module) ──
 
@@ -49,8 +54,73 @@ export interface VideoProcessOptions {
   crop?: { x: number; y: number; w: number; h: number };
 }
 
+const MB_CROP_EXTS = new Set(["mp4", "m4v", "mov", "webm", "mkv"]);
+
+/** Crop video using mediabunny (WebCodecs native encoder — much faster than FFmpeg WASM) */
+async function cropWithMediabunny(
+  inputBytes: Uint8Array,
+  fileName: string,
+  crop: { x: number; y: number; w: number; h: number },
+  removeAudio: boolean,
+  onProgress?: (pct: number) => void,
+): Promise<Uint8Array> {
+  const ext = fileName.split(".").pop()?.toLowerCase() ?? "mp4";
+  const isWebM = ext === "webm";
+  const isMkv = ext === "mkv";
+
+  const input = new Input({ formats: ALL_FORMATS, source: new MBBufferSource(inputBytes) });
+  const duration = await input.computeDuration();
+  if (!duration || duration <= 0) { input.dispose(); throw new Error("Cannot determine duration"); }
+
+  const audioTrack = await input.getPrimaryAudioTrack();
+  const hasAudio = !removeAudio && audioTrack !== null;
+
+  const videoCodec = isWebM ? "vp9" as const : "avc" as const;
+  const audioCodec = isWebM ? "opus" as const : "aac" as const;
+
+  if (hasAudio && !await canEncodeAudio(audioCodec)) {
+    input.dispose();
+    throw new Error(`Browser cannot encode ${audioCodec}`);
+  }
+
+  // Match original video bitrate for similar file size
+  const audioBytesEstimate = hasAudio ? (128000 / 8) * duration : 0;
+  const originalVideoBitrate = ((inputBytes.length - audioBytesEstimate) * 8) / duration;
+  const videoBitrate = Math.max(Math.floor(originalVideoBitrate), 100000);
+
+  const fmt = isWebM ? new WebMOutputFormat() : isMkv ? new MkvOutputFormat() : new Mp4OutputFormat();
+  const output = new Output({ format: fmt, target: new BufferTarget() });
+
+  const conversion = await Conversion.init({
+    input,
+    output,
+    video: {
+      crop: { left: crop.x, top: crop.y, width: crop.w, height: crop.h },
+      codec: videoCodec,
+      bitrate: videoBitrate,
+      hardwareAcceleration: "prefer-hardware",
+    },
+    audio: hasAudio
+      ? { codec: audioCodec, bitrate: 128000 }
+      : { discard: true },
+  });
+
+  if (!conversion.isValid) { input.dispose(); throw new Error("Mediabunny conversion not valid"); }
+
+  if (onProgress) {
+    conversion.onProgress = (progress: number) => {
+      onProgress(Math.min(Math.round(progress * 100), 99));
+    };
+  }
+
+  await conversion.execute();
+  const result = (output.target as BufferTarget).buffer;
+  if (!result) throw new Error("No output buffer");
+  return new Uint8Array(result);
+}
+
 /**
- * Process a video file: trim + audio removal via MediaBunny, FFmpeg fallback for subtitle removal.
+ * Process a video file: crop via WebCodecs (fast), FFmpeg for trim/EQ/subtitles.
  */
 export async function processVideo(
   file: File,
@@ -59,9 +129,9 @@ export async function processVideo(
 ): Promise<FileData> {
   const hasEq = options.eqBands?.some(b => b.gain !== 0) ?? false;
   const hasCrop = !!options.crop;
-  const hasEdits = (options.trimStart !== undefined && options.trimStart > 0) ||
-    (options.trimEnd !== undefined && options.trimEnd < Infinity) ||
-    options.removeAudio || options.removeSubtitles || hasEq || hasCrop;
+  const hasTrim = (options.trimStart !== undefined && options.trimStart > 0) ||
+    (options.trimEnd !== undefined && options.trimEnd < Infinity);
+  const hasEdits = hasTrim || options.removeAudio || options.removeSubtitles || hasEq || hasCrop;
 
   if (!hasEdits) {
     const buf = await file.arrayBuffer();
@@ -70,6 +140,31 @@ export async function processVideo(
 
   const baseName = file.name.replace(/\.[^.]+$/, "");
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "mp4";
+
+  // Fast path: use mediabunny (WebCodecs) for crop when available
+  if (hasCrop && typeof VideoEncoder !== "undefined" && MB_CROP_EXTS.has(ext)) {
+    try {
+      const hasFFmpegOps = hasTrim || options.removeSubtitles || hasEq;
+      let intermediateBytes: Uint8Array;
+
+      if (hasFFmpegOps) {
+        // Phase 1: FFmpeg for trim/EQ/subtitles with stream copy (no crop, fast)
+        intermediateBytes = await processWithFFmpeg(file, { ...options, crop: undefined }, onProgress);
+      } else {
+        intermediateBytes = new Uint8Array(await file.arrayBuffer());
+      }
+
+      // Phase 2: mediabunny for crop (native encoder, fast)
+      const cropped = await cropWithMediabunny(
+        intermediateBytes, file.name, options.crop!, options.removeAudio ?? false, onProgress,
+      );
+      return { name: baseName + "_edited." + ext, bytes: cropped };
+    } catch (e) {
+      console.warn("Mediabunny crop failed, falling back to FFmpeg:", e);
+    }
+  }
+
+  // Fallback: FFmpeg for everything
   const resultBytes = await processWithFFmpeg(file, options, onProgress);
   return { name: baseName + "_edited." + ext, bytes: resultBytes };
 }
@@ -108,6 +203,7 @@ async function processWithFFmpeg(
     // Crop requires video re-encoding (can't stream-copy)
     const { x, y, w, h } = options.crop!;
     args.push("-vf", `crop=${w}:${h}:${x}:${y}`);
+    args.push("-c:v", "libx264", "-preset", "ultrafast");
     if (eqActive) {
       // Re-encode audio with EQ filters too
       args.push("-c:a", "aac");
@@ -303,7 +399,7 @@ export async function addSubtitlesToVideo(
       await ffExec(["-i", tmpVid, "-i", tmpSub, "-c:v", "copy", "-c:a", "copy", "-c:s", "mov_text", tmpOut]);
     } else {
       // burn: re-encode with subtitle filter
-      await ffExec(["-i", tmpVid, "-vf", `subtitles=${tmpSub}`, "-c:a", "copy", tmpOut]);
+      await ffExec(["-i", tmpVid, "-vf", `subtitles=${tmpSub}`, "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "copy", tmpOut]);
     }
   } finally {
     ff.off("progress", progressHandler);
@@ -358,7 +454,7 @@ export async function mergeVideos(
     const a = ["-f", "concat", "-safe", "0", "-i", "concat_list.txt"];
     if (encode) {
       // Re-encode for compatibility
-      a.push("-c:a", "aac");
+      a.push("-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac");
     } else {
       a.push("-c", "copy");
     }
