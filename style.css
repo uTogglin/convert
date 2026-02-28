@@ -2780,6 +2780,39 @@ body[data-tool="image"] #convert-button { display: none !important; }
 }
 .speech-player.hidden { display: none; }
 
+/* ── Word highlight display ── */
+.speech-word-display {
+  padding: 16px;
+  background: var(--input-bg);
+  border-radius: var(--radius-sm);
+  margin-bottom: 16px;
+  font-size: 1rem;
+  line-height: 1.8;
+  max-height: 200px;
+  overflow-y: auto;
+  color: var(--text-muted);
+  transition: color var(--transition);
+}
+.speech-word-display:empty { display: none; }
+.speech-word-display .speech-word {
+  transition: color 0.1s ease, background 0.1s ease;
+  border-radius: 3px;
+  padding: 1px 2px;
+}
+.speech-word-display .speech-word.active {
+  color: var(--text-main);
+  background: var(--accent-dim);
+}
+
+/* ── Freeze warning ── */
+.speech-freeze-warning {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin: 8px 0 0;
+  font-style: italic;
+}
+.speech-freeze-warning.hidden { display: none; }
+
 .speech-player-controls {
   display: flex;
   align-items: center;
