@@ -1,28 +1,51 @@
 import JSZip from "jszip";
 import { getKokoro, encodeWav } from "./speech-tool.js";
 
+// ── Model options ───────────────────────────────────────────────────────────
+const SUM_MODELS: Record<string, { id: string; label: string }> = {
+  "distilbart-6-6":  { id: "Xenova/distilbart-cnn-6-6",  label: "DistilBART 6-6" },
+  "distilbart-12-6": { id: "Xenova/distilbart-cnn-12-6", label: "DistilBART 12-6" },
+  "bart-large-cnn":  { id: "Xenova/bart-large-cnn",      label: "BART Large CNN" },
+};
+
+function getSumModel(): string {
+  try { return localStorage.getItem("convert-sum-model") ?? "distilbart-12-6"; } catch { return "distilbart-12-6"; }
+}
+
 // ── Lazy summarization pipeline ─────────────────────────────────────────────
 let summarizer: any = null;
 let summarizerLoading: Promise<any> | null = null;
+let loadedModelKey: string | null = null;
 
 async function getSummarizer(onProgress?: (pct: number, msg: string) => void): Promise<any> {
+  const modelKey = getSumModel();
+
+  // If model changed, discard old pipeline
+  if (summarizer && loadedModelKey !== modelKey) {
+    summarizer = null;
+    summarizerLoading = null;
+  }
+
   if (summarizer) return summarizer;
   if (summarizerLoading) { await summarizerLoading; return summarizer; }
+
+  const modelInfo = SUM_MODELS[modelKey] || SUM_MODELS["distilbart-12-6"];
 
   summarizerLoading = (async () => {
     const { pipeline } = await import("@huggingface/transformers");
 
-    onProgress?.(0, "Loading summarization model...");
+    onProgress?.(0, `Loading ${modelInfo.label} model...`);
 
-    summarizer = await pipeline("summarization", "Xenova/distilbart-cnn-6-6", {
+    summarizer = await pipeline("summarization", modelInfo.id, {
       progress_callback: (info: any) => {
         if (info.status === "progress" && typeof info.progress === "number") {
-          onProgress?.(Math.round(info.progress), "Downloading summarization model...");
+          onProgress?.(Math.round(info.progress), `Downloading ${modelInfo.label}...`);
         }
       },
     });
 
-    console.log("[Summarize] Model loaded successfully");
+    loadedModelKey = modelKey;
+    console.log(`[Summarize] ${modelInfo.label} loaded successfully`);
   })();
 
   try {

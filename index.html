@@ -406,6 +406,15 @@
       <div class="sm-panel" data-panel="summarize">
         <h3 class="sm-panel-title">Summarize</h3>
         <div class="sm-group">
+          <span class="sm-label">Summarization Model</span>
+          <select id="sm-sum-model" class="sm-select">
+            <option value="distilbart-6-6">Fast — DistilBART 6-6 (~300 MB)</option>
+            <option value="distilbart-12-6" selected>Balanced — DistilBART 12-6 (~600 MB)</option>
+            <option value="bart-large-cnn">Best — BART Large CNN (~1.6 GB)</option>
+          </select>
+          <p class="sm-hint">Larger models produce better summaries but take longer to download. Models are cached after first use.</p>
+        </div>
+        <div class="sm-group">
           <span class="sm-label">Default Word Limit</span>
           <div class="sm-size-row">
             <input type="number" id="sm-sum-word-limit" value="150" min="50" max="500" step="10">
@@ -422,7 +431,7 @@
         </div>
         <div class="sm-group">
           <span class="sm-label">Processing</span>
-          <p class="sm-hint">Uses DistilBART CNN 6-6 (~300 MB). Model is cached after first download. Everything runs in-browser; no files leave your device.</p>
+          <p class="sm-hint">Everything runs in-browser; no files leave your device.</p>
         </div>
       </div>
 

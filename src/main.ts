@@ -424,6 +424,7 @@ const ui = {
   smSttModel: document.querySelector("#sm-stt-model") as HTMLSelectElement,
   smSttLanguage: document.querySelector("#sm-stt-language") as HTMLSelectElement,
   // Summarize settings panel
+  smSumModel: document.querySelector("#sm-sum-model") as HTMLSelectElement,
   smSumWordLimit: document.querySelector("#sm-sum-word-limit") as HTMLInputElement,
   smSumCorsProxy: document.querySelector("#sm-sum-cors-proxy") as HTMLButtonElement,
 };
@@ -556,6 +557,13 @@ ui.smSttLanguage?.addEventListener("change", () => {
 });
 
 // ── Summarize settings panel ─────────────────────────────────────────────────
+// Model selector
+const sumModelDefault = (() => { try { return localStorage.getItem("convert-sum-model") ?? "distilbart-12-6"; } catch { return "distilbart-12-6"; } })();
+if (ui.smSumModel) ui.smSumModel.value = sumModelDefault;
+ui.smSumModel?.addEventListener("change", () => {
+  try { localStorage.setItem("convert-sum-model", ui.smSumModel.value); } catch {}
+});
+
 if (ui.smSumWordLimit) ui.smSumWordLimit.value = sumWordLimitDefault;
 ui.smSumWordLimit?.addEventListener("change", () => {
   sumWordLimitDefault = ui.smSumWordLimit.value;
