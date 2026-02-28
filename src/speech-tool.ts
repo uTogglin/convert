@@ -184,7 +184,12 @@ export function initSpeechTool() {
   const sttMicContent = document.getElementById("speech-stt-mic") as HTMLDivElement;
   const sttFileContent = document.getElementById("speech-stt-file") as HTMLDivElement;
   const sttLang = document.getElementById("speech-stt-lang") as HTMLSelectElement;
+  const sttMicModel = document.getElementById("speech-stt-mic-model") as HTMLSelectElement;
   const recordBtn = document.getElementById("speech-stt-record") as HTMLButtonElement;
+  const micProgress = document.getElementById("speech-stt-mic-progress") as HTMLDivElement;
+  const micProgressFill = micProgress.querySelector(".speech-progress-fill") as HTMLDivElement;
+  const micProgressText = micProgress.querySelector(".speech-progress-text") as HTMLSpanElement;
+  const micFreezeWarning = micProgress.querySelector(".speech-freeze-warning") as HTMLParagraphElement;
   const sttFileLang = document.getElementById("speech-stt-file-lang") as HTMLSelectElement;
   const sttFileModel = document.getElementById("speech-stt-file-model") as HTMLSelectElement;
   const fileDrop = document.getElementById("speech-file-drop") as HTMLDivElement;
@@ -205,7 +210,6 @@ export function initSpeechTool() {
   let wordTimings: WordTiming[] = [];
   let activeWordIdx = -1;
   let sttFile: File | null = null;
-  let recognition: any = null;
   let isRecording = false;
 
   // Set initial play icon
@@ -555,79 +559,114 @@ export function initSpeechTool() {
     }
   });
 
-  // ── STT: Microphone (Web Speech API) ───────────────────────────────────
-  const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+  // ── STT: Microphone (MediaRecorder + Whisper) ──────────────────────────
+  let mediaRecorder: MediaRecorder | null = null;
+  let micChunks: Blob[] = [];
 
-  recordBtn.addEventListener("click", () => {
-    if (!SpeechRecognition) {
-      sttOutput.classList.remove("hidden");
-      sttResult.value = "Speech recognition is not supported in this browser. Try Chrome or Edge.";
-      return;
-    }
-
-    if (isRecording && recognition) {
-      recognition.stop();
-      return;
-    }
-
-    recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = sttLang.value;
-
-    let finalTranscript = sttResult.value;
-
-    recognition.onstart = () => {
-      isRecording = true;
-      recordBtn.classList.add("recording");
-      const dot = recordBtn.querySelector(".speech-record-dot");
-      if (dot) {
-        recordBtn.textContent = "";
-        recordBtn.appendChild(dot);
-        recordBtn.append(" Stop Recording");
-      }
-    };
-
-    recognition.onresult = (e: any) => {
-      let interim = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const transcript = e.results[i][0].transcript;
-        if (e.results[i].isFinal) {
-          finalTranscript += transcript + " ";
-        } else {
-          interim += transcript;
-        }
-      }
-      sttOutput.classList.remove("hidden");
-      sttResult.value = finalTranscript + interim;
-    };
-
-    recognition.onerror = (e: any) => {
-      console.error("Speech recognition error:", e.error);
-      if (e.error === "not-allowed") {
-        sttOutput.classList.remove("hidden");
-        sttResult.value = "Microphone access denied. Please allow microphone access and try again.";
-      }
-      stopRecording();
-    };
-
-    recognition.onend = () => {
-      stopRecording();
-    };
-
-    recognition.start();
-  });
-
-  function stopRecording() {
-    isRecording = false;
-    recordBtn.classList.remove("recording");
+  function setRecordingUI(recording: boolean) {
+    isRecording = recording;
+    recordBtn.classList.toggle("recording", recording);
     const dot = recordBtn.querySelector(".speech-record-dot");
     if (dot) {
       recordBtn.textContent = "";
       recordBtn.appendChild(dot);
-      recordBtn.append(" Start Recording");
+      recordBtn.append(recording ? " Stop Recording" : " Start Recording");
     }
   }
+
+  recordBtn.addEventListener("click", async () => {
+    // Stop recording → transcribe
+    if (isRecording && mediaRecorder) {
+      mediaRecorder.stop();
+      return;
+    }
+
+    // Start recording
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err: any) {
+      sttOutput.classList.remove("hidden");
+      sttResult.value = err?.name === "NotAllowedError"
+        ? "Microphone access denied. Please allow microphone access and try again."
+        : `Could not access microphone: ${err?.message || err}`;
+      return;
+    }
+
+    micChunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) micChunks.push(e.data);
+    };
+
+    mediaRecorder.onstop = async () => {
+      // Stop all mic tracks
+      stream.getTracks().forEach(t => t.stop());
+      setRecordingUI(false);
+
+      if (micChunks.length === 0) return;
+
+      // Build a File from the recorded audio for Whisper
+      const blob = new Blob(micChunks, { type: mediaRecorder!.mimeType });
+      const ext = blob.type.includes("webm") ? "webm" : blob.type.includes("mp4") ? "mp4" : "ogg";
+      const file = new File([blob], `recording.${ext}`, { type: blob.type });
+
+      // Transcribe using Whisper
+      micProgress.classList.remove("hidden");
+      micFreezeWarning.classList.add("hidden");
+      micProgressFill.style.width = "0%";
+      micProgressText.textContent = "Processing recording...";
+      recordBtn.classList.add("disabled");
+
+      try {
+        const { generateSubtitles } = await import("./subtitle-generator.ts");
+        const language = sttLang.value || undefined;
+        const model = sttMicModel.value as "base" | "small" | "medium" | "large-v3-turbo";
+
+        const result = await generateSubtitles(file, (stage, pct) => {
+          micProgressFill.style.width = `${pct}%`;
+          micProgressText.textContent = stage;
+          if (pct < 50 && pct > 5) {
+            micFreezeWarning.classList.remove("hidden");
+          } else if (pct >= 50) {
+            micFreezeWarning.classList.add("hidden");
+          }
+        }, { language, model });
+
+        const srtText = new TextDecoder().decode(result.bytes);
+        const plainText = srtText
+          .split("\n")
+          .filter(line => {
+            if (/^\d+$/.test(line.trim())) return false;
+            if (/-->/.test(line)) return false;
+            if (!line.trim()) return false;
+            return true;
+          })
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .trim();
+
+        sttOutput.classList.remove("hidden");
+        // Append to existing text if any
+        const existing = sttResult.value.trim();
+        sttResult.value = existing ? existing + " " + plainText : (plainText || "(No speech detected)");
+
+      } catch (err: any) {
+        console.error("Mic transcription failed:", err);
+        micProgressText.textContent = `Error: ${err?.message || "Unknown error"}`;
+        micFreezeWarning.classList.add("hidden");
+        sttOutput.classList.remove("hidden");
+        sttResult.value = `Transcription failed: ${err?.message || err}\n\nTry a smaller model or check browser console for details.`;
+      } finally {
+        recordBtn.classList.remove("disabled");
+        setTimeout(() => micProgress.classList.add("hidden"), 1500);
+      }
+    };
+
+    mediaRecorder.start();
+    setRecordingUI(true);
+  });
 
   // ── STT: File upload ───────────────────────────────────────────────────
   fileDrop.addEventListener("click", () => fileInput.click());

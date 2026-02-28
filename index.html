@@ -951,31 +951,47 @@
         <!-- Mic mode -->
         <div id="speech-stt-mic" class="speech-stt-content active">
           <div class="speech-card">
-            <div class="speech-stt-lang-row">
-              <label class="speech-option-label">Language</label>
-              <select id="speech-stt-lang" class="sm-select">
-                <option value="en-US">English (US)</option>
-                <option value="en-GB">English (UK)</option>
-                <option value="es-ES">Spanish</option>
-                <option value="fr-FR">French</option>
-                <option value="de-DE">German</option>
-                <option value="it-IT">Italian</option>
-                <option value="pt-BR">Portuguese</option>
-                <option value="nl-NL">Dutch</option>
-                <option value="ru-RU">Russian</option>
-                <option value="ja-JP">Japanese</option>
-                <option value="ko-KR">Korean</option>
-                <option value="zh-CN">Chinese</option>
-                <option value="ar-SA">Arabic</option>
-                <option value="hi-IN">Hindi</option>
-                <option value="pl-PL">Polish</option>
-                <option value="sv-SE">Swedish</option>
-              </select>
+            <div class="speech-stt-options-row">
+              <div class="speech-stt-lang-row">
+                <label class="speech-option-label">Language</label>
+                <select id="speech-stt-lang" class="sm-select">
+                  <option value="">Auto-detect</option>
+                  <option value="en">English</option>
+                  <option value="es">Spanish</option>
+                  <option value="fr">French</option>
+                  <option value="de">German</option>
+                  <option value="it">Italian</option>
+                  <option value="pt">Portuguese</option>
+                  <option value="nl">Dutch</option>
+                  <option value="ru">Russian</option>
+                  <option value="ja">Japanese</option>
+                  <option value="ko">Korean</option>
+                  <option value="zh">Chinese</option>
+                  <option value="ar">Arabic</option>
+                  <option value="hi">Hindi</option>
+                  <option value="pl">Polish</option>
+                  <option value="sv">Swedish</option>
+                </select>
+              </div>
+              <div class="speech-stt-lang-row">
+                <label class="speech-option-label">Model</label>
+                <select id="speech-stt-mic-model" class="sm-select">
+                  <option value="large-v3-turbo">Best — Large V3 Turbo (~550 MB)</option>
+                  <option value="medium">Balanced — Medium (~500 MB)</option>
+                  <option value="small" selected>Fast — Small (~160 MB)</option>
+                  <option value="base">Fastest — Base (~50 MB)</option>
+                </select>
+              </div>
             </div>
             <button id="speech-stt-record" class="speech-record-btn">
               <span class="speech-record-dot"></span>
               Start Recording
             </button>
+            <div id="speech-stt-mic-progress" class="speech-progress hidden">
+              <div class="speech-progress-bar"><div class="speech-progress-fill"></div></div>
+              <span class="speech-progress-text">Processing...</span>
+              <p class="speech-freeze-warning hidden">Page may briefly freeze during model initialization...</p>
+            </div>
           </div>
         </div>
 
