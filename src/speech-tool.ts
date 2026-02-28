@@ -22,9 +22,10 @@ async function getKokoro(onProgress?: (pct: number, msg: string) => void): Promi
   kokoroLoading = (async () => {
     const { KokoroTTS } = await import("kokoro-js");
 
-    // Force WASM — WebGPU has execution provider issues on many systems
-    const device = "wasm";
-    const dtype = "q8";
+    // Use WebGPU when available, fall back to WASM
+    const hasWebGPU = typeof navigator !== "undefined" && "gpu" in navigator && await navigator.gpu?.requestAdapter().catch(() => null);
+    const device = hasWebGPU ? "webgpu" : "wasm";
+    const dtype = hasWebGPU ? "fp32" : "q8";
 
     console.log(`[Kokoro TTS] Using device=${device}, dtype=${dtype}`);
     onProgress?.(0, `Loading Kokoro model (${device})...`);
@@ -378,10 +379,31 @@ export function initSpeechTool() {
         }
         const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
 
-        // RawAudio has .data (Float32Array getter) and .sampling_rate
-        const data: Float32Array | undefined = result?.data;
+        // RawAudio has .data getter (Float32Array) and .sampling_rate
+        // On WebGPU, the ONNX tensor data may not transfer to CPU automatically,
+        // so result.data can be undefined. Try multiple fallback approaches.
+        let data: Float32Array | undefined;
+        if (result?.data instanceof Float32Array && result.data.length > 0) {
+          data = result.data;
+        } else if (result?.audio instanceof Float32Array && result.audio.length > 0) {
+          // Internal RawAudio property — direct Float32Array
+          data = result.audio;
+        } else if (result?.audio?.getData) {
+          // WebGPU: internal audio is an ONNX tensor still on GPU — read it back
+          const gpuData = await result.audio.getData();
+          if (gpuData instanceof Float32Array && gpuData.length > 0) data = gpuData;
+        } else if (result?.audio?.data instanceof Float32Array && result.audio.data.length > 0) {
+          // Internal audio might be a tensor with .data property
+          data = result.audio.data;
+        }
         if (!data || data.length === 0) {
-          console.error("[Kokoro TTS] generate() returned no audio data:", result);
+          console.error("[Kokoro TTS] Could not extract audio from result:", {
+            resultType: typeof result,
+            resultKeys: result ? Object.keys(result) : [],
+            dataType: typeof result?.data,
+            audioType: typeof result?.audio,
+            audioKeys: result?.audio ? Object.keys(result.audio) : [],
+          });
           throw new Error("TTS generated empty audio. Try shorter text or a different voice.");
         }
         sampleRate = result.sampling_rate || 24000;
