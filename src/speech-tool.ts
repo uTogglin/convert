@@ -22,18 +22,9 @@ async function getKokoro(onProgress?: (pct: number, msg: string) => void): Promi
   kokoroLoading = (async () => {
     const { KokoroTTS } = await import("kokoro-js");
 
-    // Prefer WebGPU (fast, GPU-accelerated) with WASM fallback
-    let device = "wasm";
-    let dtype = "q8"; // q8 for WASM (CPU-optimized, 92MB)
-    try {
-      if ("gpu" in navigator) {
-        const adapter = await (navigator as any).gpu.requestAdapter();
-        if (adapter) {
-          device = "webgpu";
-          dtype = "fp16"; // fp16 for WebGPU (GPU-compatible, 163MB)
-        }
-      }
-    } catch { /* no WebGPU */ }
+    // Force WASM — WebGPU has execution provider issues on many systems
+    const device = "wasm";
+    const dtype = "q8";
 
     console.log(`[Kokoro TTS] Using device=${device}, dtype=${dtype}`);
     onProgress?.(0, `Loading Kokoro model (${device})...`);
@@ -374,15 +365,24 @@ export function initSpeechTool() {
         console.log(`[Kokoro TTS] Generating chunk ${i + 1}/${chunks.length}: "${chunk.substring(0, 50)}..."`);
         ttsProgressText.textContent = chunks.length > 1
           ? `Generating speech (${i + 1}/${chunks.length})...`
-          : "Generating speech...";
+          : "Generating speech (this may take a moment)...";
         ttsProgressFill.style.width = `${Math.min(95, 65 + (i / chunks.length) * 30)}%`;
 
-        const result = await tts.generate(chunk, { voice, speed });
+        const t0 = performance.now();
+        let result: any;
+        try {
+          result = await tts.generate(chunk, { voice, speed });
+        } catch (genErr: any) {
+          console.error(`[Kokoro TTS] generate() failed:`, genErr);
+          throw new Error(`Generation failed: ${genErr?.message || genErr}`);
+        }
+        const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+
         const data: Float32Array = result.data;
         sampleRate = result.sampling_rate || 24000;
         audioChunks.push(data);
         chunkMeta.push({ text: chunk, samples: data.length });
-        console.log(`[Kokoro TTS] Chunk ${i + 1} done: ${data.length} samples`);
+        console.log(`[Kokoro TTS] Chunk ${i + 1} done in ${elapsed}s: ${data.length} samples`);
       }
       console.log("[Kokoro TTS] All chunks generated");
 
