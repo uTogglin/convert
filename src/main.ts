@@ -153,6 +153,26 @@ let compressSpeed: "fast" | "balanced" | "quality" = (() => {
 let compressWebmMode: boolean = (() => {
   try { return localStorage.getItem("convert-compress-webm") === "true"; } catch { return false; }
 })();
+/** Default TTS voice */
+let ttsVoiceDefault: string = (() => {
+  try { return localStorage.getItem("convert-tts-voice") ?? "af_heart"; } catch { return "af_heart"; }
+})();
+
+/** Default TTS speed */
+let ttsSpeedDefault: string = (() => {
+  try { return localStorage.getItem("convert-tts-speed") ?? "1"; } catch { return "1"; }
+})();
+
+/** Default STT model */
+let sttModelDefault: string = (() => {
+  try { return localStorage.getItem("convert-stt-model") ?? "base"; } catch { return "base"; }
+})();
+
+/** Default STT language */
+let sttLanguageDefault: string = (() => {
+  try { return localStorage.getItem("convert-stt-language") ?? ""; } catch { return ""; }
+})();
+
 /** Queue for mixed-category batch conversion */
 let conversionQueue: File[][] = [];
 let currentQueueIndex = 0;
@@ -391,6 +411,12 @@ const ui = {
   vidFilmstripGrid: document.querySelector("#vid-filmstrip-grid") as HTMLDivElement,
   vidAddMore: document.querySelector("#vid-add-more") as HTMLButtonElement,
   applyAllToggle: document.querySelector("#apply-all-toggle") as HTMLButtonElement,
+  // Speech settings panel
+  smTtsVoice: document.querySelector("#sm-tts-voice") as HTMLSelectElement,
+  smTtsSpeed: document.querySelector("#sm-tts-speed") as HTMLInputElement,
+  smTtsSpeedLabel: document.querySelector("#sm-tts-speed-label") as HTMLSpanElement,
+  smSttModel: document.querySelector("#sm-stt-model") as HTMLSelectElement,
+  smSttLanguage: document.querySelector("#sm-stt-language") as HTMLSelectElement,
 };
 
 // ── Home page / tool navigation ──────────────────────────────────────────────
@@ -469,6 +495,48 @@ document.querySelector("#logo")?.addEventListener("click", showHomePage);
 
 // Initialize speech tool
 initSpeechTool();
+
+// ── Speech settings panel ───────────────────────────────────────────────────
+// Restore saved values into settings selects
+if (ui.smTtsVoice) ui.smTtsVoice.value = ttsVoiceDefault;
+if (ui.smTtsSpeed) { ui.smTtsSpeed.value = ttsSpeedDefault; if (ui.smTtsSpeedLabel) ui.smTtsSpeedLabel.textContent = `${parseFloat(ttsSpeedDefault).toFixed(1)}x`; }
+if (ui.smSttModel) ui.smSttModel.value = sttModelDefault;
+if (ui.smSttLanguage) ui.smSttLanguage.value = sttLanguageDefault;
+
+ui.smTtsVoice?.addEventListener("change", () => {
+  ttsVoiceDefault = ui.smTtsVoice.value;
+  try { localStorage.setItem("convert-tts-voice", ttsVoiceDefault); } catch {}
+  const el = document.getElementById("speech-tts-voice") as HTMLSelectElement | null;
+  if (el) el.value = ttsVoiceDefault;
+});
+ui.smTtsSpeed?.addEventListener("input", () => {
+  ttsSpeedDefault = ui.smTtsSpeed.value;
+  if (ui.smTtsSpeedLabel) ui.smTtsSpeedLabel.textContent = `${parseFloat(ttsSpeedDefault).toFixed(1)}x`;
+  try { localStorage.setItem("convert-tts-speed", ttsSpeedDefault); } catch {}
+  const el = document.getElementById("speech-tts-speed") as HTMLInputElement | null;
+  const lbl = document.getElementById("speech-tts-speed-label") as HTMLSpanElement | null;
+  const disp = document.getElementById("speech-tts-speed-display") as HTMLSpanElement | null;
+  const val = `${parseFloat(ttsSpeedDefault).toFixed(1)}x`;
+  if (el) el.value = ttsSpeedDefault;
+  if (lbl) lbl.textContent = val;
+  if (disp) disp.textContent = val;
+});
+ui.smSttModel?.addEventListener("change", () => {
+  sttModelDefault = ui.smSttModel.value;
+  try { localStorage.setItem("convert-stt-model", sttModelDefault); } catch {}
+  const mic = document.getElementById("speech-stt-mic-model") as HTMLSelectElement | null;
+  const file = document.getElementById("speech-stt-file-model") as HTMLSelectElement | null;
+  if (mic) mic.value = sttModelDefault;
+  if (file) file.value = sttModelDefault;
+});
+ui.smSttLanguage?.addEventListener("change", () => {
+  sttLanguageDefault = ui.smSttLanguage.value;
+  try { localStorage.setItem("convert-stt-language", sttLanguageDefault); } catch {}
+  const mic = document.getElementById("speech-stt-lang") as HTMLSelectElement | null;
+  const file = document.getElementById("speech-stt-file-lang") as HTMLSelectElement | null;
+  if (mic) mic.value = sttLanguageDefault;
+  if (file) file.value = sttLanguageDefault;
+});
 
 // ── Settings modal ──────────────────────────────────────────────────────────
 const smNavBtns = document.querySelectorAll<HTMLButtonElement>(".sm-nav-btn");
@@ -2053,7 +2121,8 @@ async function applyToolProcessing(files: FileData[]): Promise<FileData[]> {
     // Convert: only strip metadata (privacy)
     files = await applyMetadataStrip(files);
   } else if (activeTool === "compress") {
-    // Compress: only compression
+    // Compress: strip image metadata (privacy) + compression
+    files = await applyMetadataStrip(files);
     files = await applyCompression(files);
   } else if (activeTool === "image") {
     // Image tools: BG removal → metadata strip → rescale

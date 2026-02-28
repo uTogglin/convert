@@ -228,6 +228,7 @@ async function processWithFFmpeg(
   }
   if (options.removeAudio) args.push("-an");
   if (options.removeSubtitles) args.push("-sn");
+  try { if (localStorage.getItem("convert-privacy") === "true") args.push("-map_metadata", "-1"); } catch {}
 
   args.push(tmpOut);
 
@@ -394,12 +395,15 @@ export async function addSubtitlesToVideo(
   };
   ff.on("progress", progressHandler);
 
+  const privacyArgs: string[] = [];
+  try { if (localStorage.getItem("convert-privacy") === "true") privacyArgs.push("-map_metadata", "-1"); } catch {}
+
   try {
     if (options.mode === "mux") {
-      await ffExec(["-i", tmpVid, "-i", tmpSub, "-c:v", "copy", "-c:a", "copy", "-c:s", "mov_text", tmpOut]);
+      await ffExec(["-i", tmpVid, "-i", tmpSub, "-c:v", "copy", "-c:a", "copy", "-c:s", "mov_text", ...privacyArgs, tmpOut]);
     } else {
       // burn: re-encode with subtitle filter
-      await ffExec(["-i", tmpVid, "-vf", `subtitles=${tmpSub}`, "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "copy", tmpOut]);
+      await ffExec(["-i", tmpVid, "-vf", `subtitles=${tmpSub}`, "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "copy", ...privacyArgs, tmpOut]);
     }
   } finally {
     ff.off("progress", progressHandler);
@@ -458,6 +462,7 @@ export async function mergeVideos(
     } else {
       a.push("-c", "copy");
     }
+    try { if (localStorage.getItem("convert-privacy") === "true") a.push("-map_metadata", "-1"); } catch {}
     a.push(tmpOut);
     return a;
   };

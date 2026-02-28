@@ -204,6 +204,81 @@ export function initSpeechTool() {
   const sttResult = document.getElementById("speech-stt-result") as HTMLTextAreaElement;
   const sttCopy = document.getElementById("speech-stt-copy") as HTMLButtonElement;
 
+  // ── Apply saved defaults from settings panel ───────────────────────────
+  try {
+    const savedVoice = localStorage.getItem("convert-tts-voice");
+    if (savedVoice) ttsVoice.value = savedVoice;
+
+    const savedSpeed = localStorage.getItem("convert-tts-speed");
+    if (savedSpeed) {
+      ttsSpeed.value = savedSpeed;
+      const label = `${parseFloat(savedSpeed).toFixed(1)}x`;
+      ttsSpeedLabel.textContent = label;
+      speedDisplay.textContent = label;
+    }
+
+    const savedModel = localStorage.getItem("convert-stt-model");
+    if (savedModel) {
+      sttMicModel.value = savedModel;
+      sttFileModel.value = savedModel;
+    }
+
+    const savedLang = localStorage.getItem("convert-stt-language");
+    if (savedLang !== null) {
+      sttLang.value = savedLang;
+      sttFileLang.value = savedLang;
+    }
+  } catch {}
+
+  // ── Sync speech tool changes back to localStorage (& settings panel) ──
+  ttsVoice.addEventListener("change", () => {
+    try { localStorage.setItem("convert-tts-voice", ttsVoice.value); } catch {}
+    const smVoice = document.getElementById("sm-tts-voice") as HTMLSelectElement | null;
+    if (smVoice) smVoice.value = ttsVoice.value;
+  });
+  ttsSpeed.addEventListener("input", () => {
+    try { localStorage.setItem("convert-tts-speed", ttsSpeed.value); } catch {}
+    const smSpeed = document.getElementById("sm-tts-speed") as HTMLInputElement | null;
+    const smLabel = document.getElementById("sm-tts-speed-label") as HTMLSpanElement | null;
+    if (smSpeed) smSpeed.value = ttsSpeed.value;
+    if (smLabel) smLabel.textContent = `${parseFloat(ttsSpeed.value).toFixed(1)}x`;
+  });
+
+  function syncModelToStorage() {
+    // Both mic and file model selects should stay in sync
+    const val = sttMicModel.value;
+    sttFileModel.value = val;
+    try { localStorage.setItem("convert-stt-model", val); } catch {}
+    const smModel = document.getElementById("sm-stt-model") as HTMLSelectElement | null;
+    if (smModel) smModel.value = val;
+  }
+  function syncFileModelToStorage() {
+    const val = sttFileModel.value;
+    sttMicModel.value = val;
+    try { localStorage.setItem("convert-stt-model", val); } catch {}
+    const smModel = document.getElementById("sm-stt-model") as HTMLSelectElement | null;
+    if (smModel) smModel.value = val;
+  }
+  sttMicModel.addEventListener("change", syncModelToStorage);
+  sttFileModel.addEventListener("change", syncFileModelToStorage);
+
+  function syncLangToStorage() {
+    const val = sttLang.value;
+    sttFileLang.value = val;
+    try { localStorage.setItem("convert-stt-language", val); } catch {}
+    const smLang = document.getElementById("sm-stt-language") as HTMLSelectElement | null;
+    if (smLang) smLang.value = val;
+  }
+  function syncFileLangToStorage() {
+    const val = sttFileLang.value;
+    sttLang.value = val;
+    try { localStorage.setItem("convert-stt-language", val); } catch {}
+    const smLang = document.getElementById("sm-stt-language") as HTMLSelectElement | null;
+    if (smLang) smLang.value = val;
+  }
+  sttLang.addEventListener("change", syncLangToStorage);
+  sttFileLang.addEventListener("change", syncFileLangToStorage);
+
   // State
   let currentWavBlob: Blob | null = null;
   let currentAudioUrl: string | null = null;
@@ -543,7 +618,9 @@ export function initSpeechTool() {
 
       const ff = await getSpeechFFmpeg();
       await ff.writeFile("input.wav", wavBytes);
-      const code = await ff.exec(["-i", "input.wav", "-codec:a", "libmp3lame", "-qscale:a", "2", "output.mp3"]);
+      const pArgs: string[] = [];
+      try { if (localStorage.getItem("convert-privacy") === "true") pArgs.push("-map_metadata", "-1"); } catch {}
+      const code = await ff.exec(["-i", "input.wav", "-codec:a", "libmp3lame", "-qscale:a", "2", ...pArgs, "output.mp3"]);
       if (typeof code === "number" && code !== 0) throw new Error(`FFmpeg exit code ${code}`);
       const mp3Data = await ff.readFile("output.mp3") as Uint8Array;
       await ff.deleteFile("input.wav").catch(() => {});

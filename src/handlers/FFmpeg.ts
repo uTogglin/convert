@@ -243,7 +243,9 @@ class FFmpegHandler implements FormatHandler {
     }
     await this.#ffmpeg.writeFile("list.txt", new TextEncoder().encode(listString));
 
-    const command = ["-hide_banner", "-f", "concat", "-safe", "0", "-i", "list.txt", "-f", outputFormat.internal];
+    const command = ["-hide_banner", "-f", "concat", "-safe", "0", "-i", "list.txt"];
+    try { if (localStorage.getItem("convert-privacy") === "true") command.push("-map_metadata", "-1"); } catch {}
+    command.push("-f", outputFormat.internal);
     if (outputFormat.mime === "video/mp4") {
       command.push("-pix_fmt", "yuv420p");
     } else if (outputFormat.internal === "dvd") {

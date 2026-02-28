@@ -3,6 +3,11 @@ import { FFmpeg } from "@ffmpeg/ffmpeg";
 import type { LogEvent } from "@ffmpeg/ffmpeg";
 import { compressVideoWebCodecs, compressVideoVP9, isWebCodecsAvailable } from "./webcodecs-compress.ts";
 
+/** Returns ["-map_metadata", "-1"] when privacy mode is active, else [] */
+function privacyArgs(): string[] {
+  try { return localStorage.getItem("convert-privacy") === "true" ? ["-map_metadata", "-1"] : []; } catch { return []; }
+}
+
 /** Yield to the browser so pending DOM updates get painted */
 const yieldToBrowser = () => new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
 
@@ -380,7 +385,7 @@ async function compressGif(file: FileData, targetBytes: number): Promise<FileDat
         : `fps=${fps},split[s0][s1];[s0]palettegen=max_colors=128[p];[s1][p]paletteuse`;
 
       try {
-        await ffExec(["-hide_banner", "-y", "-i", inputName, "-vf", vf, outputName]);
+        await ffExec(["-hide_banner", "-y", "-i", inputName, "-vf", vf, ...privacyArgs(), outputName]);
         const data = await ff.readFile(outputName);
         const bytes = data instanceof Uint8Array ? new Uint8Array(data) : new TextEncoder().encode(data as string);
 
@@ -473,6 +478,7 @@ async function compressVideo(
       "-hide_banner", "-y", "-i", inputName,
       "-c:v", videoCodec, ...pixFmtArgs, ...speedArgs, ...crfArgs,
       ...(hasAudio ? ["-c:a", "copy"] : ["-an"]),
+      ...privacyArgs(),
       outputName,
     ];
 
@@ -536,6 +542,7 @@ async function compressVideo(
       "-c:v", videoCodec, ...pixFmtArgs, ...speedArgs,
       "-b:v", String(videoBitrate),
       ...audioArgs,
+      ...privacyArgs(),
       outputName,
     ], duration, "Compressing video...", stallTimeout);
   } catch (e) {
@@ -607,7 +614,7 @@ async function compressAudio(file: FileData, targetBytes: number, mode: "auto" |
   if (mode === "auto" && ext === "wav") {
     const flacName = "compress_output.flac";
     try {
-      await ffExec(["-hide_banner", "-y", "-i", inputName, "-c:a", "flac", flacName]);
+      await ffExec(["-hide_banner", "-y", "-i", inputName, "-c:a", "flac", ...privacyArgs(), flacName]);
       const data = await ff.readFile(flacName);
       const bytes = data instanceof Uint8Array ? new Uint8Array(data) : new TextEncoder().encode(data as string);
       await ff.deleteFile(flacName).catch(() => {});
@@ -652,6 +659,7 @@ async function compressAudio(file: FileData, targetBytes: number, mode: "auto" |
     await ffExecWithProgress([
       "-hide_banner", "-y", "-i", inputName,
       "-c:a", codec, "-b:a", String(Math.floor(bitrate / 1000)) + "k",
+      ...privacyArgs(),
       outputName,
     ], duration, "Compressing audio...");
   } catch (e) {
