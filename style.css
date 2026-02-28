@@ -232,23 +232,33 @@ body {
 body[data-tool="compress"] #format-containers,
 body[data-tool="image"] #format-containers,
 body[data-tool="video"] #format-containers,
-body[data-tool="speech"] #format-containers { display: none !important; }
+body[data-tool="speech"] #format-containers,
+body[data-tool="summarize"] #format-containers { display: none !important; }
 body[data-tool="compress"] #image-page,
 body[data-tool="compress"] #video-page,
 body[data-tool="compress"] #speech-page,
+body[data-tool="compress"] #summarize-page,
 body[data-tool="image"] #compress-page,
 body[data-tool="image"] #video-page,
 body[data-tool="image"] #speech-page,
+body[data-tool="image"] #summarize-page,
 body[data-tool="video"] #compress-page,
 body[data-tool="video"] #image-page,
 body[data-tool="video"] #speech-page,
+body[data-tool="video"] #summarize-page,
 body[data-tool="speech"] #compress-page,
 body[data-tool="speech"] #image-page,
 body[data-tool="speech"] #video-page,
+body[data-tool="speech"] #summarize-page,
+body[data-tool="summarize"] #compress-page,
+body[data-tool="summarize"] #image-page,
+body[data-tool="summarize"] #video-page,
+body[data-tool="summarize"] #speech-page,
 body[data-tool="convert"] #compress-page,
 body[data-tool="convert"] #image-page,
 body[data-tool="convert"] #video-page,
-body[data-tool="convert"] #speech-page { display: none !important; }
+body[data-tool="convert"] #speech-page,
+body[data-tool="convert"] #summarize-page { display: none !important; }
 body[data-tool="video"] #file-area { display: none !important; }
 body[data-tool="video"] #archive-panel { display: none !important; }
 body[data-tool="video"] #output-tray { display: none !important; }
@@ -257,6 +267,10 @@ body[data-tool="speech"] #file-area { display: none !important; }
 body[data-tool="speech"] #archive-panel { display: none !important; }
 body[data-tool="speech"] #output-tray { display: none !important; }
 body[data-tool="speech"] #convert-button { display: none !important; }
+body[data-tool="summarize"] #file-area { display: none !important; }
+body[data-tool="summarize"] #archive-panel { display: none !important; }
+body[data-tool="summarize"] #output-tray { display: none !important; }
+body[data-tool="summarize"] #convert-button { display: none !important; }
 
 /* =========================================
    TOOL PAGES (Compress & Image) — header only
