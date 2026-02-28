@@ -91,16 +91,21 @@ async function fetchUrlText(url: string): Promise<string> {
     // Direct fetch blocked by CORS
   }
 
-  // Fall back to CORS proxy only if user opted in
+  // Fall back to CORS proxies only if user opted in
   if (corsProxyEnabled) {
-    try {
-      const resp = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
-      if (resp.ok) {
+    const proxies = [
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+      `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+    ];
+    for (const proxyUrl of proxies) {
+      try {
+        const resp = await fetch(proxyUrl);
+        if (!resp.ok) continue;
         const html = await resp.text();
         const text = extractTextFromHtml(html);
         if (text) return text;
-      }
-    } catch { /* proxy also failed */ }
+      } catch { continue; }
+    }
   }
 
   throw new Error(
