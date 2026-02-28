@@ -180,10 +180,17 @@ async function processWithFFmpeg(
   return result;
 }
 
+export interface SubtitleStreamInfo {
+  index: number;
+  codec: string;
+  language?: string;
+}
+
 export interface VideoProbeInfo {
   hasAudio: boolean;
   hasSubtitles: boolean;
   subtitleCount: number;
+  subtitles: SubtitleStreamInfo[];
   duration: number;
 }
 
@@ -201,9 +208,20 @@ export async function probeVideoInfo(file: File): Promise<VideoProbeInfo> {
   await ff.deleteFile(tmpIn);
 
   const hasAudio = /Stream.*Audio/.test(log);
-  const subMatches = log.match(/Stream.*Subtitle/g);
-  const hasSubtitles = !!subMatches && subMatches.length > 0;
-  const subtitleCount = subMatches ? subMatches.length : 0;
+
+  // Parse subtitle streams with index, language, and codec
+  const subtitles: SubtitleStreamInfo[] = [];
+  const subRegex = /Stream #0:(\d+)(?:\((\w+)\))?.*?Subtitle:\s*(\w+)/g;
+  let subMatch;
+  while ((subMatch = subRegex.exec(log)) !== null) {
+    subtitles.push({
+      index: parseInt(subMatch[1]),
+      codec: subMatch[3].toLowerCase(),
+      language: subMatch[2] || undefined,
+    });
+  }
+  const hasSubtitles = subtitles.length > 0;
+  const subtitleCount = subtitles.length;
 
   // Try to parse duration
   let duration = 0;
@@ -212,14 +230,14 @@ export async function probeVideoInfo(file: File): Promise<VideoProbeInfo> {
     duration = parseInt(durMatch[1]) * 3600 + parseInt(durMatch[2]) * 60 + parseInt(durMatch[3]) + parseInt(durMatch[4]) / 100;
   }
 
-  return { hasAudio, hasSubtitles, subtitleCount, duration };
+  return { hasAudio, hasSubtitles, subtitleCount, subtitles, duration };
 }
 
 /**
  * Extract subtitle tracks from a video file.
  * Returns an array of FileData (one per subtitle track).
  */
-export async function extractSubtitles(file: File): Promise<FileData[]> {
+export async function extractSubtitles(file: File, filterStreamIndex?: number): Promise<FileData[]> {
   const ff = await getFFmpeg();
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "mp4";
   const tmpIn = "sub_extract_in." + ext;
@@ -229,7 +247,12 @@ export async function extractSubtitles(file: File): Promise<FileData[]> {
 
   // Probe for subtitle streams
   const log = await ffExecWithLog(["-i", tmpIn, "-f", "null", "-"]);
-  const streamMatches = [...log.matchAll(/Stream #0:(\d+).*?Subtitle:\s*(\w+)/g)];
+  let streamMatches = [...log.matchAll(/Stream #0:(\d+).*?Subtitle:\s*(\w+)/g)];
+
+  // Filter to specific stream if requested
+  if (filterStreamIndex !== undefined) {
+    streamMatches = streamMatches.filter(m => parseInt(m[1]) === filterStreamIndex);
+  }
 
   if (streamMatches.length === 0) {
     await ff.deleteFile(tmpIn);
@@ -256,6 +279,60 @@ export async function extractSubtitles(file: File): Promise<FileData[]> {
 
   await ff.deleteFile(tmpIn);
   return results;
+}
+
+export interface AddSubtitleOptions {
+  mode: "mux" | "burn";
+}
+
+/**
+ * Add a subtitle file to a video.
+ * - mux: embeds as a selectable track (fast, stream copy)
+ * - burn: hardcodes into video frames (re-encodes video)
+ */
+export async function addSubtitlesToVideo(
+  videoFile: File,
+  subFile: File,
+  options: AddSubtitleOptions,
+  onProgress?: (pct: number) => void,
+): Promise<FileData> {
+  const ff = await getFFmpeg();
+  const ext = videoFile.name.split(".").pop()?.toLowerCase() ?? "mp4";
+  const subExt = subFile.name.split(".").pop()?.toLowerCase() ?? "srt";
+  const baseName = videoFile.name.replace(/\.[^.]+$/, "");
+  const tmpVid = "addsub_in." + ext;
+  const tmpSub = "subs_in." + subExt;
+  const tmpOut = "addsub_out." + ext;
+
+  const vidBuf = await videoFile.arrayBuffer();
+  await ff.writeFile(tmpVid, new Uint8Array(vidBuf));
+  const subBuf = await subFile.arrayBuffer();
+  await ff.writeFile(tmpSub, new Uint8Array(subBuf));
+
+  const progressHandler = (e: { progress?: number }) => {
+    onProgress?.(Math.min(Math.round((e.progress ?? 0) * 100), 99));
+  };
+  ff.on("progress", progressHandler);
+
+  try {
+    if (options.mode === "mux") {
+      await ffExec(["-i", tmpVid, "-i", tmpSub, "-c:v", "copy", "-c:a", "copy", "-c:s", "mov_text", tmpOut]);
+    } else {
+      // burn: re-encode with subtitle filter
+      await ffExec(["-i", tmpVid, "-vf", `subtitles=${tmpSub}`, "-c:a", "copy", tmpOut]);
+    }
+  } finally {
+    ff.off("progress", progressHandler);
+  }
+
+  const data = await ff.readFile(tmpOut);
+  const result = data instanceof Uint8Array ? data : new TextEncoder().encode(data as string);
+  await ff.deleteFile(tmpVid);
+  await ff.deleteFile(tmpSub);
+  await ff.deleteFile(tmpOut);
+
+  const suffix = options.mode === "mux" ? "_subbed" : "_burned";
+  return { name: `${baseName}${suffix}.${ext}`, bytes: result };
 }
 
 /**

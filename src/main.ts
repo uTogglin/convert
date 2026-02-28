@@ -6,7 +6,8 @@ import JSZip from "jszip";
 import { gzip as pakoGzip } from "pako";
 import { createTar } from "./handlers/archive.js";
 import { applyFileCompression } from "./compress.js";
-import { processVideo, probeVideoInfo, extractSubtitles } from "./video-editor.js";
+import { processVideo, probeVideoInfo, extractSubtitles, addSubtitlesToVideo } from "./video-editor.js";
+import type { SubtitleStreamInfo } from "./video-editor.js";
 import { generateSubtitles } from "./subtitle-generator.js";
 
 // ── In-app console log capture ─────────────────────────────────────────────
@@ -179,6 +180,10 @@ let vidProcessedData: FileData | null = null;
 let vidObjectUrl: string | null = null;
 let vidProcessedUrl: string | null = null;
 let vidIsProcessing: boolean = false;
+let vidSubStreams: SubtitleStreamInfo[] = [];
+let vidSubFile: File | null = null;
+let vidAddSubMux: boolean = false;
+let vidAddSubBurn: boolean = false;
 
 /** Returns the broad media category from a file's MIME type */
 function getMediaCategory(file: File): string {
@@ -304,6 +309,15 @@ const ui = {
   vidProgressText: document.querySelector(".vid-progress-text") as HTMLSpanElement,
   vidDownloadBtn: document.querySelector("#vid-download-btn") as HTMLButtonElement,
   vidFileInput: document.querySelector("#vid-file-input") as HTMLInputElement,
+  vidVolumeSlider: document.querySelector("#vid-volume-slider") as HTMLInputElement,
+  vidSubLangSelect: document.querySelector("#vid-sub-lang") as HTMLSelectElement,
+  vidAddSubsToggle: document.querySelector("#vid-add-subs-toggle") as HTMLButtonElement,
+  vidAddSubsCollapsible: document.querySelector(".vid-collapsible") as HTMLDivElement,
+  vidSubFileBtn: document.querySelector("#vid-sub-file-btn") as HTMLButtonElement,
+  vidSubFileName: document.querySelector("#vid-sub-file-name") as HTMLSpanElement,
+  vidMuxToggle: document.querySelector("#vid-mux-toggle") as HTMLButtonElement,
+  vidBurnToggle: document.querySelector("#vid-burn-toggle") as HTMLButtonElement,
+  vidSubFileInput: document.querySelector("#vid-sub-file-input") as HTMLInputElement,
 };
 
 // ── Home page / tool navigation ──────────────────────────────────────────────
@@ -2727,7 +2741,8 @@ function vidHasEdits(): boolean {
   return vidTrimStart > 0.01 ||
     (vidDuration > 0 && vidTrimEnd < vidDuration - 0.01) ||
     vidRemoveAudio ||
-    vidRemoveSubtitles;
+    vidRemoveSubtitles ||
+    (vidSubFile !== null && (vidAddSubMux || vidAddSubBurn));
 }
 
 /** Update the action button state */
@@ -2786,12 +2801,38 @@ function vidLoadFile(file: File) {
   // Reset toggle states in UI
   ui.vidRemoveAudioToggle?.classList.remove("active");
   ui.vidRemoveSubsToggle?.classList.remove("active");
+  ui.vidMuxToggle?.classList.remove("active");
+  ui.vidBurnToggle?.classList.remove("active");
+  vidSubFile = null;
+  vidAddSubMux = false;
+  vidAddSubBurn = false;
+  vidSubStreams = [];
+  if (ui.vidSubFileName) ui.vidSubFileName.textContent = "";
+  if (ui.vidAddSubsCollapsible) ui.vidAddSubsCollapsible.classList.remove("open");
+
+  // Reset language dropdown
+  if (ui.vidSubLangSelect) {
+    ui.vidSubLangSelect.innerHTML = '<option value="all">All tracks</option>';
+  }
 
   // Probe for audio/subtitles in background
   probeVideoInfo(file).then(info => {
     vidHasAudio = info.hasAudio;
     vidHasSubtitles = info.hasSubtitles;
     vidSubtitleCount = info.subtitleCount;
+    vidSubStreams = info.subtitles;
+
+    // Populate language dropdown
+    if (ui.vidSubLangSelect && info.subtitles.length > 0) {
+      ui.vidSubLangSelect.innerHTML = '<option value="all">All tracks</option>';
+      for (const sub of info.subtitles) {
+        const opt = document.createElement("option");
+        opt.value = String(sub.index);
+        const lang = sub.language ? sub.language.toUpperCase() : "?";
+        opt.textContent = `#${sub.index} ${lang} (${sub.codec})`;
+        ui.vidSubLangSelect.appendChild(opt);
+      }
+    }
   }).catch(() => {});
 }
 
@@ -2822,6 +2863,15 @@ function vidResetState() {
   if (ui.vidTrimStartInput) ui.vidTrimStartInput.value = "";
   if (ui.vidTrimEndInput) ui.vidTrimEndInput.value = "";
   if (ui.vidGenerateProgress) ui.vidGenerateProgress.classList.add("hidden");
+  vidSubFile = null;
+  vidAddSubMux = false;
+  vidAddSubBurn = false;
+  vidSubStreams = [];
+  if (ui.vidMuxToggle) ui.vidMuxToggle.classList.remove("active");
+  if (ui.vidBurnToggle) ui.vidBurnToggle.classList.remove("active");
+  if (ui.vidSubFileName) ui.vidSubFileName.textContent = "";
+  if (ui.vidAddSubsCollapsible) ui.vidAddSubsCollapsible.classList.remove("open");
+  if (ui.vidSubLangSelect) ui.vidSubLangSelect.innerHTML = '<option value="all">All tracks</option>';
   vidUpdateActionButton();
 }
 
@@ -2988,7 +3038,9 @@ ui.vidExtractSubs?.addEventListener("click", async () => {
   ui.vidExtractSubs.textContent = "Extracting...";
   ui.vidExtractSubs.classList.add("disabled");
   try {
-    const subs = await extractSubtitles(vidFile);
+    const langVal = ui.vidSubLangSelect?.value;
+    const filterIndex = langVal && langVal !== "all" ? parseInt(langVal) : undefined;
+    const subs = await extractSubtitles(vidFile, filterIndex);
     if (subs.length === 0) {
       window.showPopup(
         `<h2>No subtitles found</h2>` +
@@ -3018,7 +3070,7 @@ ui.vidExtractSubs?.addEventListener("click", async () => {
       `<button onclick="window.hidePopup()">OK</button>`
     );
   } finally {
-    ui.vidExtractSubs.textContent = "Extract subtitles";
+    ui.vidExtractSubs.textContent = "Extract";
     ui.vidExtractSubs.classList.remove("disabled");
   }
 });
@@ -3062,6 +3114,62 @@ ui.vidGenerateSubs?.addEventListener("click", async () => {
     ui.vidGenerateSubs.classList.remove("disabled");
     ui.vidGenerateProgress?.classList.add("hidden");
   }
+});
+
+// Volume slider
+ui.vidVolumeSlider?.addEventListener("input", () => {
+  if (ui.vidPreview) ui.vidPreview.volume = parseFloat(ui.vidVolumeSlider.value);
+});
+
+// Collapsible add-subtitles toggle
+ui.vidAddSubsToggle?.addEventListener("click", () => {
+  ui.vidAddSubsCollapsible?.classList.toggle("open");
+});
+
+// Choose subtitle file button
+ui.vidSubFileBtn?.addEventListener("click", () => {
+  ui.vidSubFileInput?.click();
+});
+
+// Subtitle file input change
+ui.vidSubFileInput?.addEventListener("change", () => {
+  const files = ui.vidSubFileInput.files;
+  if (files && files.length > 0) {
+    vidSubFile = files[0];
+    if (ui.vidSubFileName) ui.vidSubFileName.textContent = vidSubFile.name;
+    vidProcessedData = null;
+    if (vidProcessedUrl) { URL.revokeObjectURL(vidProcessedUrl); vidProcessedUrl = null; }
+    vidUpdateActionButton();
+    ui.vidSubFileInput.value = "";
+  }
+});
+
+// Mux toggle
+ui.vidMuxToggle?.addEventListener("click", () => {
+  vidAddSubMux = !vidAddSubMux;
+  ui.vidMuxToggle.classList.toggle("active", vidAddSubMux);
+  // If mux is on, turn off burn (they conflict)
+  if (vidAddSubMux && vidAddSubBurn) {
+    vidAddSubBurn = false;
+    ui.vidBurnToggle?.classList.remove("active");
+  }
+  vidProcessedData = null;
+  if (vidProcessedUrl) { URL.revokeObjectURL(vidProcessedUrl); vidProcessedUrl = null; }
+  vidUpdateActionButton();
+});
+
+// Burn toggle
+ui.vidBurnToggle?.addEventListener("click", () => {
+  vidAddSubBurn = !vidAddSubBurn;
+  ui.vidBurnToggle.classList.toggle("active", vidAddSubBurn);
+  // If burn is on, turn off mux (they conflict)
+  if (vidAddSubBurn && vidAddSubMux) {
+    vidAddSubMux = false;
+    ui.vidMuxToggle?.classList.remove("active");
+  }
+  vidProcessedData = null;
+  if (vidProcessedUrl) { URL.revokeObjectURL(vidProcessedUrl); vidProcessedUrl = null; }
+  vidUpdateActionButton();
 });
 
 // Canvas click → file input (empty state only)
@@ -3118,18 +3226,50 @@ ui.vidDownloadBtn?.addEventListener("click", async () => {
     window.showPopup("<h2>Processing video...</h2><p>This may take a moment.</p>");
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-    const result = await processVideo(vidFile, {
-      trimStart: vidTrimStart,
-      trimEnd: vidTrimEnd,
-      removeAudio: vidRemoveAudio,
-      removeSubtitles: vidRemoveSubtitles,
-    }, (pct) => {
+    const hasStandardEdits = vidTrimStart > 0.01 ||
+      (vidDuration > 0 && vidTrimEnd < vidDuration - 0.01) ||
+      vidRemoveAudio || vidRemoveSubtitles;
+    const hasSubAdd = vidSubFile && (vidAddSubMux || vidAddSubBurn);
+
+    let result: FileData;
+
+    if (hasStandardEdits) {
+      result = await processVideo(vidFile, {
+        trimStart: vidTrimStart,
+        trimEnd: vidTrimEnd,
+        removeAudio: vidRemoveAudio,
+        removeSubtitles: vidRemoveSubtitles,
+      }, (pct) => {
+        const popup = document.getElementById("popup");
+        if (popup) {
+          const p = popup.querySelector("p");
+          if (p) p.textContent = `Processing... ${pct}%`;
+        }
+      });
+    } else {
+      // No standard edits — use original file as-is
+      const buf = await vidFile.arrayBuffer();
+      result = { name: vidFile.name, bytes: new Uint8Array(buf) };
+    }
+
+    // Add subtitles if configured
+    if (hasSubAdd && vidSubFile) {
+      const mode = vidAddSubBurn ? "burn" : "mux";
       const popup = document.getElementById("popup");
       if (popup) {
         const p = popup.querySelector("p");
-        if (p) p.textContent = `Processing... ${pct}%`;
+        if (p) p.textContent = mode === "burn" ? "Burning subtitles..." : "Muxing subtitles...";
       }
-    });
+      // Create a temporary File from the result bytes for addSubtitlesToVideo
+      const tmpFile = new File([result.bytes], result.name, { type: "video/mp4" });
+      result = await addSubtitlesToVideo(tmpFile, vidSubFile, { mode }, (pct) => {
+        const popup2 = document.getElementById("popup");
+        if (popup2) {
+          const p = popup2.querySelector("p");
+          if (p) p.textContent = `${mode === "burn" ? "Burning" : "Muxing"} subtitles... ${pct}%`;
+        }
+      });
+    }
 
     vidProcessedData = result;
     if (vidProcessedUrl) URL.revokeObjectURL(vidProcessedUrl);

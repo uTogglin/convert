@@ -2103,6 +2103,109 @@ body[data-tool="image"] #convert-button { display: none !important; }
   pointer-events: none;
 }
 
+/* ── Volume slider ── */
+.vid-volume-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  color: var(--text-muted);
+}
+.vid-volume-slider {
+  width: 70px;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--input-border);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+.vid-volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+.vid-volume-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  cursor: pointer;
+}
+
+/* ── Collapsible add-subtitles section ── */
+.vid-collapsible {
+  margin-bottom: 6px;
+}
+.vid-collapsible-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 9px 14px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg);
+  color: var(--text-main);
+  cursor: pointer;
+  font-size: 0.84rem;
+  font-weight: 500;
+  font-family: inherit;
+  transition: all 0.18s ease;
+}
+.vid-collapsible-header:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.vid-collapsible-arrow {
+  font-size: 0.75rem;
+  transition: transform 0.2s ease;
+  display: inline-block;
+}
+.vid-collapsible.open .vid-collapsible-arrow {
+  transform: rotate(90deg);
+}
+.vid-collapsible-body {
+  display: none;
+  padding: 8px 0 0;
+}
+.vid-collapsible.open .vid-collapsible-body {
+  display: block;
+}
+
+/* ── Subtitle file name display ── */
+.vid-sub-file-name {
+  display: block;
+  font-size: 0.76rem;
+  color: var(--accent);
+  margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-height: 1em;
+}
+
+/* ── Extract row (dropdown + button side by side) ── */
+.vid-extract-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.vid-extract-row .vid-lang-select {
+  flex: 1;
+  min-width: 0;
+}
+.vid-extract-row .sm-btn {
+  flex-shrink: 0;
+  width: auto;
+  margin-bottom: 0;
+}
+
 /* =========================================
    10. RESPONSIVE
    ========================================= */
