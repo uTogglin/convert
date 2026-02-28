@@ -8,15 +8,31 @@ let detectedDevice: "webgpu" | "wasm" | null = null;
 const MODEL_IDS: Record<string, string> = {
   base: "onnx-community/whisper-base",
   small: "onnx-community/whisper-small",
+  medium: "onnx-community/whisper-medium",
+  "large-v3-turbo": "onnx-community/whisper-large-v3-turbo",
 };
 
-async function getWhisperDevice(): Promise<{ device: "webgpu" | "wasm"; dtype: string }> {
-  if (detectedDevice) return { device: detectedDevice, dtype: detectedDevice === "webgpu" ? "fp32" : "q8" };
+async function getWhisperDevice(): Promise<"webgpu" | "wasm"> {
+  if (detectedDevice) return detectedDevice;
   const hasWebGPU = typeof navigator !== "undefined" && "gpu" in navigator &&
     !!(await navigator.gpu?.requestAdapter().catch(() => null));
   detectedDevice = hasWebGPU ? "webgpu" : "wasm";
   console.log(`[Whisper STT] Using device=${detectedDevice}`);
-  return { device: detectedDevice, dtype: detectedDevice === "webgpu" ? "fp32" : "q8" };
+  return detectedDevice;
+}
+
+function getWhisperDtype(modelKey: string, device: "webgpu" | "wasm"): any {
+  // Large models need quantization to fit in browser memory
+  if (modelKey === "large-v3-turbo") {
+    return device === "webgpu"
+      ? { encoder_model: "fp32", decoder_model_merged: "q4" }
+      : "q8";
+  }
+  if (modelKey === "medium") {
+    return device === "webgpu" ? "fp32" : "q8";
+  }
+  // base / small
+  return device === "webgpu" ? "fp32" : "q8";
 }
 
 /**
@@ -44,7 +60,7 @@ function formatSrtTime(seconds: number): string {
 
 export interface GenerateSubtitleOptions {
   language?: string;
-  model?: "base" | "small";
+  model?: "base" | "small" | "medium" | "large-v3-turbo";
 }
 
 /**
@@ -56,7 +72,7 @@ export async function generateSubtitles(
   onProgress?: (stage: string, pct: number) => void,
   options?: GenerateSubtitleOptions,
 ): Promise<FileData> {
-  const modelKey = options?.model || "small";
+  const modelKey = options?.model || "large-v3-turbo";
   const modelId = MODEL_IDS[modelKey];
   const language = options?.language || undefined;
 
@@ -79,14 +95,15 @@ export async function generateSubtitles(
 
       try {
         const { pipeline } = await import("@huggingface/transformers");
-        const { device, dtype } = await getWhisperDevice();
+        const device = await getWhisperDevice();
+        const dtype = getWhisperDtype(modelKey, device);
         onProgress?.(`Downloading ${modelKey} model (${device})...`, 10);
 
         whisperPipeline = await pipeline(
           "automatic-speech-recognition",
           modelId,
           {
-            dtype: dtype as any,
+            dtype,
             device: device as any,
             progress_callback: (info: any) => {
               if (info.status === "progress" && typeof info.progress === "number") {
