@@ -108,6 +108,19 @@
         <p>Trim, crop, merge, remove audio, and manage subtitles — all processed in your browser.</p>
         <span class="home-card-tag">New</span>
       </button>
+      <button class="home-card" data-tool="speech">
+        <div class="home-card-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+            <line x1="12" y1="19" x2="12" y2="23"></line>
+            <line x1="8" y1="23" x2="16" y2="23"></line>
+          </svg>
+        </div>
+        <h3>Text & Speech</h3>
+        <p>Read text aloud or transcribe speech to text — all processed locally in your browser.</p>
+        <span class="home-card-tag">New</span>
+      </button>
     </div>
   </section>
 
@@ -132,6 +145,10 @@
         <button class="sm-nav-btn" data-panel="video">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
           Video Editor
+        </button>
+        <button class="sm-nav-btn" data-panel="speech">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+          Text & Speech
         </button>
       </nav>
     </aside>
@@ -277,6 +294,23 @@
             </div>
             <label class="sm-check"><input type="checkbox" id="rescale-lock-ratio" checked> Lock aspect ratio</label>
           </div>
+        </div>
+      </div>
+
+      <!-- Text & Speech panel -->
+      <div class="sm-panel" data-panel="speech">
+        <h3 class="sm-panel-title">Text & Speech</h3>
+        <div class="sm-group">
+          <span class="sm-label">Text to Speech</span>
+          <p class="sm-hint">Uses espeak-ng for local speech synthesis. Select voice and speed on the tool page.</p>
+        </div>
+        <div class="sm-group">
+          <span class="sm-label">Speech to Text</span>
+          <p class="sm-hint">Microphone mode uses Web Speech API (requires browser support). File upload uses Whisper AI via Transformers.js — model cached on first use (~41 MB).</p>
+        </div>
+        <div class="sm-group">
+          <span class="sm-label">Processing</span>
+          <p class="sm-hint">Everything runs locally. No files leave your device.</p>
         </div>
       </div>
 
@@ -766,6 +800,196 @@
     <input id="vid-file-input" type="file" multiple accept="video/*" style="display:none">
     <input id="vid-sub-file-input" type="file" accept=".srt,.ass,.vtt,.ssa" style="display:none">
     <input id="vid-merge-file-input" type="file" accept="video/*" multiple style="display:none">
+  </section>
+
+  <!-- Speech tool page -->
+  <section id="speech-page" class="tool-page hidden">
+    <div class="speech-page-header">
+      <h2>Text & Speech</h2>
+      <p>Read text aloud or transcribe speech to text.</p>
+    </div>
+
+    <div id="speech-layout">
+      <div class="speech-tabs">
+        <button class="speech-tab active" data-tab="tts">Text to Speech</button>
+        <button class="speech-tab" data-tab="stt">Speech to Text</button>
+      </div>
+
+      <!-- TTS Panel -->
+      <div id="speech-tts-panel" class="speech-panel active">
+        <textarea id="speech-tts-input" class="speech-textarea" placeholder="Type or paste text here..." rows="6"></textarea>
+
+        <div class="speech-tts-options">
+          <div class="speech-option-group">
+            <label class="speech-option-label">Voice</label>
+            <select id="speech-tts-voice" class="sm-select">
+              <option value="en">English (US)</option>
+              <option value="en-gb">English (UK)</option>
+              <option value="fr">French</option>
+              <option value="de">German</option>
+              <option value="es">Spanish</option>
+              <option value="it">Italian</option>
+              <option value="pt">Portuguese</option>
+              <option value="nl">Dutch</option>
+              <option value="ru">Russian</option>
+              <option value="ja">Japanese</option>
+              <option value="ko">Korean</option>
+              <option value="zh">Chinese</option>
+              <option value="ar">Arabic</option>
+              <option value="hi">Hindi</option>
+              <option value="pl">Polish</option>
+              <option value="sv">Swedish</option>
+            </select>
+          </div>
+          <div class="speech-option-group">
+            <label class="speech-option-label">Speed</label>
+            <div class="speech-speed-row">
+              <input type="range" id="speech-tts-speed" min="0.5" max="2" step="0.1" value="1">
+              <span id="speech-tts-speed-label">1x</span>
+            </div>
+          </div>
+        </div>
+
+        <button id="speech-tts-generate" class="speech-generate-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+          Generate Audio
+        </button>
+
+        <div id="speech-tts-progress" class="speech-progress hidden">
+          <div class="speech-progress-bar"><div class="speech-progress-fill"></div></div>
+          <span class="speech-progress-text">Generating...</span>
+        </div>
+
+        <div id="speech-player" class="speech-player hidden">
+          <div class="speech-player-controls">
+            <button id="speech-skip-back" class="speech-player-btn" title="Back 10s">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+              <span class="speech-skip-label">10</span>
+            </button>
+            <button id="speech-play-btn" class="speech-play-btn" title="Play/Pause">
+              <svg class="speech-icon-play" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+              <svg class="speech-icon-pause hidden" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+            </button>
+            <button id="speech-skip-forward" class="speech-player-btn" title="Forward 10s">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+              <span class="speech-skip-label">10</span>
+            </button>
+          </div>
+          <div class="speech-progress-row">
+            <div id="speech-seek-bar" class="speech-seek-bar">
+              <div id="speech-seek-fill" class="speech-seek-fill"></div>
+              <div id="speech-seek-thumb" class="speech-seek-thumb"></div>
+            </div>
+            <span id="speech-time-display" class="speech-time-display">0:00 / 0:00</span>
+          </div>
+          <button id="speech-download-mp3" class="speech-download-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            Download MP3
+          </button>
+          <audio id="speech-audio" preload="auto"></audio>
+        </div>
+      </div>
+
+      <!-- STT Panel -->
+      <div id="speech-stt-panel" class="speech-panel">
+        <div class="speech-stt-modes">
+          <button class="speech-stt-mode active" data-mode="mic">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+            Microphone
+          </button>
+          <button class="speech-stt-mode" data-mode="file">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+            Upload File
+          </button>
+        </div>
+
+        <!-- Mic mode -->
+        <div id="speech-stt-mic" class="speech-stt-content active">
+          <div class="speech-stt-lang-row">
+            <label class="speech-option-label">Language</label>
+            <select id="speech-stt-lang" class="sm-select">
+              <option value="en-US">English (US)</option>
+              <option value="en-GB">English (UK)</option>
+              <option value="es-ES">Spanish</option>
+              <option value="fr-FR">French</option>
+              <option value="de-DE">German</option>
+              <option value="it-IT">Italian</option>
+              <option value="pt-BR">Portuguese</option>
+              <option value="nl-NL">Dutch</option>
+              <option value="ru-RU">Russian</option>
+              <option value="ja-JP">Japanese</option>
+              <option value="ko-KR">Korean</option>
+              <option value="zh-CN">Chinese</option>
+              <option value="ar-SA">Arabic</option>
+              <option value="hi-IN">Hindi</option>
+              <option value="pl-PL">Polish</option>
+              <option value="sv-SE">Swedish</option>
+            </select>
+          </div>
+          <button id="speech-stt-record" class="speech-record-btn">
+            <span class="speech-record-dot"></span>
+            Start Recording
+          </button>
+        </div>
+
+        <!-- File upload mode -->
+        <div id="speech-stt-file" class="speech-stt-content">
+          <div class="speech-stt-lang-row">
+            <label class="speech-option-label">Language</label>
+            <select id="speech-stt-file-lang" class="sm-select">
+              <option value="">Auto-detect</option>
+              <option value="en">English</option>
+              <option value="es">Spanish</option>
+              <option value="fr">French</option>
+              <option value="de">German</option>
+              <option value="it">Italian</option>
+              <option value="pt">Portuguese</option>
+              <option value="nl">Dutch</option>
+              <option value="ru">Russian</option>
+              <option value="ja">Japanese</option>
+              <option value="ko">Korean</option>
+              <option value="zh">Chinese</option>
+              <option value="ar">Arabic</option>
+              <option value="hi">Hindi</option>
+              <option value="pl">Polish</option>
+              <option value="sv">Swedish</option>
+            </select>
+          </div>
+          <div id="speech-file-drop" class="speech-file-drop">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            <span class="speech-file-drop-text">Drop audio or video file here</span>
+            <span class="speech-file-drop-sub">or click to browse</span>
+          </div>
+          <span id="speech-stt-file-name" class="speech-stt-file-name"></span>
+          <div id="speech-stt-file-model-row" class="speech-stt-lang-row">
+            <label class="speech-option-label">Model</label>
+            <select id="speech-stt-file-model" class="sm-select">
+              <option value="small">Quality (small)</option>
+              <option value="base">Speed (base)</option>
+            </select>
+          </div>
+          <button id="speech-stt-transcribe" class="speech-generate-btn disabled">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+            Transcribe
+          </button>
+          <div id="speech-stt-progress" class="speech-progress hidden">
+            <div class="speech-progress-bar"><div class="speech-progress-fill"></div></div>
+            <span class="speech-progress-text">Processing...</span>
+          </div>
+        </div>
+
+        <!-- STT output (shared by both modes) -->
+        <div id="speech-stt-output" class="speech-stt-output hidden">
+          <textarea id="speech-stt-result" class="speech-textarea" placeholder="Transcribed text will appear here..." rows="6" readonly></textarea>
+          <button id="speech-stt-copy" class="speech-copy-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            Copy
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <input id="speech-file-input" type="file" accept="audio/*,video/*" style="display:none">
   </section>
 
   <div id="format-containers">

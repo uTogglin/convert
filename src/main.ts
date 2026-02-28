@@ -9,6 +9,7 @@ import { applyFileCompression } from "./compress.js";
 import { processVideo, probeVideoInfo, extractSubtitles, addSubtitlesToVideo, mergeVideos } from "./video-editor.js";
 import type { SubtitleStreamInfo } from "./video-editor.js";
 import { generateSubtitles } from "./subtitle-generator.js";
+import { initSpeechTool } from "./speech-tool.js";
 
 // ── In-app console log capture ─────────────────────────────────────────────
 interface AppLogEntry { level: "error" | "warn" | "info"; msg: string; time: string; }
@@ -394,11 +395,12 @@ const ui = {
 
 // ── Home page / tool navigation ──────────────────────────────────────────────
 /** Which tool view is active, or null when on the home page */
-let activeTool: "convert" | "compress" | "image" | "video" | null = null;
+let activeTool: "convert" | "compress" | "image" | "video" | "speech" | null = null;
 
 const compressPage = document.querySelector("#compress-page") as HTMLElement;
 const imagePage = document.querySelector("#image-page") as HTMLElement;
 const videoPage = document.querySelector("#video-page") as HTMLElement;
+const speechPage = document.querySelector("#speech-page") as HTMLElement;
 
 function showHomePage() {
   // Clean up tool state when navigating away
@@ -412,9 +414,10 @@ function showHomePage() {
   compressPage.classList.add("hidden");
   imagePage.classList.add("hidden");
   videoPage.classList.add("hidden");
+  speechPage.classList.add("hidden");
 }
 
-function showToolView(tool: "convert" | "compress" | "image" | "video") {
+function showToolView(tool: "convert" | "compress" | "image" | "video" | "speech") {
   // Clean up tool state when switching away
   if (activeTool === "image" && tool !== "image") imgResetState();
   if (activeTool === "video" && tool !== "video") vidResetState();
@@ -427,6 +430,7 @@ function showToolView(tool: "convert" | "compress" | "image" | "video") {
   compressPage.classList.add("hidden");
   imagePage.classList.add("hidden");
   videoPage.classList.add("hidden");
+  speechPage.classList.add("hidden");
 
   if (tool === "compress") {
     compressPage.classList.remove("hidden");
@@ -440,6 +444,8 @@ function showToolView(tool: "convert" | "compress" | "image" | "video") {
     syncImageSettingsUI();
   } else if (tool === "video") {
     videoPage.classList.remove("hidden");
+  } else if (tool === "speech") {
+    speechPage.classList.remove("hidden");
   }
   updateProcessButton();
 }
@@ -453,13 +459,16 @@ ui.backToHome.addEventListener("click", showHomePage);
 // Home card clicks
 for (const card of document.querySelectorAll<HTMLButtonElement>(".home-card")) {
   card.addEventListener("click", () => {
-    const tool = card.dataset.tool as "convert" | "compress" | "image" | "video";
+    const tool = card.dataset.tool as "convert" | "compress" | "image" | "video" | "speech";
     if (tool) showToolView(tool);
   });
 }
 
 // Clicking logo goes home
 document.querySelector("#logo")?.addEventListener("click", showHomePage);
+
+// Initialize speech tool
+initSpeechTool();
 
 // ── Settings modal ──────────────────────────────────────────────────────────
 const smNavBtns = document.querySelectorAll<HTMLButtonElement>(".sm-nav-btn");
@@ -472,7 +481,7 @@ function openSettings(panel?: string) {
     sidebar.classList.add("hidden");
     ui.settingsModal.classList.add("sm-no-sidebar");
     // Build a simple tab bar for the two panels
-    const toolPanel = activeTool === "compress" ? "compress" : activeTool === "image" ? "image" : activeTool === "video" ? "video" : "convert";
+    const toolPanel = activeTool === "compress" ? "compress" : activeTool === "image" ? "image" : activeTool === "video" ? "video" : activeTool === "speech" ? "speech" : "convert";
     switchSettingsPanel(panel || toolPanel);
     // Show only relevant nav items
     smNavBtns.forEach(b => {
@@ -888,8 +897,8 @@ function presentQueueGroup(index: number) {
 // the window as a drag-and-drop event, and to the clipboard paste event.
 ui.fileInput.addEventListener("change", fileSelectHandler);
 window.addEventListener("drop", (e) => {
-  // On image/video page, let those tools handle drops
-  if (activeTool === "image" || activeTool === "video") return;
+  // On image/video/speech page, let those tools handle drops
+  if (activeTool === "image" || activeTool === "video" || activeTool === "speech") return;
   fileSelectHandler(e);
 });
 window.addEventListener("dragover", e => e.preventDefault());
@@ -1239,6 +1248,7 @@ if (ui.settingsToggle) {
       const panel = activeTool === "compress" ? "compress"
                   : activeTool === "image" ? "image"
                   : activeTool === "video" ? "video"
+                  : activeTool === "speech" ? "speech"
                   : undefined;
       openSettings(panel);
     } else {
