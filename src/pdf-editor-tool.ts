@@ -78,7 +78,8 @@ export function initPdfEditorTool() {
       pdfFileName = file.name;
       const pdfjsLib = await import("pdfjs-dist");
       pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-      pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes, useWorkerFetch: false, isEvalSupported: false, useSystemFonts: true }).promise;
+      // Pass a copy to pdfjs — it detaches the ArrayBuffer, and we need the original for pdf-lib export
+      pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(pdfBytes), useWorkerFetch: false, isEvalSupported: false, useSystemFonts: true }).promise;
       totalPages = pdfDoc.numPages;
       currentPage = 1;
       zoom = 1;
@@ -407,9 +408,7 @@ export function initPdfEditorTool() {
       saveCurrentAnnotations();
 
       const { PDFDocument } = await import("pdf-lib");
-      // Copy bytes — the original Uint8Array buffer may have been transferred/detached
-      const pdfCopy = new Uint8Array(pdfBytes);
-      const outPdf = await PDFDocument.load(pdfCopy.buffer);
+      const outPdf = await PDFDocument.load(pdfBytes);
 
       for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
         const annotJson = pageAnnotations.get(pageNum);
