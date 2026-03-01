@@ -1482,6 +1482,7 @@
           <div id="ocr-preview" class="ocr-preview hidden">
             <img id="ocr-preview-img" alt="Uploaded file preview">
           </div>
+          <div id="ocr-pdf-preview" class="ocr-pdf-preview hidden"></div>
         </div>
 
         <!-- Right pane: output -->
@@ -1505,40 +1506,57 @@
           </div>
           <textarea id="ocr-result" class="speech-textarea ocr-result-textarea" placeholder="Extracted text will appear here..." readonly></textarea>
 
-          <!-- Read Aloud: TTS progress + player -->
+          <!-- Read Aloud: TTS progress (inline) -->
           <div id="ocr-tts-progress" class="speech-progress hidden">
             <div class="speech-progress-bar"><div class="speech-progress-fill"></div></div>
             <span class="speech-progress-text">Loading TTS model...</span>
             <p class="speech-freeze-warning hidden">The page may become unresponsive while generating — this is normal.</p>
           </div>
-
-          <div id="ocr-tts-player" class="speech-player hidden">
-            <div id="ocr-word-display" class="speech-word-display"></div>
-            <div class="speech-player-seek-row">
-              <span id="ocr-time-current" class="speech-time-label">0:00</span>
-              <div id="ocr-seek-bar" class="speech-seek-bar">
-                <div id="ocr-seek-fill" class="speech-seek-fill"></div>
-                <div id="ocr-seek-thumb" class="speech-seek-thumb"></div>
-              </div>
-              <span id="ocr-time-duration" class="speech-time-label">0:00</span>
-            </div>
-            <div class="speech-player-toolbar">
-              <div class="speech-player-controls">
-                <button id="ocr-skip-back" class="speech-player-btn" title="Back 10s">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
-                  <span class="speech-skip-label">10</span>
-                </button>
-                <button id="ocr-play-btn" class="speech-play-btn" title="Play/Pause"></button>
-                <button id="ocr-skip-forward" class="speech-player-btn" title="Forward 10s">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
-                  <span class="speech-skip-label">10</span>
-                </button>
-              </div>
-            </div>
-            <audio id="ocr-tts-audio" preload="auto"></audio>
-          </div>
         </div>
       </div>
+    </div>
+
+    <!-- Read Aloud fullscreen overlay -->
+    <div id="ocr-tts-overlay" class="ocr-tts-overlay hidden">
+      <!-- Main scrollable text body -->
+      <div class="ocr-tts-body">
+        <div id="ocr-word-display" class="speech-word-display ocr-tts-word-display"></div>
+      </div>
+
+      <!-- Bottom bar: current sentence + controls -->
+      <div class="ocr-tts-bottom">
+        <div id="ocr-tts-sentence" class="ocr-tts-sentence"></div>
+        <div class="ocr-tts-controls">
+          <button id="ocr-tts-close" class="ocr-tts-close-btn" title="Try Another">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+            Try Another
+          </button>
+          <div class="ocr-tts-transport">
+            <button id="ocr-skip-back" class="speech-player-btn" title="Back 10s">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+              <span class="speech-skip-label">10</span>
+            </button>
+            <button id="ocr-play-btn" class="speech-play-btn" title="Play/Pause"></button>
+            <button id="ocr-skip-forward" class="speech-player-btn" title="Forward 10s">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+              <span class="speech-skip-label">10</span>
+            </button>
+          </div>
+          <button id="ocr-download-audio-btn" class="ocr-download-audio-btn" title="Download Audio">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            Download Audio
+          </button>
+        </div>
+        <div class="speech-player-seek-row ocr-tts-seek">
+          <span id="ocr-time-current" class="speech-time-label">0:00</span>
+          <div id="ocr-seek-bar" class="speech-seek-bar">
+            <div id="ocr-seek-fill" class="speech-seek-fill"></div>
+            <div id="ocr-seek-thumb" class="speech-seek-thumb"></div>
+          </div>
+          <span id="ocr-time-duration" class="speech-time-label">0:00</span>
+        </div>
+      </div>
+      <audio id="ocr-tts-audio" preload="auto"></audio>
     </div>
 
     <input id="ocr-file-input" type="file" accept="image/*,.pdf" style="display:none">

@@ -73,6 +73,7 @@ export function initOcrTool() {
   const downloadBtn = document.getElementById("ocr-download-btn") as HTMLButtonElement;
   const preview = document.getElementById("ocr-preview") as HTMLDivElement;
   const previewImg = document.getElementById("ocr-preview-img") as HTMLImageElement;
+  const pdfPreview = document.getElementById("ocr-pdf-preview") as HTMLDivElement;
   const emptyState = document.getElementById("ocr-empty-state") as HTMLDivElement;
 
   let selectedFile: File | null = null;
@@ -83,19 +84,43 @@ export function initOcrTool() {
     extractBtn.classList.toggle("disabled", !selectedFile || processing);
   }
 
-  function showPreview(file: File) {
+  async function showPreview(file: File) {
     const ext = file.name.split(".").pop()?.toLowerCase();
+    // Reset all previews
+    preview.classList.add("hidden");
+    pdfPreview.classList.add("hidden");
+    if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
+
     if (ext === "pdf") {
-      preview.classList.add("hidden");
-      emptyState.classList.remove("hidden");
-      if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
-      return;
+      emptyState.classList.add("hidden");
+      pdfPreview.innerHTML = "";
+      pdfPreview.classList.remove("hidden");
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const pdfjsLib = await import("pdfjs-dist");
+        pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+        const pdf = await pdfjsLib.getDocument({ data: bytes, useWorkerFetch: false, isEvalSupported: false, useSystemFonts: true }).promise;
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const vp = page.getViewport({ scale: 1.5 });
+          const canvas = document.createElement("canvas");
+          canvas.width = vp.width;
+          canvas.height = vp.height;
+          const ctx = canvas.getContext("2d")!;
+          await page.render({ canvasContext: ctx, viewport: vp }).promise;
+          pdfPreview.appendChild(canvas);
+        }
+      } catch (e) {
+        console.warn("[OCR] PDF preview failed:", e);
+        pdfPreview.classList.add("hidden");
+        emptyState.classList.remove("hidden");
+      }
+    } else {
+      previewUrl = URL.createObjectURL(file);
+      previewImg.src = previewUrl;
+      preview.classList.remove("hidden");
+      emptyState.classList.add("hidden");
     }
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    previewUrl = URL.createObjectURL(file);
-    previewImg.src = previewUrl;
-    preview.classList.remove("hidden");
-    emptyState.classList.add("hidden");
   }
 
   function setFile(file: File) {
@@ -206,8 +231,11 @@ export function initOcrTool() {
   const ttsProgressFill = ttsProgress.querySelector(".speech-progress-fill") as HTMLDivElement;
   const ttsProgressText = ttsProgress.querySelector(".speech-progress-text") as HTMLSpanElement;
   const ttsFreezeWarn = ttsProgress.querySelector(".speech-freeze-warning") as HTMLParagraphElement;
-  const ttsPlayer = document.getElementById("ocr-tts-player") as HTMLDivElement;
+  const ttsOverlay = document.getElementById("ocr-tts-overlay") as HTMLDivElement;
+  const ttsCloseBtn = document.getElementById("ocr-tts-close") as HTMLButtonElement;
+  const downloadAudioBtn = document.getElementById("ocr-download-audio-btn") as HTMLButtonElement;
   const wordDisplay = document.getElementById("ocr-word-display") as HTMLDivElement;
+  const ttsSentence = document.getElementById("ocr-tts-sentence") as HTMLDivElement;
   const ttsAudio = document.getElementById("ocr-tts-audio") as HTMLAudioElement;
   const playBtn = document.getElementById("ocr-play-btn") as HTMLButtonElement;
   const skipBack = document.getElementById("ocr-skip-back") as HTMLButtonElement;
@@ -223,8 +251,11 @@ export function initOcrTool() {
   playBtn.innerHTML = PLAY_SVG;
 
   interface WordTiming { word: string; start: number; end: number; el: HTMLSpanElement; }
+  interface SentenceTiming { text: string; start: number; end: number; }
   let wordTimings: WordTiming[] = [];
+  let sentenceTimings: SentenceTiming[] = [];
   let activeWordIdx = -1;
+  let activeSentenceIdx = -1;
   let ttsAudioUrl: string | null = null;
   let ttsGenerating = false;
 
@@ -288,6 +319,33 @@ export function initOcrTool() {
     return -1;
   }
 
+  function findSentenceAtTime(t: number): number {
+    for (let i = 0; i < sentenceTimings.length; i++) {
+      if (t >= sentenceTimings[i].start && t < sentenceTimings[i].end) return i;
+    }
+    if (sentenceTimings.length && t >= sentenceTimings[sentenceTimings.length - 1].start) return sentenceTimings.length - 1;
+    return -1;
+  }
+
+  function updateSentenceDisplay(idx: number) {
+    if (idx === activeSentenceIdx) return;
+    activeSentenceIdx = idx;
+    if (idx < 0 || idx >= sentenceTimings.length) { ttsSentence.innerHTML = ""; return; }
+    const st = sentenceTimings[idx];
+    // Find the active word within this sentence to highlight it
+    const currentWord = activeWordIdx >= 0 && activeWordIdx < wordTimings.length ? wordTimings[activeWordIdx].word : "";
+    const words = st.text.split(/(\s+)/);
+    let highlighted = false;
+    const html = words.map(w => {
+      if (!highlighted && w.trim() && w.trim() === currentWord) {
+        highlighted = true;
+        return `<span class="ocr-sentence-hl">${w}</span>`;
+      }
+      return w;
+    }).join("");
+    ttsSentence.innerHTML = html;
+  }
+
   function updateHighlight() {
     const newIdx = findWordAtTime(ttsAudio.currentTime);
     if (newIdx !== activeWordIdx) {
@@ -300,6 +358,24 @@ export function initOcrTool() {
         }
       }
       activeWordIdx = newIdx;
+    }
+    // Update sentence display with current word highlighted
+    const sIdx = findSentenceAtTime(ttsAudio.currentTime);
+    if (sIdx !== activeSentenceIdx && sIdx >= 0) {
+      activeSentenceIdx = sIdx;
+      ttsSentence.textContent = sentenceTimings[sIdx].text;
+    }
+    // Highlight current word in sentence
+    if (sIdx >= 0 && newIdx >= 0 && newIdx < wordTimings.length) {
+      const st = sentenceTimings[sIdx];
+      const curWord = wordTimings[newIdx].word;
+      // Find word position in sentence for highlight
+      const escaped = curWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(`(\\b)(${escaped})(\\b)`);
+      const parts = st.text.split(re);
+      if (parts.length > 1) {
+        ttsSentence.innerHTML = st.text.replace(re, `$1<span class="ocr-sentence-hl">$2</span>$3`);
+      }
     }
   }
 
@@ -314,6 +390,7 @@ export function initOcrTool() {
     cancelAnimationFrame(hlRaf);
     if (activeWordIdx >= 0 && activeWordIdx < wordTimings.length) wordTimings[activeWordIdx].el.classList.remove("active");
     activeWordIdx = -1;
+    activeSentenceIdx = -1;
   });
   skipBack.addEventListener("click", () => { ttsAudio.currentTime = Math.max(0, ttsAudio.currentTime - 10); });
   skipForward.addEventListener("click", () => { ttsAudio.currentTime = Math.min(ttsAudio.duration || 0, ttsAudio.currentTime + 10); });
@@ -354,7 +431,6 @@ export function initOcrTool() {
     ttsProgressFill.style.width = "0%";
     ttsProgressText.textContent = "Loading Kokoro TTS model...";
     ttsFreezeWarn.classList.add("hidden");
-    ttsPlayer.classList.add("hidden");
 
     try {
       const tts = await getKokoro((pct, msg) => {
@@ -410,6 +486,17 @@ export function initOcrTool() {
 
       wordTimings = buildTimings(chunkMeta, sampleRate, wordSpans);
       activeWordIdx = -1;
+      activeSentenceIdx = -1;
+
+      // Build sentence timings from chunks
+      sentenceTimings = [];
+      let sOff = 0;
+      for (const ch of chunkMeta) {
+        const tStart = sOff / sampleRate;
+        const tEnd = (sOff + ch.samples) / sampleRate;
+        sentenceTimings.push({ text: ch.text, start: tStart, end: tEnd });
+        sOff += ch.samples;
+      }
 
       const wavBlob = encodeWav(full, sampleRate);
       if (ttsAudioUrl) URL.revokeObjectURL(ttsAudioUrl);
@@ -419,8 +506,8 @@ export function initOcrTool() {
 
       ttsProgressFill.style.width = "100%";
       ttsProgressText.textContent = "Done!";
-      ttsPlayer.classList.remove("hidden");
-      setTimeout(() => { ttsProgress.classList.add("hidden"); }, 600);
+      setTimeout(() => { ttsProgress.classList.add("hidden"); }, 400);
+      ttsOverlay.classList.remove("hidden");
 
     } catch (err: any) {
       console.error("[OCR TTS] Error:", err);
@@ -430,6 +517,28 @@ export function initOcrTool() {
       ttsGenerating = false;
       readAloudBtn.classList.remove("disabled");
     }
+  });
+
+  // Close overlay (Try Another)
+  ttsCloseBtn.addEventListener("click", () => {
+    ttsAudio.pause();
+    ttsAudio.currentTime = 0;
+    cancelAnimationFrame(hlRaf);
+    playBtn.innerHTML = PLAY_SVG;
+    if (activeWordIdx >= 0 && activeWordIdx < wordTimings.length) wordTimings[activeWordIdx].el.classList.remove("active");
+    activeWordIdx = -1;
+    activeSentenceIdx = -1;
+    ttsSentence.textContent = "";
+    ttsOverlay.classList.add("hidden");
+  });
+
+  // Download audio
+  downloadAudioBtn.addEventListener("click", () => {
+    if (!ttsAudioUrl) return;
+    const a = document.createElement("a");
+    a.href = ttsAudioUrl;
+    a.download = "ocr-read-aloud.wav";
+    a.click();
   });
 
   updateExtractBtn();
