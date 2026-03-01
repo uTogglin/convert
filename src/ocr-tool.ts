@@ -327,23 +327,36 @@ export function initOcrTool() {
     return -1;
   }
 
-  function updateSentenceDisplay(idx: number) {
-    if (idx === activeSentenceIdx) return;
-    activeSentenceIdx = idx;
-    if (idx < 0 || idx >= sentenceTimings.length) { ttsSentence.innerHTML = ""; return; }
-    const st = sentenceTimings[idx];
-    // Find the active word within this sentence to highlight it
-    const currentWord = activeWordIdx >= 0 && activeWordIdx < wordTimings.length ? wordTimings[activeWordIdx].word : "";
-    const words = st.text.split(/(\s+)/);
-    let highlighted = false;
-    const html = words.map(w => {
-      if (!highlighted && w.trim() && w.trim() === currentWord) {
-        highlighted = true;
-        return `<span class="ocr-sentence-hl">${w}</span>`;
+  // Build sentence spans once when sentence changes, so we can highlight words by index
+  let sentenceWordSpans: HTMLSpanElement[] = [];
+  let sentenceActiveIdx = -1;
+
+  function buildSentenceSpans(text: string) {
+    ttsSentence.innerHTML = "";
+    sentenceWordSpans = [];
+    sentenceActiveIdx = -1;
+    const tokens = text.split(/(\s+)/);
+    for (const tok of tokens) {
+      if (/^\s+$/.test(tok)) {
+        ttsSentence.appendChild(document.createTextNode(tok));
+      } else {
+        const sp = document.createElement("span");
+        sp.textContent = tok;
+        ttsSentence.appendChild(sp);
+        sentenceWordSpans.push(sp);
       }
-      return w;
-    }).join("");
-    ttsSentence.innerHTML = html;
+    }
+  }
+
+  // Map a global word index to the local index within the current sentence
+  function globalToSentenceWordIdx(globalIdx: number, sIdx: number): number {
+    if (sIdx < 0 || globalIdx < 0) return -1;
+    // Count how many words are in sentences before sIdx
+    let count = 0;
+    for (let i = 0; i < sIdx; i++) {
+      count += sentenceTimings[i].text.trim().split(/\s+/).filter(Boolean).length;
+    }
+    return globalIdx - count;
   }
 
   function updateHighlight() {
@@ -359,23 +372,27 @@ export function initOcrTool() {
       }
       activeWordIdx = newIdx;
     }
-    // Update sentence display with current word highlighted
+    // Update sentence teleprompter
     const sIdx = findSentenceAtTime(ttsAudio.currentTime);
-    if (sIdx !== activeSentenceIdx && sIdx >= 0) {
+    if (sIdx !== activeSentenceIdx) {
       activeSentenceIdx = sIdx;
-      ttsSentence.textContent = sentenceTimings[sIdx].text;
+      if (sIdx >= 0) {
+        buildSentenceSpans(sentenceTimings[sIdx].text);
+      } else {
+        ttsSentence.textContent = "";
+        sentenceWordSpans = [];
+      }
     }
     // Highlight current word in sentence
-    if (sIdx >= 0 && newIdx >= 0 && newIdx < wordTimings.length) {
-      const st = sentenceTimings[sIdx];
-      const curWord = wordTimings[newIdx].word;
-      // Find word position in sentence for highlight
-      const escaped = curWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const re = new RegExp(`(\\b)(${escaped})(\\b)`);
-      const parts = st.text.split(re);
-      if (parts.length > 1) {
-        ttsSentence.innerHTML = st.text.replace(re, `$1<span class="ocr-sentence-hl">$2</span>$3`);
+    const localIdx = globalToSentenceWordIdx(newIdx, sIdx);
+    if (localIdx !== sentenceActiveIdx) {
+      if (sentenceActiveIdx >= 0 && sentenceActiveIdx < sentenceWordSpans.length) {
+        sentenceWordSpans[sentenceActiveIdx].classList.remove("ocr-sentence-hl");
       }
+      if (localIdx >= 0 && localIdx < sentenceWordSpans.length) {
+        sentenceWordSpans[localIdx].classList.add("ocr-sentence-hl");
+      }
+      sentenceActiveIdx = localIdx;
     }
   }
 
@@ -528,6 +545,8 @@ export function initOcrTool() {
     if (activeWordIdx >= 0 && activeWordIdx < wordTimings.length) wordTimings[activeWordIdx].el.classList.remove("active");
     activeWordIdx = -1;
     activeSentenceIdx = -1;
+    sentenceActiveIdx = -1;
+    sentenceWordSpans = [];
     ttsSentence.textContent = "";
     ttsOverlay.classList.add("hidden");
   });

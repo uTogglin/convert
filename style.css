@@ -3656,15 +3656,12 @@ body[data-tool="image"] #convert-button { display: none !important; }
 .ocr-tts-body {
   flex: 1;
   overflow-y: auto;
-  padding: 40px 32px;
-  display: flex;
-  justify-content: center;
+  padding: 32px 40px;
 }
 .ocr-tts-word-display {
-  max-width: 720px;
   width: 100%;
-  font-size: 1.05rem;
-  line-height: 1.9;
+  font-size: 1.08rem;
+  line-height: 2;
 }
 
 /* Bottom bar */
@@ -3688,10 +3685,10 @@ body[data-tool="image"] #convert-button { display: none !important; }
   align-items: center;
   justify-content: center;
 }
-.ocr-tts-sentence .ocr-sentence-hl {
+.ocr-sentence-hl {
   background: var(--accent-dim);
   border-radius: 4px;
-  padding: 1px 4px;
+  padding: 2px 4px;
 }
 
 /* Controls row: Try Another | transport | Download Audio */
