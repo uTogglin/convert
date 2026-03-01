@@ -97,9 +97,11 @@ export function initPdfEditorTool() {
     }
   }
 
+  let fabricModule: any = null;
+
   // ── Fabric.js initialization ───────────────────────────────────────────
   async function initFabric() {
-    const fabricModule = await import("fabric");
+    fabricModule = await import("fabric");
     const FabricCanvas = fabricModule.Canvas || (fabricModule as any).default?.Canvas;
 
     if (fabricCanvas) {
@@ -116,13 +118,13 @@ export function initPdfEditorTool() {
     brushLabel.textContent = `${defaults.brush}px`;
     fontInput.value = String(defaults.font);
 
-    // Enable drawing mode briefly to initialize the brush, then disable
-    fabricCanvas.isDrawingMode = true;
-    if (fabricCanvas.freeDrawingBrush) {
+    // Explicitly create a PencilBrush for drawing/signing
+    const PencilBrush = fabricModule.PencilBrush || (fabricModule as any).default?.PencilBrush;
+    if (PencilBrush) {
+      fabricCanvas.freeDrawingBrush = new PencilBrush(fabricCanvas);
       fabricCanvas.freeDrawingBrush.width = defaults.brush;
       fabricCanvas.freeDrawingBrush.color = colorInput.value;
     }
-    fabricCanvas.isDrawingMode = false;
 
     // Track modifications for undo
     fabricCanvas.on("object:added", () => { if (!skipHistory) pushHistory(); });
@@ -337,10 +339,19 @@ export function initPdfEditorTool() {
       fontGroup.style.display = tool === "text" ? "flex" : "none";
 
       if (fabricCanvas) {
-        fabricCanvas.isDrawingMode = tool === "draw";
-        if (tool === "draw" && fabricCanvas.freeDrawingBrush) {
-          fabricCanvas.freeDrawingBrush.width = parseInt(brushInput.value) || 3;
-          fabricCanvas.freeDrawingBrush.color = colorInput.value;
+        if (tool === "draw") {
+          // Ensure brush exists before enabling drawing mode
+          if (!fabricCanvas.freeDrawingBrush && fabricModule) {
+            const PencilBrush = fabricModule.PencilBrush || (fabricModule as any).default?.PencilBrush;
+            if (PencilBrush) fabricCanvas.freeDrawingBrush = new PencilBrush(fabricCanvas);
+          }
+          if (fabricCanvas.freeDrawingBrush) {
+            fabricCanvas.freeDrawingBrush.width = parseInt(brushInput.value) || 3;
+            fabricCanvas.freeDrawingBrush.color = colorInput.value;
+          }
+          fabricCanvas.isDrawingMode = true;
+        } else {
+          fabricCanvas.isDrawingMode = false;
         }
         if (tool === "select") {
           fabricCanvas.selection = true;
