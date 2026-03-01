@@ -43,7 +43,8 @@ async function getOcrWorker(lang: string, onProgress?: (pct: number, msg: string
 // ── PDF page-to-image helper ────────────────────────────────────────────────
 async function pdfToImages(bytes: Uint8Array): Promise<HTMLCanvasElement[]> {
   const pdfjsLib = await import("pdfjs-dist");
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+  const pdfjsWorker = await import("pdfjs-dist/build/pdf.worker.mjs?url").catch(() => null);
+  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker?.default || "";
   const pdf = await pdfjsLib.getDocument({ data: bytes, useWorkerFetch: false, isEvalSupported: false, useSystemFonts: true }).promise;
   const canvases: HTMLCanvasElement[] = [];
   for (let i = 1; i <= pdf.numPages; i++) {

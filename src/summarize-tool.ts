@@ -80,7 +80,8 @@ function extractTextFromHtml(html: string): string {
 
 async function extractTextFromPdf(bytes: Uint8Array): Promise<string> {
   const pdfjsLib = await import("pdfjs-dist");
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+  const pdfjsWorker = await import("pdfjs-dist/build/pdf.worker.mjs?url").catch(() => null);
+  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker?.default || "";
   const pdf = await pdfjsLib.getDocument({ data: bytes, useWorkerFetch: false, isEvalSupported: false, useSystemFonts: true }).promise;
   const parts: string[] = [];
   for (let i = 1; i <= pdf.numPages; i++) {

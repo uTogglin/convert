@@ -77,7 +77,9 @@ export function initPdfEditorTool() {
       pdfBytes = new Uint8Array(await file.arrayBuffer());
       pdfFileName = file.name;
       const pdfjsLib = await import("pdfjs-dist");
-      pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+      // Use inline worker via Vite's ?url import, or disable worker
+      const pdfjsWorker = await import("pdfjs-dist/build/pdf.worker.mjs?url").catch(() => null);
+      pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker?.default || "";
       pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes, useWorkerFetch: false, isEvalSupported: false, useSystemFonts: true }).promise;
       totalPages = pdfDoc.numPages;
       currentPage = 1;
