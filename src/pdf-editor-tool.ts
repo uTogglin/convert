@@ -2,7 +2,7 @@
 // Renders PDF pages with pdfjs-dist, lets users annotate with Fabric.js,
 // and exports the annotated PDF with pdf-lib.
 
-type PdeTool = "select" | "text" | "draw" | "highlight" | "image";
+type PdeTool = "select" | "text" | "draw" | "highlight" | "redact" | "image";
 
 export function initPdfEditorTool() {
   /* ── DOM refs ── */
@@ -32,6 +32,9 @@ export function initPdfEditorTool() {
   const colorHex = document.getElementById("pde-color-hex") as HTMLSpanElement;
   const textProps = document.getElementById("pde-text-props") as HTMLDivElement;
   const drawProps = document.getElementById("pde-draw-props") as HTMLDivElement;
+  const redactProps = document.getElementById("pde-redact-props") as HTMLDivElement;
+  const redactColorInput = document.getElementById("pde-redact-color") as HTMLInputElement;
+  const redactColorHex = document.getElementById("pde-redact-color-hex") as HTMLSpanElement;
   const brushInput = document.getElementById("pde-brush-size") as HTMLInputElement;
   const brushLabel = document.getElementById("pde-brush-label") as HTMLSpanElement;
   const fontInput = document.getElementById("pde-font-size") as HTMLInputElement;
@@ -88,6 +91,10 @@ export function initPdfEditorTool() {
   }
   const pageTextEdits: Map<number, TextEdit[]> = new Map();
   let textEditCounter = 0;
+
+  // Redact tool state
+  let redactDragStart: { x: number; y: number } | null = null;
+  let redactDragRect: any = null;
 
   function getDefaults() {
     const brush = (() => { try { return parseInt(localStorage.getItem("convert-pde-brush") ?? "3"); } catch { return 3; } })();
@@ -221,6 +228,7 @@ export function initPdfEditorTool() {
     // Show/hide property sections
     textProps.style.display = (activePdeTool === "text" || isTextObj) ? "" : "none";
     drawProps.style.display = activePdeTool === "draw" ? "" : "none";
+    redactProps.style.display = activePdeTool === "redact" ? "" : "none";
     // Populate text properties from selected object
     if (isTextObj) {
       fontFamilySelect.value = obj.fontFamily || "Arial";
@@ -456,7 +464,55 @@ export function initPdfEditorTool() {
         });
         fabricCanvas.add(rect);
         fabricCanvas.setActiveObject(rect);
+      } else if (activePdeTool === "redact" && !opt.target) {
+        // Start drag to draw redaction rect
+        const pointer = fabricCanvas.getViewportPoint(opt.e);
+        redactDragStart = { x: pointer.x, y: pointer.y };
+        const fabricMod = fabricModule as any;
+        const Rect = fabricMod.Rect || fabricMod.default?.Rect;
+        redactDragRect = new Rect({
+          left: pointer.x,
+          top: pointer.y,
+          width: 0,
+          height: 0,
+          fill: redactColorInput.value,
+          stroke: "transparent",
+          strokeWidth: 0,
+          selectable: false,
+          evented: false,
+          opacity: 1,
+          _pdeRedact: true,
+        });
+        fabricCanvas.add(redactDragRect);
       }
+    });
+
+    // Redact tool: drag to resize
+    fabricCanvas.on("mouse:move", (opt: any) => {
+      if (activePdeTool !== "redact" || !redactDragStart || !redactDragRect) return;
+      const pointer = fabricCanvas.getViewportPoint(opt.e);
+      const left = Math.min(redactDragStart.x, pointer.x);
+      const top = Math.min(redactDragStart.y, pointer.y);
+      const width = Math.abs(pointer.x - redactDragStart.x);
+      const height = Math.abs(pointer.y - redactDragStart.y);
+      redactDragRect.set({ left, top, width, height });
+      fabricCanvas.renderAll();
+    });
+
+    // Redact tool: finish drag
+    fabricCanvas.on("mouse:up", () => {
+      if (activePdeTool !== "redact" || !redactDragStart || !redactDragRect) return;
+      const w = redactDragRect.width;
+      const h = redactDragRect.height;
+      if (w < 3 && h < 3) {
+        fabricCanvas.remove(redactDragRect);
+      } else {
+        redactDragRect.set({ selectable: true, evented: true });
+        fabricCanvas.setActiveObject(redactDragRect);
+      }
+      redactDragStart = null;
+      redactDragRect = null;
+      fabricCanvas.renderAll();
     });
 
 
@@ -802,7 +858,7 @@ export function initPdfEditorTool() {
 
   function saveCurrentAnnotations() {
     if (!fabricCanvas) return;
-    const json = JSON.stringify(fabricCanvas.toJSON(["_pdeTextEditId", "_pdeCoverRect"]));
+    const json = JSON.stringify(fabricCanvas.toJSON(["_pdeTextEditId", "_pdeCoverRect", "_pdeRedact"]));
     pageAnnotations.set(currentPage, json);
   }
 
@@ -824,7 +880,7 @@ export function initPdfEditorTool() {
 
   /* ── Undo/Redo ── */
   function pushHistory() {
-    const state = JSON.stringify(fabricCanvas.toJSON(["_pdeTextEditId", "_pdeCoverRect"]));
+    const state = JSON.stringify(fabricCanvas.toJSON(["_pdeTextEditId", "_pdeCoverRect", "_pdeRedact"]));
     undoStack.push(state);
     redoStack = [];
     if (undoStack.length > 50) undoStack.shift();
@@ -923,7 +979,12 @@ export function initPdfEditorTool() {
         if (tool === "select") {
           fabricCanvas.selection = true;
         }
-        fabricCanvas.defaultCursor = "default";
+        if (tool === "redact") {
+          fabricCanvas.defaultCursor = "crosshair";
+          fabricCanvas.selection = false;
+        } else {
+          fabricCanvas.defaultCursor = "default";
+        }
       }
 
       if (tool === "image") {
@@ -1091,6 +1152,16 @@ export function initPdfEditorTool() {
   });
 
 
+  // Redact color
+  redactColorInput.addEventListener("input", () => {
+    redactColorHex.textContent = redactColorInput.value;
+    const obj = fabricCanvas?.getActiveObject();
+    if (obj && obj._pdeRedact) {
+      obj.set("fill", redactColorInput.value);
+      fabricCanvas.renderAll();
+    }
+  });
+
   // Opacity
   opacityInput.addEventListener("input", () => {
     opacityLabel.textContent = `${opacityInput.value}%`;
@@ -1204,31 +1275,86 @@ export function initPdfEditorTool() {
     return "Helvetica";
   }
 
-  /* ── Apply text edits to PDF content streams ── */
-  async function applyTextEdits(outPdf: any, pdfLibModule: any) {
+  /* ── Collect redaction regions and find text items underneath ── */
+  function collectRedactionEdits(pageNum: number): { pdfX: number; pdfY: number; tolerance: number; delete: boolean }[] {
+    const annotJson = pageAnnotations.get(pageNum);
+    if (!annotJson) return [];
+    const parsed = JSON.parse(annotJson);
+    if (!parsed.objects) return [];
+
+    const textContent = pageTextContent.get(pageNum);
+    if (!textContent || !textContent._vpTransform) return [];
+
+    const scale = zoom * 1.5;
+    const vt = textContent._vpTransform;
+    const edits: { pdfX: number; pdfY: number; tolerance: number; delete: boolean }[] = [];
+
+    // Get redaction rectangles from the fabric JSON
+    const redactRects = parsed.objects.filter((o: any) => o._pdeRedact);
+    if (redactRects.length === 0) return [];
+
+    // For each text item, check if it falls within any redaction rectangle
+    for (const item of textContent.items) {
+      if (!item.str || !item.transform) continue;
+      const pdfX = item.transform[4];
+      const pdfY = item.transform[5];
+
+      // Convert PDF coords to canvas coords
+      const cx = (vt[0] * pdfX + vt[2] * pdfY + vt[4]) * scale;
+      const cy = (vt[1] * pdfX + vt[3] * pdfY + vt[5]) * scale;
+
+      for (const rect of redactRects) {
+        const rl = rect.left ?? 0;
+        const rt = rect.top ?? 0;
+        const rw = (rect.width ?? 0) * (rect.scaleX ?? 1);
+        const rh = (rect.height ?? 0) * (rect.scaleY ?? 1);
+
+        if (cx >= rl - 2 && cx <= rl + rw + 2 && cy >= rt - 2 && cy <= rt + rh + 2) {
+          edits.push({ pdfX, pdfY, tolerance: 2.0, delete: true });
+          break; // text item matched one rect, no need to check others
+        }
+      }
+    }
+
+    return edits;
+  }
+
+  /* ── Apply text edits and redactions to PDF content streams ── */
+  async function applyTextEdits(outPdf: any, pdfLibModule: any, hasRedactions: boolean) {
     const { PDFName, PDFArray, PDFRawStream } = pdfLibModule;
     const { removeTextFromStream } = await import("./pdf-content-stream");
     const pako = await import("pako");
 
     const pages = outPdf.getPages();
 
-    for (const [pageNum, edits] of pageTextEdits) {
-      if (!edits || edits.length === 0) continue;
+    // Collect all pages that need content stream edits (text edits + redactions)
+    const pagesToProcess = new Set<number>();
+    for (const [pageNum] of pageTextEdits) pagesToProcess.add(pageNum);
+    if (hasRedactions) {
+      for (let p = 1; p <= totalPages; p++) pagesToProcess.add(p);
+    }
+
+    for (const pageNum of pagesToProcess) {
       const pageIdx = pageNum - 1;
       if (pageIdx < 0 || pageIdx >= pages.length) continue;
-
       const page = pages[pageIdx];
 
-      // Collect deletion edits (remove original text from content stream)
-      const deleteEdits = edits.filter(e => e.deleted || e.newStr !== e.originalStr);
+      // Collect text edit deletions
+      const textEdits = pageTextEdits.get(pageNum) || [];
+      const deleteEdits = textEdits
+        .filter(e => e.deleted || e.newStr !== e.originalStr)
+        .map(e => ({ pdfX: e.pdfX, pdfY: e.pdfY, tolerance: 2.0, delete: true }));
 
-      if (deleteEdits.length > 0) {
+      // Collect redaction region deletions
+      const redactEdits = hasRedactions ? collectRedactionEdits(pageNum) : [];
+
+      const allEdits = [...deleteEdits, ...redactEdits];
+      if (allEdits.length > 0) {
         try {
           const pageNode = page.node;
           const contentsRef = pageNode.get(PDFName.of("Contents"));
 
           if (contentsRef) {
-            // Collect all stream refs
             const streamRefs: any[] = [];
             if (contentsRef instanceof PDFArray) {
               for (let i = 0; i < contentsRef.size(); i++) {
@@ -1242,7 +1368,6 @@ export function initPdfEditorTool() {
               const streamObj = outPdf.context.lookup(ref);
               if (!streamObj) continue;
 
-              // Get raw bytes from the stream (duck-typed for any pdf-lib stream)
               let streamBytes: Uint8Array;
               try {
                 if (typeof streamObj.getContents === "function") {
@@ -1256,7 +1381,6 @@ export function initPdfEditorTool() {
                 continue;
               }
 
-              // Try to inflate if FlateDecode compressed
               let streamText: string;
               let wasCompressed = false;
               try {
@@ -1267,18 +1391,9 @@ export function initPdfEditorTool() {
                 streamText = new TextDecoder("latin1").decode(streamBytes);
               }
 
-              // Apply text removals
-              const editPositions = deleteEdits.map(e => ({
-                pdfX: e.pdfX,
-                pdfY: e.pdfY,
-                tolerance: 2.0,
-                delete: true,
-              }));
-
-              const modified = removeTextFromStream(streamText, editPositions);
+              const modified = removeTextFromStream(streamText, allEdits);
               if (modified === streamText) continue;
 
-              // Re-encode
               const modifiedBytes = new Uint8Array(Array.from(modified, c => c.charCodeAt(0)));
               let finalBytes: Uint8Array;
               if (wasCompressed) {
@@ -1287,8 +1402,6 @@ export function initPdfEditorTool() {
                 finalBytes = modifiedBytes;
               }
 
-              // Replace the stream contents in the PDF
-              // Modify the existing dict in-place to preserve all other keys
               const dict = streamObj.dict;
               dict.set(PDFName.of("Length"), outPdf.context.obj(finalBytes.length));
               if (wasCompressed) {
@@ -1302,15 +1415,14 @@ export function initPdfEditorTool() {
           }
         } catch (err) {
           console.warn(`[PDF Editor] Content stream edit failed for page ${pageNum}, using overlay fallback:`, err);
-          // Fall through — replacement text will still be drawn, original may remain
         }
       }
 
-      // Draw replacement text for edits that changed (not just deleted)
+      // Draw replacement text for text edits that changed (not just deleted)
       const { StandardFonts } = pdfLibModule;
       const { rgb } = pdfLibModule;
 
-      for (const edit of edits) {
+      for (const edit of textEdits) {
         if (edit.deleted) continue;
         if (edit.newStr === edit.originalStr) continue;
         if (!edit.newStr) continue;
@@ -1319,7 +1431,6 @@ export function initPdfEditorTool() {
           const fontKey = mapToStandardFont(edit.detectedFamily, edit.bold, edit.italic);
           const font = await outPdf.embedFont(StandardFonts[fontKey] || StandardFonts.Helvetica);
 
-          // Parse color
           let r = 0, g = 0, b = 0;
           if (edit.color.startsWith("#") && edit.color.length === 7) {
             r = parseInt(edit.color.slice(1, 3), 16) / 255;
@@ -1351,7 +1462,7 @@ export function initPdfEditorTool() {
     try {
       saveCurrentAnnotations();
 
-      // Check if there are any text edits
+      // Check if there are any text edits or redactions
       let hasTextEdits = false;
       for (const [, edits] of pageTextEdits) {
         if (edits.some(e => e.deleted || e.newStr !== e.originalStr)) {
@@ -1360,11 +1471,20 @@ export function initPdfEditorTool() {
         }
       }
 
+      let hasRedactions = false;
+      for (const [, json] of pageAnnotations) {
+        const parsed = JSON.parse(json);
+        if (parsed.objects?.some((o: any) => o._pdeRedact)) {
+          hasRedactions = true;
+          break;
+        }
+      }
+
       // Capture all annotated pages as PNGs (excluding text-edit objects)
       const captures = await capturePageAnnotations();
 
-      if (captures.size === 0 && !hasTextEdits) {
-        // No annotations and no text edits — just download the original
+      if (captures.size === 0 && !hasTextEdits && !hasRedactions) {
+        // No annotations, text edits, or redactions — just download the original
         const blob = new Blob([pdfBytes.buffer as ArrayBuffer], { type: "application/pdf" });
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
@@ -1378,9 +1498,9 @@ export function initPdfEditorTool() {
       const { PDFDocument } = pdfLibModule;
       const outPdf = await PDFDocument.load(pdfBytes);
 
-      // Apply text edits to content streams
-      if (hasTextEdits) {
-        await applyTextEdits(outPdf, pdfLibModule);
+      // Apply text edits and redactions to content streams
+      if (hasTextEdits || hasRedactions) {
+        await applyTextEdits(outPdf, pdfLibModule, hasRedactions);
       }
 
       // Composite PNG overlays for non-text annotations
