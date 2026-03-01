@@ -424,31 +424,15 @@ export function initPdfEditorTool() {
 
   function detectNearestFont(canvasX: number, canvasY: number): { fontFamily: string; fontSize: number; color: string } | null {
     const textContent = pageTextContent.get(currentPage);
-    if (!textContent || !textContent._vpTransform) {
-      console.log("[PDE Match] No textContent or vpTransform for page", currentPage);
-      return null;
-    }
+    if (!textContent || !textContent._vpTransform) return null;
 
     const scale = zoom * 1.5;
     const vt = textContent._vpTransform;
-    console.log("[PDE Match] scale:", scale, "vpTransform:", vt);
-    console.log("[PDE Match] Looking near canvas coords:", canvasX, canvasY);
-    console.log("[PDE Match] Total text items:", textContent.items.length);
-    console.log("[PDE Match] Styles:", JSON.stringify(textContent.styles));
-
-    // Log first 3 items for debugging
-    for (let i = 0; i < Math.min(3, textContent.items.length); i++) {
-      const item = textContent.items[i];
-      if (!item.str) continue;
-      const pdfX = item.transform[4];
-      const pdfY = item.transform[5];
-      const cx = (vt[0] * pdfX + vt[2] * pdfY + vt[4]) * scale;
-      const cy = (vt[1] * pdfX + vt[3] * pdfY + vt[5]) * scale;
-      console.log(`[PDE Match] Item[${i}]: "${item.str.slice(0,30)}" pdfXY=(${pdfX},${pdfY}) canvasXY=(${cx.toFixed(1)},${cy.toFixed(1)}) transform=`, item.transform, "fontName:", item.fontName);
-    }
 
     let bestDist = Infinity;
     let bestItem: any = null;
+    let bestCx = 0;
+    let bestCy = 0;
 
     for (const item of textContent.items) {
       if (!item.str || !item.transform) continue;
@@ -462,28 +446,53 @@ export function initPdfEditorTool() {
       if (dist < bestDist) {
         bestDist = dist;
         bestItem = item;
+        bestCx = cx;
+        bestCy = cy;
       }
     }
 
-    console.log("[PDE Match] Best match:", bestItem?.str?.slice(0, 40), "dist:", bestDist.toFixed(1), "fontName:", bestItem?.fontName, "transform:", bestItem?.transform);
-
-    if (!bestItem || bestDist > 5000) return null; // Temporarily huge threshold for debugging
+    if (!bestItem || bestDist > 500) return null;
 
     // Get font family from styles
     let fontFamily = "Arial";
     if (bestItem.fontName && textContent.styles?.[bestItem.fontName]) {
       const style = textContent.styles[bestItem.fontName];
-      console.log("[PDE Match] Style for", bestItem.fontName, ":", JSON.stringify(style));
       fontFamily = mapFontFamily(style.fontFamily || "Arial");
     }
 
-    // Font size from transform matrix
+    // Font size: pdfjs renders glyph paths directly while fabric uses fillText
+    // with system fonts. The 96/72 factor corrects for the rendering difference
+    // between PDF point-based glyph scaling and CSS pixel-based font sizing.
     const pdfPts = Math.abs(bestItem.transform[0]) || Math.abs(bestItem.transform[3]);
-    const fontSize = pdfPts * scale;
-    console.log("[PDE Match] pdfPts:", pdfPts, "→ fontSize:", fontSize, "fontFamily:", fontFamily);
+    const fontSize = pdfPts * (96 / 72) * scale;
 
-    // For color: use black as default — PDF text color is not available from getTextContent()
-    const color = "#000000";
+    // Sample text color by scanning a grid of pixels near the matched text
+    // and picking the darkest one (most likely the text, not background)
+    let color = "#000000";
+    try {
+      const ctx = bgCanvas.getContext("2d")!;
+      const glyphH = pdfPts * scale;
+      let darkest = 255;
+      let darkR = 0, darkG = 0, darkB = 0;
+      // Sample a 5x5 grid within the glyph area
+      for (let dy = -0.6; dy <= -0.1; dy += 0.12) {
+        for (let dx = 0.2; dx <= 0.8; dx += 0.15) {
+          const sx = Math.round(bestCx + glyphH * dx);
+          const sy = Math.round(bestCy + glyphH * dy);
+          if (sx < 0 || sy < 0 || sx >= bgCanvas.width || sy >= bgCanvas.height) continue;
+          const px = ctx.getImageData(sx, sy, 1, 1).data;
+          const brightness = px[0] * 0.299 + px[1] * 0.587 + px[2] * 0.114;
+          if (brightness < darkest) {
+            darkest = brightness;
+            darkR = px[0]; darkG = px[1]; darkB = px[2];
+          }
+        }
+      }
+      // Only use sampled color if it's clearly not background (< 200 brightness)
+      if (darkest < 200) {
+        color = "#" + [darkR, darkG, darkB].map(c => c.toString(16).padStart(2, "0")).join("");
+      }
+    } catch { /* use default black */ }
 
     return { fontFamily, fontSize: Math.max(8, fontSize), color };
   }
