@@ -173,6 +173,34 @@ export function initPdfEditorTool() {
     document.querySelector(".pde-thumb.active")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
 
+  let thumbUpdateTimer: ReturnType<typeof setTimeout> | null = null;
+  function scheduleThumbUpdate() {
+    if (thumbUpdateTimer) clearTimeout(thumbUpdateTimer);
+    thumbUpdateTimer = setTimeout(updateCurrentThumbnail, 300);
+  }
+
+  function updateCurrentThumbnail() {
+    if (!fabricCanvas || !bgCanvas) return;
+    const thumbEl = thumbnailsContainer.querySelector(`.pde-thumb[data-page="${currentPage}"] img`) as HTMLImageElement | null;
+    if (!thumbEl) return;
+
+    // Composite PDF background + annotations into a small canvas
+    const tw = 150;
+    const scale = tw / bgCanvas.width;
+    const th = Math.round(bgCanvas.height * scale);
+    const c = document.createElement("canvas");
+    c.width = tw;
+    c.height = th;
+    const ctx = c.getContext("2d")!;
+    ctx.drawImage(bgCanvas, 0, 0, tw, th);
+
+    // Draw fabric annotations on top
+    const fabricEl = fabricCanvas.getElement();
+    if (fabricEl) ctx.drawImage(fabricEl, 0, 0, tw, th);
+
+    thumbEl.src = c.toDataURL();
+  }
+
   /* ── Properties panel ── */
   function updatePropsPanel() {
     if (!fabricCanvas) return;
@@ -239,9 +267,9 @@ export function initPdfEditorTool() {
     }
 
     // Track modifications for undo
-    fabricCanvas.on("object:added", () => { if (!skipHistory) pushHistory(); });
-    fabricCanvas.on("object:modified", () => { if (!skipHistory) pushHistory(); });
-    fabricCanvas.on("object:removed", () => { if (!skipHistory) pushHistory(); });
+    fabricCanvas.on("object:added", () => { if (!skipHistory) pushHistory(); scheduleThumbUpdate(); });
+    fabricCanvas.on("object:modified", () => { if (!skipHistory) pushHistory(); scheduleThumbUpdate(); });
+    fabricCanvas.on("object:removed", () => { if (!skipHistory) pushHistory(); scheduleThumbUpdate(); });
 
     // Selection state for delete button + properties panel
     fabricCanvas.on("selection:created", () => { deleteBtn.disabled = false; updatePropsPanel(); });
@@ -250,6 +278,7 @@ export function initPdfEditorTool() {
 
     // Auto-bullet on text changes
     fabricCanvas.on("text:changed", (opt: any) => {
+      scheduleThumbUpdate();
       const obj = opt.target;
       if (!obj || !bulletedObjects.has(obj) || bulletGuard) return;
       bulletGuard = true;
@@ -648,6 +677,7 @@ export function initPdfEditorTool() {
       fabricCanvas.renderAll();
       skipHistory = false;
       updateUndoRedoButtons();
+      scheduleThumbUpdate();
     });
   });
 
@@ -661,6 +691,7 @@ export function initPdfEditorTool() {
       fabricCanvas.renderAll();
       skipHistory = false;
       updateUndoRedoButtons();
+      scheduleThumbUpdate();
     });
   });
 
