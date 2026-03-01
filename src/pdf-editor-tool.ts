@@ -442,7 +442,7 @@ export function initPdfEditorTool() {
 
       if (captures.size === 0) {
         // No annotations — just download the original
-        const blob = new Blob([pdfBytes], { type: "application/pdf" });
+        const blob = new Blob([pdfBytes.buffer as ArrayBuffer], { type: "application/pdf" });
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
         a.download = pdfFileName.replace(/\.pdf$/i, "") + "-edited.pdf";
