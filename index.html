@@ -1570,82 +1570,149 @@
     <div id="pde-editor" class="hidden">
       <!-- Toolbar -->
       <div class="pde-toolbar">
-        <button class="pde-tool-btn active" data-pde-tool="select" title="Select">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/></svg>
-        </button>
-        <button class="pde-tool-btn" data-pde-tool="text" title="Add Text">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"></polyline><line x1="9" y1="20" x2="15" y2="20"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg>
-        </button>
-        <button class="pde-tool-btn" data-pde-tool="draw" title="Draw / Sign">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg>
-        </button>
-        <button class="pde-tool-btn" data-pde-tool="highlight" title="Highlight">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="8" rx="1"></rect></svg>
-        </button>
-        <button class="pde-tool-btn" data-pde-tool="image" title="Add Image">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-        </button>
-        <div class="pde-toolbar-sep"></div>
-        <button id="pde-undo" class="pde-tool-btn" title="Undo" disabled>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
-        </button>
-        <button id="pde-redo" class="pde-tool-btn" title="Redo" disabled>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
-        </button>
-        <div class="pde-toolbar-sep"></div>
-        <button id="pde-delete-obj" class="pde-tool-btn" title="Delete selected" disabled>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-        </button>
-      </div>
-
-      <!-- Tool options -->
-      <div class="pde-options-bar">
-        <div class="pde-option-group" id="pde-color-group">
-          <label>Color</label>
-          <input type="color" id="pde-color" value="#000000">
+        <div class="pde-toolbar-group">
+          <button class="pde-tool-btn active" data-pde-tool="select" title="Select">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/></svg>
+            <span>Select</span>
+          </button>
+          <button class="pde-tool-btn" data-pde-tool="text" title="Add Text">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"></polyline><line x1="9" y1="20" x2="15" y2="20"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg>
+            <span>Text</span>
+          </button>
+          <button class="pde-tool-btn" data-pde-tool="draw" title="Draw / Sign">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg>
+            <span>Draw</span>
+          </button>
+          <button class="pde-tool-btn" data-pde-tool="highlight" title="Highlight">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="8" rx="1"></rect></svg>
+            <span>Highlight</span>
+          </button>
+          <button class="pde-tool-btn" data-pde-tool="image" title="Add Image">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+            <span>Image</span>
+          </button>
         </div>
-        <div class="pde-option-group" id="pde-brush-group" style="display:none">
-          <label>Brush</label>
-          <input type="range" id="pde-brush-size" min="1" max="20" value="3">
-          <span id="pde-brush-label">3px</span>
-        </div>
-        <div class="pde-option-group" id="pde-font-group" style="display:none">
-          <label>Font</label>
-          <input type="number" id="pde-font-size" min="8" max="72" value="16">
-          <span>px</span>
-        </div>
-      </div>
-
-      <!-- Canvas area -->
-      <div id="pde-canvas-wrap">
-        <canvas id="pde-bg-canvas"></canvas>
-        <canvas id="pde-fabric-canvas"></canvas>
-      </div>
-
-      <!-- Page nav + zoom -->
-      <div class="pde-nav-bar">
-        <button id="pde-prev" class="pde-nav-btn" title="Previous page" disabled>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-        </button>
-        <span id="pde-page-info">Page 1 / 1</span>
-        <button id="pde-next" class="pde-nav-btn" title="Next page" disabled>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-        </button>
         <div class="pde-toolbar-sep"></div>
-        <button id="pde-zoom-out" class="pde-nav-btn" title="Zoom out">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-        </button>
-        <span id="pde-zoom-label">100%</span>
-        <button id="pde-zoom-in" class="pde-nav-btn" title="Zoom in">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        <div class="pde-toolbar-group">
+          <button id="pde-undo" class="pde-tool-btn" title="Undo" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+          </button>
+          <button id="pde-redo" class="pde-tool-btn" title="Redo" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+          </button>
+          <button id="pde-delete-obj" class="pde-tool-btn" title="Delete selected" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+          </button>
+        </div>
+        <div class="pde-toolbar-spacer"></div>
+        <button id="pde-download" class="pde-download-btn" title="Download PDF">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <span>Download</span>
         </button>
       </div>
 
-      <!-- Download -->
-      <button id="pde-download" class="speech-generate-btn">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-        Download PDF
-      </button>
+      <!-- Workspace: 3-column layout -->
+      <div class="pde-workspace">
+        <!-- Left sidebar: Page thumbnails -->
+        <aside class="pde-sidebar pde-sidebar-left">
+          <div class="pde-sidebar-header"><span>Pages</span></div>
+          <div class="pde-thumb-list" id="pde-thumbnails"></div>
+        </aside>
+
+        <!-- Center: Canvas -->
+        <main class="pde-main">
+          <div id="pde-canvas-wrap">
+            <div id="pde-canvas-inner">
+              <canvas id="pde-bg-canvas"></canvas>
+              <canvas id="pde-fabric-canvas"></canvas>
+            </div>
+          </div>
+          <!-- Bottom bar: page nav + zoom -->
+          <div class="pde-bottom-bar">
+            <button id="pde-prev" class="pde-nav-btn" title="Previous page" disabled>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            </button>
+            <span id="pde-page-info">Page 1 / 1</span>
+            <button id="pde-next" class="pde-nav-btn" title="Next page" disabled>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+            <div class="pde-toolbar-sep"></div>
+            <button id="pde-zoom-out" class="pde-nav-btn" title="Zoom out">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </button>
+            <span id="pde-zoom-label">100%</span>
+            <button id="pde-zoom-in" class="pde-nav-btn" title="Zoom in">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </button>
+          </div>
+        </main>
+
+        <!-- Right sidebar: Properties -->
+        <aside class="pde-sidebar pde-sidebar-right">
+          <div class="pde-sidebar-header"><span>Properties</span></div>
+          <div class="pde-props-body">
+            <!-- Color -->
+            <div class="pde-prop-group">
+              <label class="pde-prop-label">Color</label>
+              <div class="pde-prop-row">
+                <input type="color" id="pde-color" value="#000000">
+                <span id="pde-color-hex" class="pde-color-hex">#000000</span>
+              </div>
+            </div>
+            <!-- Text properties -->
+            <div id="pde-text-props" class="pde-prop-group">
+              <label class="pde-prop-label">Font</label>
+              <select id="pde-font-family" class="pde-select">
+                <option value="Arial">Arial</option>
+                <option value="Helvetica">Helvetica</option>
+                <option value="Times New Roman">Times New Roman</option>
+                <option value="Courier New">Courier New</option>
+                <option value="Georgia">Georgia</option>
+                <option value="Verdana">Verdana</option>
+                <option value="sans-serif">Sans-serif</option>
+              </select>
+              <div class="pde-prop-row">
+                <input type="number" id="pde-font-size" min="8" max="120" value="16" class="pde-size-input">
+                <span class="pde-prop-unit">pt</span>
+              </div>
+              <div class="pde-style-row">
+                <button id="pde-bold" class="pde-style-btn" title="Bold"><strong>B</strong></button>
+                <button id="pde-italic" class="pde-style-btn" title="Italic"><em>I</em></button>
+                <button id="pde-underline" class="pde-style-btn" title="Underline"><span style="text-decoration:underline">U</span></button>
+                <button id="pde-strikethrough" class="pde-style-btn" title="Strikethrough"><span style="text-decoration:line-through">S</span></button>
+              </div>
+              <label class="pde-prop-label">Align</label>
+              <div class="pde-align-row">
+                <button class="pde-style-btn active" data-pde-align="left" title="Align left">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>
+                </button>
+                <button class="pde-style-btn" data-pde-align="center" title="Center">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+                </button>
+                <button class="pde-style-btn" data-pde-align="right" title="Align right">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="9" y1="12" x2="21" y2="12"/><line x1="6" y1="18" x2="21" y2="18"/></svg>
+                </button>
+              </div>
+            </div>
+            <!-- Draw properties -->
+            <div id="pde-draw-props" class="pde-prop-group" style="display:none">
+              <label class="pde-prop-label">Brush Size</label>
+              <div class="pde-prop-row">
+                <input type="range" id="pde-brush-size" min="1" max="20" value="3" class="pde-range">
+                <span id="pde-brush-label" class="pde-range-label">3px</span>
+              </div>
+            </div>
+            <!-- Opacity -->
+            <div class="pde-prop-group">
+              <label class="pde-prop-label">Opacity</label>
+              <div class="pde-prop-row">
+                <input type="range" id="pde-opacity" min="0" max="100" value="100" class="pde-range">
+                <span id="pde-opacity-label" class="pde-range-label">100%</span>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
     </div>
 
     <input id="pde-file-input" type="file" accept=".pdf" style="display:none">

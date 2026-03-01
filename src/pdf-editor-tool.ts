@@ -5,6 +5,7 @@
 type PdeTool = "select" | "text" | "draw" | "highlight" | "image";
 
 export function initPdfEditorTool() {
+  /* ── DOM refs ── */
   const uploadSection = document.getElementById("pde-upload") as HTMLDivElement;
   const editorSection = document.getElementById("pde-editor") as HTMLDivElement;
   const dropArea = document.getElementById("pde-drop-area") as HTMLDivElement;
@@ -28,12 +29,23 @@ export function initPdfEditorTool() {
   const deleteBtn = document.getElementById("pde-delete-obj") as HTMLButtonElement;
 
   const colorInput = document.getElementById("pde-color") as HTMLInputElement;
-  const brushGroup = document.getElementById("pde-brush-group") as HTMLDivElement;
+  const colorHex = document.getElementById("pde-color-hex") as HTMLSpanElement;
+  const textProps = document.getElementById("pde-text-props") as HTMLDivElement;
+  const drawProps = document.getElementById("pde-draw-props") as HTMLDivElement;
   const brushInput = document.getElementById("pde-brush-size") as HTMLInputElement;
   const brushLabel = document.getElementById("pde-brush-label") as HTMLSpanElement;
-  const fontGroup = document.getElementById("pde-font-group") as HTMLDivElement;
   const fontInput = document.getElementById("pde-font-size") as HTMLInputElement;
+  const fontFamilySelect = document.getElementById("pde-font-family") as HTMLSelectElement;
+  const boldBtn = document.getElementById("pde-bold") as HTMLButtonElement;
+  const italicBtn = document.getElementById("pde-italic") as HTMLButtonElement;
+  const underlineBtn = document.getElementById("pde-underline") as HTMLButtonElement;
+  const strikeBtn = document.getElementById("pde-strikethrough") as HTMLButtonElement;
+  const alignBtns = document.querySelectorAll<HTMLButtonElement>("[data-pde-align]");
+  const opacityInput = document.getElementById("pde-opacity") as HTMLInputElement;
+  const opacityLabel = document.getElementById("pde-opacity-label") as HTMLSpanElement;
+  const thumbnailsContainer = document.getElementById("pde-thumbnails") as HTMLDivElement;
 
+  /* ── State ── */
   let pdfDoc: any = null;
   let pdfBytes: Uint8Array | null = null;
   let pdfFileName = "document.pdf";
@@ -42,11 +54,9 @@ export function initPdfEditorTool() {
   let zoom = 1;
   let activePdeTool: PdeTool = "select";
   let fabricCanvas: any = null;
+  let fabricModule: any = null;
 
-  // Per-page annotation state
   const pageAnnotations: Map<number, string> = new Map();
-
-  // Undo/redo stacks
   let undoStack: string[] = [];
   let redoStack: string[] = [];
   let skipHistory = false;
@@ -57,7 +67,7 @@ export function initPdfEditorTool() {
     return { brush, font };
   }
 
-  // ── File loading ───────────────────────────────────────────────────────
+  /* ── File loading ── */
   dropArea.addEventListener("click", () => fileInput.click());
   fileInput.addEventListener("change", () => {
     if (fileInput.files?.[0]) loadPdf(fileInput.files[0]);
@@ -92,15 +102,94 @@ export function initPdfEditorTool() {
 
       await initFabric();
       await renderPage();
+      await renderThumbnails();
     } catch (err: any) {
       console.error("[PDF Editor] Failed to load PDF:", err);
       dropText.textContent = `Error: ${err?.message || "Failed to load PDF"}`;
     }
   }
 
-  let fabricModule: any = null;
+  /* ── Thumbnails ── */
+  async function renderThumbnails() {
+    if (!pdfDoc) return;
+    thumbnailsContainer.innerHTML = "";
+    for (let i = 1; i <= totalPages; i++) {
+      const page = await pdfDoc.getPage(i);
+      const vp = page.getViewport({ scale: 0.25 });
+      const c = document.createElement("canvas");
+      c.width = vp.width;
+      c.height = vp.height;
+      const ctx = c.getContext("2d")!;
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
 
-  // ── Fabric.js initialization ───────────────────────────────────────────
+      const item = document.createElement("div");
+      item.className = "pde-thumb" + (i === currentPage ? " active" : "");
+      item.dataset.page = String(i);
+
+      const img = document.createElement("img");
+      img.src = c.toDataURL();
+      img.alt = `Page ${i}`;
+
+      const label = document.createElement("span");
+      label.className = "pde-thumb-num";
+      label.textContent = String(i);
+
+      item.appendChild(img);
+      item.appendChild(label);
+      item.addEventListener("click", () => {
+        saveCurrentAnnotations();
+        currentPage = i;
+        renderPage();
+        updateThumbHighlight();
+      });
+      thumbnailsContainer.appendChild(item);
+    }
+  }
+
+  function updateThumbHighlight() {
+    document.querySelectorAll(".pde-thumb").forEach(el => {
+      el.classList.toggle("active", parseInt((el as HTMLElement).dataset.page!) === currentPage);
+    });
+    document.querySelector(".pde-thumb.active")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+
+  /* ── Properties panel ── */
+  function updatePropsPanel() {
+    if (!fabricCanvas) return;
+    const obj = fabricCanvas.getActiveObject();
+    const isTextObj = obj && (obj.type === "i-text" || obj.type === "textbox" || obj.type === "text");
+
+    // Show/hide property sections
+    textProps.style.display = (activePdeTool === "text" || isTextObj) ? "" : "none";
+    drawProps.style.display = activePdeTool === "draw" ? "" : "none";
+
+    // Populate text properties from selected object
+    if (isTextObj) {
+      fontFamilySelect.value = obj.fontFamily || "Arial";
+      fontInput.value = String(Math.round(obj.fontSize || 16));
+      boldBtn.classList.toggle("active", obj.fontWeight === "bold");
+      italicBtn.classList.toggle("active", obj.fontStyle === "italic");
+      underlineBtn.classList.toggle("active", !!obj.underline);
+      strikeBtn.classList.toggle("active", !!obj.linethrough);
+      alignBtns.forEach(b => b.classList.toggle("active", b.dataset.pdeAlign === (obj.textAlign || "left")));
+      if (obj.fill && typeof obj.fill === "string") {
+        colorInput.value = obj.fill;
+        colorHex.textContent = obj.fill;
+      }
+    }
+
+    // Opacity
+    if (obj) {
+      const op = Math.round((obj.opacity ?? 1) * 100);
+      opacityInput.value = String(op);
+      opacityLabel.textContent = `${op}%`;
+    } else {
+      opacityInput.value = "100";
+      opacityLabel.textContent = "100%";
+    }
+  }
+
+  /* ── Fabric.js initialization ── */
   async function initFabric() {
     fabricModule = await import("fabric");
     const FabricCanvas = fabricModule.Canvas || (fabricModule as any).default?.Canvas;
@@ -132,10 +221,10 @@ export function initPdfEditorTool() {
     fabricCanvas.on("object:modified", () => { if (!skipHistory) pushHistory(); });
     fabricCanvas.on("object:removed", () => { if (!skipHistory) pushHistory(); });
 
-    // Selection state for delete button
-    fabricCanvas.on("selection:created", () => { deleteBtn.disabled = false; });
-    fabricCanvas.on("selection:updated", () => { deleteBtn.disabled = false; });
-    fabricCanvas.on("selection:cleared", () => { deleteBtn.disabled = true; });
+    // Selection state for delete button + properties panel
+    fabricCanvas.on("selection:created", () => { deleteBtn.disabled = false; updatePropsPanel(); });
+    fabricCanvas.on("selection:updated", () => { deleteBtn.disabled = false; updatePropsPanel(); });
+    fabricCanvas.on("selection:cleared", () => { deleteBtn.disabled = true; updatePropsPanel(); });
 
     // Click to add text
     fabricCanvas.on("mouse:down", (opt: any) => {
@@ -149,7 +238,7 @@ export function initPdfEditorTool() {
           top: pointer.y,
           fontSize: parseInt(fontInput.value) || defaults.font,
           fill: colorInput.value,
-          fontFamily: "sans-serif",
+          fontFamily: fontFamilySelect.value,
           editable: true,
         });
         fabricCanvas.add(text);
@@ -201,7 +290,7 @@ export function initPdfEditorTool() {
     });
   }
 
-  // ── Render PDF page ────────────────────────────────────────────────────
+  /* ── Render PDF page ── */
   async function renderPage() {
     if (!pdfDoc || !fabricCanvas) return;
 
@@ -220,11 +309,6 @@ export function initPdfEditorTool() {
     bgCanvas.style.height = `${h}px`;
     fabricCanvas.setDimensions({ width: w, height: h });
 
-    // Set wrapper to match page size so scrolling works
-    const wrap = document.getElementById("pde-canvas-wrap")!;
-    wrap.style.height = `${Math.min(h + 2, window.innerHeight * 0.7)}px`;
-    wrap.style.width = "100%";
-
     // Render PDF page to background canvas
     const ctx = bgCanvas.getContext("2d")!;
     ctx.clearRect(0, 0, w, h);
@@ -238,6 +322,7 @@ export function initPdfEditorTool() {
     prevBtn.disabled = currentPage <= 1;
     nextBtn.disabled = currentPage >= totalPages;
     zoomLabel.textContent = `${Math.round(zoom * 100)}%`;
+    updateThumbHighlight();
   }
 
   function saveCurrentAnnotations() {
@@ -262,7 +347,7 @@ export function initPdfEditorTool() {
     }
   }
 
-  // ── Undo/Redo ──────────────────────────────────────────────────────────
+  /* ── Undo/Redo ── */
   function pushHistory() {
     const state = JSON.stringify(fabricCanvas.toJSON());
     undoStack.push(state);
@@ -302,7 +387,7 @@ export function initPdfEditorTool() {
     });
   });
 
-  // ── Delete selected ────────────────────────────────────────────────────
+  /* ── Delete selected ── */
   deleteBtn.addEventListener("click", () => {
     const active = fabricCanvas?.getActiveObjects();
     if (active?.length) {
@@ -332,7 +417,7 @@ export function initPdfEditorTool() {
     if (e.ctrlKey && e.key === "y") { e.preventDefault(); redoBtn.click(); }
   });
 
-  // ── Tool switching ─────────────────────────────────────────────────────
+  /* ── Tool switching ── */
   const toolBtns = document.querySelectorAll<HTMLButtonElement>(".pde-tool-btn[data-pde-tool]");
   for (const btn of toolBtns) {
     btn.addEventListener("click", () => {
@@ -340,9 +425,8 @@ export function initPdfEditorTool() {
       activePdeTool = tool;
       toolBtns.forEach(b => b.classList.toggle("active", b === btn));
 
-      // Show/hide option groups
-      brushGroup.style.display = tool === "draw" ? "flex" : "none";
-      fontGroup.style.display = tool === "text" ? "flex" : "none";
+      // Update properties panel visibility
+      updatePropsPanel();
 
       if (fabricCanvas) {
         if (tool === "draw") {
@@ -370,12 +454,20 @@ export function initPdfEditorTool() {
     });
   }
 
-  // Tool options
+  /* ── Tool options ── */
   colorInput.addEventListener("input", () => {
+    colorHex.textContent = colorInput.value;
     if (fabricCanvas?.freeDrawingBrush && fabricCanvas.isDrawingMode) {
       fabricCanvas.freeDrawingBrush.color = colorInput.value;
     }
+    // Apply to selected text object
+    const obj = fabricCanvas?.getActiveObject();
+    if (obj && (obj.type === "i-text" || obj.type === "textbox" || obj.type === "text")) {
+      obj.set("fill", colorInput.value);
+      fabricCanvas.renderAll();
+    }
   });
+
   brushInput.addEventListener("input", () => {
     brushLabel.textContent = `${brushInput.value}px`;
     if (fabricCanvas?.freeDrawingBrush && fabricCanvas.isDrawingMode) {
@@ -383,7 +475,89 @@ export function initPdfEditorTool() {
     }
   });
 
-  // ── Page navigation ────────────────────────────────────────────────────
+  // Font family
+  fontFamilySelect.addEventListener("change", () => {
+    const obj = fabricCanvas?.getActiveObject();
+    if (obj && (obj.type === "i-text" || obj.type === "textbox" || obj.type === "text")) {
+      obj.set("fontFamily", fontFamilySelect.value);
+      fabricCanvas.renderAll();
+    }
+  });
+
+  // Font size
+  fontInput.addEventListener("input", () => {
+    const obj = fabricCanvas?.getActiveObject();
+    if (obj && (obj.type === "i-text" || obj.type === "textbox" || obj.type === "text")) {
+      obj.set("fontSize", parseInt(fontInput.value) || 16);
+      fabricCanvas.renderAll();
+    }
+  });
+
+  // Bold
+  boldBtn.addEventListener("click", () => {
+    const obj = fabricCanvas?.getActiveObject();
+    if (obj && (obj.type === "i-text" || obj.type === "textbox" || obj.type === "text")) {
+      const isBold = obj.fontWeight === "bold";
+      obj.set("fontWeight", isBold ? "normal" : "bold");
+      boldBtn.classList.toggle("active", !isBold);
+      fabricCanvas.renderAll();
+    }
+  });
+
+  // Italic
+  italicBtn.addEventListener("click", () => {
+    const obj = fabricCanvas?.getActiveObject();
+    if (obj && (obj.type === "i-text" || obj.type === "textbox" || obj.type === "text")) {
+      const isItalic = obj.fontStyle === "italic";
+      obj.set("fontStyle", isItalic ? "normal" : "italic");
+      italicBtn.classList.toggle("active", !isItalic);
+      fabricCanvas.renderAll();
+    }
+  });
+
+  // Underline
+  underlineBtn.addEventListener("click", () => {
+    const obj = fabricCanvas?.getActiveObject();
+    if (obj && (obj.type === "i-text" || obj.type === "textbox" || obj.type === "text")) {
+      obj.set("underline", !obj.underline);
+      underlineBtn.classList.toggle("active", !!obj.underline);
+      fabricCanvas.renderAll();
+    }
+  });
+
+  // Strikethrough
+  strikeBtn.addEventListener("click", () => {
+    const obj = fabricCanvas?.getActiveObject();
+    if (obj && (obj.type === "i-text" || obj.type === "textbox" || obj.type === "text")) {
+      obj.set("linethrough", !obj.linethrough);
+      strikeBtn.classList.toggle("active", !!obj.linethrough);
+      fabricCanvas.renderAll();
+    }
+  });
+
+  // Alignment
+  for (const btn of alignBtns) {
+    btn.addEventListener("click", () => {
+      const obj = fabricCanvas?.getActiveObject();
+      if (obj && (obj.type === "i-text" || obj.type === "textbox" || obj.type === "text")) {
+        obj.set("textAlign", btn.dataset.pdeAlign!);
+        alignBtns.forEach(b => b.classList.toggle("active", b === btn));
+        fabricCanvas.renderAll();
+      }
+    });
+  }
+
+  // Opacity
+  opacityInput.addEventListener("input", () => {
+    opacityLabel.textContent = `${opacityInput.value}%`;
+    const obj = fabricCanvas?.getActiveObject();
+    if (obj) {
+      obj.set("opacity", parseInt(opacityInput.value) / 100);
+      fabricCanvas.renderAll();
+    }
+  });
+
+  /* ── Page navigation ── */
   prevBtn.addEventListener("click", () => {
     if (currentPage > 1) { currentPage--; renderPage(); }
   });
@@ -391,7 +565,7 @@ export function initPdfEditorTool() {
     if (currentPage < totalPages) { currentPage++; renderPage(); }
   });
 
-  // ── Zoom ───────────────────────────────────────────────────────────────
+  /* ── Zoom ── */
   zoomInBtn.addEventListener("click", () => {
     zoom = Math.min(3, zoom + 0.25);
     saveCurrentAnnotations();
@@ -403,7 +577,7 @@ export function initPdfEditorTool() {
     renderPage();
   });
 
-  // ── Capture annotation overlay as PNG for a given page ──────────────────
+  /* ── Capture annotation overlay as PNG for a given page ── */
   // Renders annotations on the live fabric canvas by navigating to that page,
   // captures the canvas, then returns to the original page.
   async function capturePageAnnotations(): Promise<Map<number, string>> {
@@ -433,11 +607,12 @@ export function initPdfEditorTool() {
     return captures;
   }
 
-  // ── Download annotated PDF ─────────────────────────────────────────────
+  /* ── Download annotated PDF ── */
   downloadBtn.addEventListener("click", async () => {
     if (!pdfBytes || !pdfDoc) return;
     downloadBtn.classList.add("disabled");
-    downloadBtn.textContent = "Exporting...";
+    const dlLabel = downloadBtn.querySelector("span");
+    if (dlLabel) dlLabel.textContent = "Exporting...";
 
     try {
       saveCurrentAnnotations();
@@ -486,7 +661,8 @@ export function initPdfEditorTool() {
       alert(`Export failed: ${err?.message || "Unknown error"}`);
     } finally {
       downloadBtn.classList.remove("disabled");
-      downloadBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Download PDF`;
+      const dlLabel = downloadBtn.querySelector("span");
+      if (dlLabel) dlLabel.textContent = "Download";
     }
   });
 }
