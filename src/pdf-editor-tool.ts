@@ -2,7 +2,7 @@
 // Renders PDF pages with pdfjs-dist, lets users annotate with Fabric.js,
 // and exports the annotated PDF with pdf-lib.
 
-type PdeTool = "select" | "text" | "draw" | "highlight" | "image";
+type PdeTool = "select" | "text" | "draw" | "highlight" | "erase" | "image";
 
 export function initPdfEditorTool() {
   /* ── DOM refs ── */
@@ -32,6 +32,10 @@ export function initPdfEditorTool() {
   const colorHex = document.getElementById("pde-color-hex") as HTMLSpanElement;
   const textProps = document.getElementById("pde-text-props") as HTMLDivElement;
   const drawProps = document.getElementById("pde-draw-props") as HTMLDivElement;
+  const eraseProps = document.getElementById("pde-erase-props") as HTMLDivElement;
+  const eraseColorInput = document.getElementById("pde-erase-color") as HTMLInputElement;
+  const eraseColorHex = document.getElementById("pde-erase-color-hex") as HTMLSpanElement;
+  const erasePickBtn = document.getElementById("pde-erase-pick") as HTMLButtonElement;
   const brushInput = document.getElementById("pde-brush-size") as HTMLInputElement;
   const brushLabel = document.getElementById("pde-brush-label") as HTMLSpanElement;
   const fontInput = document.getElementById("pde-font-size") as HTMLInputElement;
@@ -69,6 +73,11 @@ export function initPdfEditorTool() {
 
   // Font detection state
   const pageTextContent: Map<number, any> = new Map();
+
+  // Erase tool state
+  let erasePickMode = false;
+  let eraseDragStart: { x: number; y: number } | null = null;
+  let eraseDragRect: any = null;
 
   function getDefaults() {
     const brush = (() => { try { return parseInt(localStorage.getItem("convert-pde-brush") ?? "3"); } catch { return 3; } })();
@@ -172,6 +181,7 @@ export function initPdfEditorTool() {
     // Show/hide property sections
     textProps.style.display = (activePdeTool === "text" || isTextObj) ? "" : "none";
     drawProps.style.display = activePdeTool === "draw" ? "" : "none";
+    eraseProps.style.display = activePdeTool === "erase" ? "" : "none";
 
     // Populate text properties from selected object
     if (isTextObj) {
@@ -302,18 +312,85 @@ export function initPdfEditorTool() {
         const fabricMod = fabricModule as any;
         const Rect = fabricMod.Rect || fabricMod.default?.Rect;
         const pointer = fabricCanvas.getViewportPoint(opt.e);
+        // Convert hex color to rgba with 35% opacity for highlight
+        const hex = colorInput.value;
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
         const rect = new Rect({
           left: pointer.x,
           top: pointer.y,
           width: 200,
           height: 30,
-          fill: "rgba(255, 255, 0, 0.35)",
-          stroke: "rgba(255, 200, 0, 0.5)",
+          fill: `rgba(${r}, ${g}, ${b}, 0.35)`,
+          stroke: `rgba(${r}, ${g}, ${b}, 0.5)`,
           strokeWidth: 1,
         });
         fabricCanvas.add(rect);
         fabricCanvas.setActiveObject(rect);
+      } else if (activePdeTool === "erase" && !opt.target) {
+        // Erase tool: eyedropper pick mode
+        if (erasePickMode) {
+          const pointer = fabricCanvas.getViewportPoint(opt.e);
+          const ctx = bgCanvas.getContext("2d")!;
+          const px = ctx.getImageData(Math.round(pointer.x), Math.round(pointer.y), 1, 1).data;
+          const hex = "#" + [px[0], px[1], px[2]].map(c => c.toString(16).padStart(2, "0")).join("");
+          eraseColorInput.value = hex;
+          eraseColorHex.textContent = hex;
+          erasePickMode = false;
+          erasePickBtn.classList.remove("active");
+          fabricCanvas.defaultCursor = "crosshair";
+          return;
+        }
+        // Start drag to draw erase rect
+        const pointer = fabricCanvas.getViewportPoint(opt.e);
+        eraseDragStart = { x: pointer.x, y: pointer.y };
+        const fabricMod = fabricModule as any;
+        const Rect = fabricMod.Rect || fabricMod.default?.Rect;
+        eraseDragRect = new Rect({
+          left: pointer.x,
+          top: pointer.y,
+          width: 0,
+          height: 0,
+          fill: eraseColorInput.value,
+          stroke: "transparent",
+          strokeWidth: 0,
+          selectable: false,
+          evented: false,
+          opacity: 1,
+        });
+        fabricCanvas.add(eraseDragRect);
       }
+    });
+
+    // Erase tool: drag to resize
+    fabricCanvas.on("mouse:move", (opt: any) => {
+      if (activePdeTool !== "erase" || !eraseDragStart || !eraseDragRect) return;
+      const pointer = fabricCanvas.getViewportPoint(opt.e);
+      const left = Math.min(eraseDragStart.x, pointer.x);
+      const top = Math.min(eraseDragStart.y, pointer.y);
+      const width = Math.abs(pointer.x - eraseDragStart.x);
+      const height = Math.abs(pointer.y - eraseDragStart.y);
+      eraseDragRect.set({ left, top, width, height });
+      fabricCanvas.renderAll();
+    });
+
+    // Erase tool: finish drag
+    fabricCanvas.on("mouse:up", () => {
+      if (activePdeTool !== "erase" || !eraseDragStart || !eraseDragRect) return;
+      const w = eraseDragRect.width;
+      const h = eraseDragRect.height;
+      if (w < 3 && h < 3) {
+        // Too small, remove it
+        fabricCanvas.remove(eraseDragRect);
+      } else {
+        // Make it selectable now
+        eraseDragRect.set({ selectable: true, evented: true });
+        fabricCanvas.setActiveObject(eraseDragRect);
+      }
+      eraseDragStart = null;
+      eraseDragRect = null;
+      fabricCanvas.renderAll();
     });
 
     // Image tool — convert to data URL so it survives JSON serialization
@@ -576,6 +653,19 @@ export function initPdfEditorTool() {
         if (tool === "select") {
           fabricCanvas.selection = true;
         }
+        // Set cursor for erase tool
+        if (tool === "erase") {
+          fabricCanvas.defaultCursor = "crosshair";
+          fabricCanvas.selection = false;
+        } else {
+          fabricCanvas.defaultCursor = "default";
+        }
+      }
+
+      // Reset erase pick mode when switching tools
+      if (tool !== "erase") {
+        erasePickMode = false;
+        erasePickBtn.classList.remove("active");
       }
 
       if (tool === "image") {
@@ -704,6 +794,26 @@ export function initPdfEditorTool() {
       }
     });
   }
+
+  // Erase color
+  eraseColorInput.addEventListener("input", () => {
+    eraseColorHex.textContent = eraseColorInput.value;
+    // Apply to selected erase rect
+    const obj = fabricCanvas?.getActiveObject();
+    if (obj && obj.type === "rect" && obj.strokeWidth === 0) {
+      obj.set("fill", eraseColorInput.value);
+      fabricCanvas.renderAll();
+    }
+  });
+
+  // Erase eyedropper — pick color from the PDF background canvas
+  erasePickBtn.addEventListener("click", () => {
+    erasePickMode = !erasePickMode;
+    erasePickBtn.classList.toggle("active", erasePickMode);
+    if (fabricCanvas) {
+      fabricCanvas.defaultCursor = erasePickMode ? "copy" : "crosshair";
+    }
+  });
 
   // Opacity
   opacityInput.addEventListener("input", () => {
