@@ -589,9 +589,6 @@ export function initPdfEditorTool() {
   async function renderPage() {
     if (!pdfDoc || !fabricCanvas) return;
 
-    // Save current page annotations
-    saveCurrentAnnotations();
-
     const page = await pdfDoc.getPage(currentPage);
     const vp = page.getViewport({ scale: zoom * 1.5 }); // 1.5 base for quality
 
@@ -964,10 +961,10 @@ export function initPdfEditorTool() {
 
   /* ── Page navigation ── */
   prevBtn.addEventListener("click", () => {
-    if (currentPage > 1) { currentPage--; renderPage(); }
+    if (currentPage > 1) { saveCurrentAnnotations(); currentPage--; renderPage(); }
   });
   nextBtn.addEventListener("click", () => {
-    if (currentPage < totalPages) { currentPage++; renderPage(); }
+    if (currentPage < totalPages) { saveCurrentAnnotations(); currentPage++; renderPage(); }
   });
 
   /* ── Zoom ── */
@@ -988,6 +985,7 @@ export function initPdfEditorTool() {
   async function capturePageAnnotations(): Promise<Map<number, string>> {
     const captures = new Map<number, string>();
     const origPage = currentPage;
+    saveCurrentAnnotations();
 
     for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
       const annotJson = pageAnnotations.get(pageNum);
