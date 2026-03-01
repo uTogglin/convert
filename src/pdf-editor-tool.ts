@@ -406,23 +406,71 @@ export function initPdfEditorTool() {
   }
 
   /* ── Font detection helpers ── */
+
+  // Strip subset prefix (e.g. "BCDFEE+Calibri" → "Calibri")
+  function stripSubset(name: string): string {
+    return name.replace(/^[A-Z]{6}\+/, "");
+  }
+
+  // Detect bold/italic from font name (e.g. "TimesNewRomanPS-BoldItalicMT")
+  function detectFontStyle(fontName: string): { bold: boolean; italic: boolean } {
+    const lower = stripSubset(fontName).toLowerCase();
+    return {
+      bold: /bold|demi|heavy|black/i.test(lower),
+      italic: /italic|oblique|slant/i.test(lower),
+    };
+  }
+
   function mapFontFamily(pdfFamily: string): string {
-    const lower = pdfFamily.toLowerCase();
-    // Check specific font names first
-    if (lower.includes("helvetica")) return "Helvetica";
+    const lower = stripSubset(pdfFamily).toLowerCase().replace(/[-_,\s]+/g, "");
+    // Specific font families — ordered by commonality in PDFs
     if (lower.includes("arial")) return "Arial";
+    if (lower.includes("helvetica")) return "Helvetica";
+    if (lower.includes("timesnewroman") || lower.includes("timesnew")) return "Times New Roman";
     if (lower.includes("times")) return "Times New Roman";
-    if (lower.includes("courier")) return "Courier New";
+    if (lower.includes("calibri")) return "Calibri";
+    if (lower.includes("cambria")) return "Cambria";
+    if (lower.includes("palatino") || lower.includes("palatin")) return "Palatino Linotype";
+    if (lower.includes("garamond")) return "Garamond";
+    if (lower.includes("bookantiqua")) return "Book Antiqua";
     if (lower.includes("georgia")) return "Georgia";
     if (lower.includes("verdana")) return "Verdana";
+    if (lower.includes("tahoma")) return "Tahoma";
+    if (lower.includes("trebuchet")) return "Trebuchet MS";
+    if (lower.includes("couriernew") || lower.includes("courier")) return "Courier New";
+    if (lower.includes("lucidaconsole")) return "Lucida Console";
+    if (lower.includes("lucidasans")) return "Lucida Sans Unicode";
+    if (lower.includes("consolas")) return "Consolas";
+    if (lower.includes("segoeui") || lower.includes("segoe")) return "Segoe UI";
+    if (lower.includes("comicsans")) return "Comic Sans MS";
+    if (lower.includes("impact")) return "Impact";
+    if (lower.includes("centuryschl") || lower.includes("century")) return "Georgia";
+    if (lower.includes("bookman")) return "Bookman Old Style";
+    if (lower.includes("nimbus") && lower.includes("rom")) return "Times New Roman";
+    if (lower.includes("nimbus") && lower.includes("san")) return "Arial";
+    if (lower.includes("nimbus") && lower.includes("mon")) return "Courier New";
+    if (lower.includes("liberationserif") || lower.includes("freeserif")) return "Times New Roman";
+    if (lower.includes("liberationsans") || lower.includes("freesans")) return "Arial";
+    if (lower.includes("liberationmono") || lower.includes("freemono")) return "Courier New";
+    if (lower.includes("dejavuserif")) return "Georgia";
+    if (lower.includes("dejavusans") && lower.includes("mono")) return "Courier New";
+    if (lower.includes("dejavusans")) return "Verdana";
+    if (lower.includes("roboto")) return "Arial";
+    if (lower.includes("opensans") || lower.includes("open")) return "Arial";
+    if (lower.includes("lato")) return "Arial";
+    if (lower.includes("sourcesans")) return "Arial";
+    if (lower.includes("sourceserif")) return "Georgia";
+    if (lower.includes("sourcecode")) return "Courier New";
+    if (lower.includes("notosans")) return "Arial";
+    if (lower.includes("notoserif")) return "Times New Roman";
     // Generic families
     if (lower === "serif" || (lower.includes("serif") && !lower.includes("sans"))) return "Times New Roman";
-    if (lower === "sans-serif" || lower.includes("sans")) return "Arial";
+    if (lower === "sansserif" || lower.includes("sans")) return "Arial";
     if (lower === "monospace" || lower.includes("mono")) return "Courier New";
     return "Arial";
   }
 
-  function detectNearestFont(canvasX: number, canvasY: number): { fontFamily: string; fontSize: number; color: string } | null {
+  function detectNearestFont(canvasX: number, canvasY: number): { fontFamily: string; fontSize: number; color: string; bold: boolean; italic: boolean } | null {
     const textContent = pageTextContent.get(currentPage);
     if (!textContent || !textContent._vpTransform) return null;
 
@@ -453,11 +501,22 @@ export function initPdfEditorTool() {
 
     if (!bestItem || bestDist > 500) return null;
 
-    // Get font family from styles
+    // Get font family and style from the PDF font name
     let fontFamily = "Arial";
-    if (bestItem.fontName && textContent.styles?.[bestItem.fontName]) {
-      const style = textContent.styles[bestItem.fontName];
-      fontFamily = mapFontFamily(style.fontFamily || "Arial");
+    let bold = false;
+    let italic = false;
+    if (bestItem.fontName) {
+      // Detect bold/italic from the raw font name (e.g. "TimesNewRomanPS-BoldItalicMT")
+      const style = detectFontStyle(bestItem.fontName);
+      bold = style.bold;
+      italic = style.italic;
+
+      if (textContent.styles?.[bestItem.fontName]) {
+        const s = textContent.styles[bestItem.fontName];
+        fontFamily = mapFontFamily(s.fontFamily || bestItem.fontName);
+      } else {
+        fontFamily = mapFontFamily(bestItem.fontName);
+      }
     }
 
     // Font size: pdfjs renders glyph paths directly while fabric uses fillText
@@ -494,7 +553,7 @@ export function initPdfEditorTool() {
       }
     } catch { /* use default black */ }
 
-    return { fontFamily, fontSize: Math.max(8, fontSize), color };
+    return { fontFamily, fontSize: Math.max(8, fontSize), color, bold, italic };
   }
 
   /* ── Render PDF page ── */
@@ -821,12 +880,24 @@ export function initPdfEditorTool() {
     obj.set("fontFamily", detected.fontFamily);
     obj.set("fontSize", detected.fontSize);
     obj.set("fill", detected.color);
+    obj.set("fontWeight", detected.bold ? "bold" : "normal");
+    obj.set("fontStyle", detected.italic ? "italic" : "normal");
+
+    // Ensure the detected font is in the dropdown
+    if (!fontFamilySelect.querySelector(`option[value="${detected.fontFamily}"]`)) {
+      const opt = document.createElement("option");
+      opt.value = detected.fontFamily;
+      opt.textContent = detected.fontFamily;
+      fontFamilySelect.appendChild(opt);
+    }
 
     // Update UI controls
     fontFamilySelect.value = detected.fontFamily;
     fontInput.value = String(Math.round(detected.fontSize));
     colorInput.value = detected.color;
     colorHex.textContent = detected.color;
+    boldBtn.classList.toggle("active", detected.bold);
+    italicBtn.classList.toggle("active", detected.italic);
 
     fabricCanvas.renderAll();
   });
