@@ -2,7 +2,7 @@
 // Renders PDF pages with pdfjs-dist, lets users annotate with Fabric.js,
 // and exports the annotated PDF with pdf-lib.
 
-type PdeTool = "select" | "text" | "draw" | "highlight" | "erase" | "image";
+type PdeTool = "select" | "text" | "draw" | "highlight" | "image";
 
 export function initPdfEditorTool() {
   /* ── DOM refs ── */
@@ -32,10 +32,6 @@ export function initPdfEditorTool() {
   const colorHex = document.getElementById("pde-color-hex") as HTMLSpanElement;
   const textProps = document.getElementById("pde-text-props") as HTMLDivElement;
   const drawProps = document.getElementById("pde-draw-props") as HTMLDivElement;
-  const eraseProps = document.getElementById("pde-erase-props") as HTMLDivElement;
-  const eraseColorInput = document.getElementById("pde-erase-color") as HTMLInputElement;
-  const eraseColorHex = document.getElementById("pde-erase-color-hex") as HTMLSpanElement;
-  const erasePickBtn = document.getElementById("pde-erase-pick") as HTMLButtonElement;
   const brushInput = document.getElementById("pde-brush-size") as HTMLInputElement;
   const brushLabel = document.getElementById("pde-brush-label") as HTMLSpanElement;
   const fontInput = document.getElementById("pde-font-size") as HTMLInputElement;
@@ -75,10 +71,23 @@ export function initPdfEditorTool() {
   // Font detection state
   const pageTextContent: Map<number, any> = new Map();
 
-  // Erase tool state
-  let erasePickMode = false;
-  let eraseDragStart: { x: number; y: number } | null = null;
-  let eraseDragRect: any = null;
+  // Text editing state
+  interface TextEdit {
+    id: string;
+    originalStr: string;
+    pdfX: number;
+    pdfY: number;
+    fontSizePt: number;
+    fontName: string;
+    detectedFamily: string;
+    bold: boolean;
+    italic: boolean;
+    color: string;
+    newStr: string;
+    deleted: boolean;
+  }
+  const pageTextEdits: Map<number, TextEdit[]> = new Map();
+  let textEditCounter = 0;
 
   function getDefaults() {
     const brush = (() => { try { return parseInt(localStorage.getItem("convert-pde-brush") ?? "3"); } catch { return 3; } })();
@@ -114,6 +123,8 @@ export function initPdfEditorTool() {
       zoom = 1;
       pageAnnotations.clear();
       pageTextContent.clear();
+      pageTextEdits.clear();
+      textEditCounter = 0;
       undoStack = [];
       redoStack = [];
 
@@ -210,8 +221,6 @@ export function initPdfEditorTool() {
     // Show/hide property sections
     textProps.style.display = (activePdeTool === "text" || isTextObj) ? "" : "none";
     drawProps.style.display = activePdeTool === "draw" ? "" : "none";
-    eraseProps.style.display = activePdeTool === "erase" ? "" : "none";
-
     // Populate text properties from selected object
     if (isTextObj) {
       fontFamilySelect.value = obj.fontFamily || "Arial";
@@ -269,7 +278,27 @@ export function initPdfEditorTool() {
     // Track modifications for undo
     fabricCanvas.on("object:added", () => { if (!skipHistory) pushHistory(); scheduleThumbUpdate(); });
     fabricCanvas.on("object:modified", () => { if (!skipHistory) pushHistory(); scheduleThumbUpdate(); });
-    fabricCanvas.on("object:removed", () => { if (!skipHistory) pushHistory(); scheduleThumbUpdate(); });
+    fabricCanvas.on("object:removed", (opt: any) => {
+      if (!skipHistory) pushHistory();
+      scheduleThumbUpdate();
+      // Handle text edit deletion — mark edit as deleted and remove paired cover rect
+      const obj = opt.target;
+      if (obj?._pdeTextEditId && !obj._pdeCoverRect) {
+        const edits = pageTextEdits.get(currentPage);
+        if (edits) {
+          const edit = edits.find((e: TextEdit) => e.id === obj._pdeTextEditId);
+          if (edit) edit.deleted = true;
+        }
+        // Remove paired cover rect
+        const all = fabricCanvas.getObjects();
+        for (const o of all) {
+          if (o._pdeTextEditId === obj._pdeTextEditId && o._pdeCoverRect) {
+            fabricCanvas.remove(o);
+            break;
+          }
+        }
+      }
+    });
 
     // Selection state for delete button + properties panel
     fabricCanvas.on("selection:created", () => { deleteBtn.disabled = false; updatePropsPanel(); });
@@ -280,7 +309,21 @@ export function initPdfEditorTool() {
     fabricCanvas.on("text:changed", (opt: any) => {
       scheduleThumbUpdate();
       const obj = opt.target;
-      if (!obj || !bulletedObjects.has(obj) || bulletGuard) return;
+      if (!obj) return;
+
+      // Track text edit changes
+      if (obj._pdeTextEditId && !obj._pdeCoverRect) {
+        const edits = pageTextEdits.get(currentPage);
+        if (edits) {
+          const edit = edits.find((e: TextEdit) => e.id === obj._pdeTextEditId);
+          if (edit) {
+            edit.newStr = obj.text || "";
+            edit.deleted = !edit.newStr;
+          }
+        }
+      }
+
+      if (!bulletedObjects.has(obj) || bulletGuard) return;
       bulletGuard = true;
       const lines = (obj.text as string).split("\n");
       let changed = false;
@@ -297,15 +340,87 @@ export function initPdfEditorTool() {
       bulletGuard = false;
     });
 
-    // Click to add text
+    // Click to add or edit text
     fabricCanvas.on("mouse:down", (opt: any) => {
       if (activePdeTool === "text" && !opt.target) {
         const fabricMod = fabricModule as any;
         const IText = fabricMod.IText || fabricMod.default?.IText;
+        const Rect = fabricMod.Rect || fabricMod.default?.Rect;
         const defaults = getDefaults();
         const pointer = fabricCanvas.getViewportPoint(opt.e);
-        const initialText = bulletModeActive ? "• " : "Type here";
 
+        // Check if clicking on existing PDF text
+        const hitItem = findTextItemAtPoint(pointer.x, pointer.y);
+        if (hitItem) {
+          // Check if this text was already edited
+          const existingEdits = pageTextEdits.get(currentPage) || [];
+          const alreadyEdited = existingEdits.find(e =>
+            Math.abs(e.pdfX - hitItem.pdfX) < 1 && Math.abs(e.pdfY - hitItem.pdfY) < 1
+          );
+          if (alreadyEdited) {
+            // Already has an edit object on canvas — let user click it normally
+          } else {
+            // Create a cover rect matching the background color
+            const bgColor = sampleBgColor(hitItem.canvasLeft, hitItem.canvasTop, hitItem.width, hitItem.height);
+            const editId = `textedit-${++textEditCounter}`;
+
+            const coverRect = new Rect({
+              left: hitItem.canvasLeft,
+              top: hitItem.canvasTop,
+              width: hitItem.width,
+              height: hitItem.height,
+              fill: bgColor,
+              stroke: "transparent",
+              strokeWidth: 0,
+              selectable: false,
+              evented: false,
+              _pdeTextEditId: editId,
+              _pdeCoverRect: true,
+            });
+            fabricCanvas.add(coverRect);
+
+            // Create editable IText with matched font
+            const editText = new IText(hitItem.str, {
+              left: hitItem.canvasLeft,
+              top: hitItem.canvasTop,
+              fontSize: hitItem.fontSize,
+              fill: hitItem.color,
+              fontFamily: hitItem.fontFamily,
+              fontWeight: hitItem.bold ? "bold" : "normal",
+              fontStyle: hitItem.italic ? "italic" : "normal",
+              editable: true,
+              _pdeTextEditId: editId,
+              _pdeCoverRect: false,
+            });
+
+            fabricCanvas.add(editText);
+            fabricCanvas.setActiveObject(editText);
+            editText.enterEditing();
+            editText.selectAll();
+
+            // Record the text edit
+            const textEdit: TextEdit = {
+              id: editId,
+              originalStr: hitItem.str,
+              pdfX: hitItem.pdfX,
+              pdfY: hitItem.pdfY,
+              fontSizePt: hitItem.fontSizePt,
+              fontName: hitItem.fontName,
+              detectedFamily: hitItem.fontFamily,
+              bold: hitItem.bold,
+              italic: hitItem.italic,
+              color: hitItem.color,
+              newStr: hitItem.str,
+              deleted: false,
+            };
+            if (!pageTextEdits.has(currentPage)) pageTextEdits.set(currentPage, []);
+            pageTextEdits.get(currentPage)!.push(textEdit);
+            return;
+          }
+        }
+
+        // No existing text hit — create new text
+        const initialText = bulletModeActive ? "• " : "Type here";
         const text = new IText(initialText, {
           left: pointer.x,
           top: pointer.y,
@@ -341,70 +456,9 @@ export function initPdfEditorTool() {
         });
         fabricCanvas.add(rect);
         fabricCanvas.setActiveObject(rect);
-      } else if (activePdeTool === "erase" && !opt.target) {
-        // Erase tool: eyedropper pick mode
-        if (erasePickMode) {
-          const pointer = fabricCanvas.getViewportPoint(opt.e);
-          const ctx = bgCanvas.getContext("2d")!;
-          const px = ctx.getImageData(Math.round(pointer.x), Math.round(pointer.y), 1, 1).data;
-          const hex = "#" + [px[0], px[1], px[2]].map(c => c.toString(16).padStart(2, "0")).join("");
-          eraseColorInput.value = hex;
-          eraseColorHex.textContent = hex;
-          erasePickMode = false;
-          erasePickBtn.classList.remove("active");
-          fabricCanvas.defaultCursor = "crosshair";
-          return;
-        }
-        // Start drag to draw erase rect
-        const pointer = fabricCanvas.getViewportPoint(opt.e);
-        eraseDragStart = { x: pointer.x, y: pointer.y };
-        const fabricMod = fabricModule as any;
-        const Rect = fabricMod.Rect || fabricMod.default?.Rect;
-        eraseDragRect = new Rect({
-          left: pointer.x,
-          top: pointer.y,
-          width: 0,
-          height: 0,
-          fill: eraseColorInput.value,
-          stroke: "transparent",
-          strokeWidth: 0,
-          selectable: false,
-          evented: false,
-          opacity: 1,
-        });
-        fabricCanvas.add(eraseDragRect);
       }
     });
 
-    // Erase tool: drag to resize
-    fabricCanvas.on("mouse:move", (opt: any) => {
-      if (activePdeTool !== "erase" || !eraseDragStart || !eraseDragRect) return;
-      const pointer = fabricCanvas.getViewportPoint(opt.e);
-      const left = Math.min(eraseDragStart.x, pointer.x);
-      const top = Math.min(eraseDragStart.y, pointer.y);
-      const width = Math.abs(pointer.x - eraseDragStart.x);
-      const height = Math.abs(pointer.y - eraseDragStart.y);
-      eraseDragRect.set({ left, top, width, height });
-      fabricCanvas.renderAll();
-    });
-
-    // Erase tool: finish drag
-    fabricCanvas.on("mouse:up", () => {
-      if (activePdeTool !== "erase" || !eraseDragStart || !eraseDragRect) return;
-      const w = eraseDragRect.width;
-      const h = eraseDragRect.height;
-      if (w < 3 && h < 3) {
-        // Too small, remove it
-        fabricCanvas.remove(eraseDragRect);
-      } else {
-        // Make it selectable now
-        eraseDragRect.set({ selectable: true, evented: true });
-        fabricCanvas.setActiveObject(eraseDragRect);
-      }
-      eraseDragStart = null;
-      eraseDragRect = null;
-      fabricCanvas.renderAll();
-    });
 
     // Image tool — convert to data URL so it survives JSON serialization
     imgInput.addEventListener("change", async () => {
@@ -585,6 +639,124 @@ export function initPdfEditorTool() {
     return { fontFamily, fontSize: Math.max(8, fontSize), color, bold, italic };
   }
 
+  /* ── Text editing: hit test + background sampling ── */
+
+  function findTextItemAtPoint(canvasX: number, canvasY: number): {
+    str: string; pdfX: number; pdfY: number; canvasLeft: number; canvasTop: number;
+    width: number; height: number; fontFamily: string; fontSize: number; fontSizePt: number;
+    fontName: string; color: string; bold: boolean; italic: boolean;
+  } | null {
+    const textContent = pageTextContent.get(currentPage);
+    if (!textContent || !textContent._vpTransform) return null;
+
+    const scale = zoom * 1.5;
+    const vt = textContent._vpTransform;
+
+    for (const item of textContent.items) {
+      if (!item.str || !item.transform) continue;
+      const pdfX = item.transform[4];
+      const pdfY = item.transform[5];
+
+      // Convert PDF coords to canvas coords
+      const cx = (vt[0] * pdfX + vt[2] * pdfY + vt[4]) * scale;
+      const cy = (vt[1] * pdfX + vt[3] * pdfY + vt[5]) * scale;
+
+      // Compute text bounding box in canvas space
+      const pdfPts = Math.abs(item.transform[0]) || Math.abs(item.transform[3]);
+      const glyphH = pdfPts * scale;
+      const textW = (item.width ?? 0) * scale;
+
+      // Bounding box: text baseline is at cy, text extends upward
+      const boxLeft = cx;
+      const boxTop = cy - glyphH;
+      const boxRight = cx + textW;
+      const boxBottom = cy + glyphH * 0.3; // small descender allowance
+
+      if (canvasX >= boxLeft - 2 && canvasX <= boxRight + 2 &&
+          canvasY >= boxTop - 2 && canvasY <= boxBottom + 2) {
+        // Hit! Get font info
+        let fontFamily = "Arial";
+        let bold = false;
+        let italic = false;
+        let fontName = item.fontName || "";
+        if (fontName) {
+          const style = detectFontStyle(fontName);
+          bold = style.bold;
+          italic = style.italic;
+          if (textContent.styles?.[fontName]) {
+            fontFamily = mapFontFamily(textContent.styles[fontName].fontFamily || fontName);
+          } else {
+            fontFamily = mapFontFamily(fontName);
+          }
+        }
+
+        const fontSize = pdfPts * (96 / 72) * scale;
+
+        // Sample text color
+        let color = "#000000";
+        try {
+          const ctx = bgCanvas.getContext("2d")!;
+          let darkest = 255;
+          let darkR = 0, darkG = 0, darkB = 0;
+          for (let dy = -0.6; dy <= -0.1; dy += 0.12) {
+            for (let dx = 0.2; dx <= 0.8; dx += 0.15) {
+              const sx = Math.round(cx + glyphH * dx);
+              const sy = Math.round(cy + glyphH * dy);
+              if (sx < 0 || sy < 0 || sx >= bgCanvas.width || sy >= bgCanvas.height) continue;
+              const px = ctx.getImageData(sx, sy, 1, 1).data;
+              const brightness = px[0] * 0.299 + px[1] * 0.587 + px[2] * 0.114;
+              if (brightness < darkest) {
+                darkest = brightness;
+                darkR = px[0]; darkG = px[1]; darkB = px[2];
+              }
+            }
+          }
+          if (darkest < 200) {
+            color = "#" + [darkR, darkG, darkB].map(c => c.toString(16).padStart(2, "0")).join("");
+          }
+        } catch { /* default black */ }
+
+        return {
+          str: item.str, pdfX, pdfY,
+          canvasLeft: boxLeft, canvasTop: boxTop,
+          width: Math.max(textW, 20), height: glyphH * 1.3,
+          fontFamily, fontSize: Math.max(8, fontSize), fontSizePt: pdfPts,
+          fontName, color, bold, italic,
+        };
+      }
+    }
+    return null;
+  }
+
+  function sampleBgColor(x: number, y: number, w: number, h: number): string {
+    try {
+      const ctx = bgCanvas.getContext("2d")!;
+      // Sample pixels around the edges of the bounding box (background, not text)
+      let totalR = 0, totalG = 0, totalB = 0, count = 0;
+      const offsets = [
+        [x - 3, y + h / 2], [x + w + 3, y + h / 2],       // left/right of box
+        [x + w / 2, y - 3], [x + w / 2, y + h + 3],       // above/below box
+        [x - 3, y - 3], [x + w + 3, y - 3],                // corners above
+        [x - 3, y + h + 3], [x + w + 3, y + h + 3],       // corners below
+      ];
+      for (const [sx, sy] of offsets) {
+        const px = Math.round(sx);
+        const py = Math.round(sy);
+        if (px < 0 || py < 0 || px >= bgCanvas.width || py >= bgCanvas.height) continue;
+        const pd = ctx.getImageData(px, py, 1, 1).data;
+        totalR += pd[0]; totalG += pd[1]; totalB += pd[2];
+        count++;
+      }
+      if (count > 0) {
+        const r = Math.round(totalR / count);
+        const g = Math.round(totalG / count);
+        const b = Math.round(totalB / count);
+        return "#" + [r, g, b].map(c => c.toString(16).padStart(2, "0")).join("");
+      }
+    } catch { /* fallback */ }
+    return "#ffffff";
+  }
+
   /* ── Render PDF page ── */
   async function renderPage() {
     if (!pdfDoc || !fabricCanvas) return;
@@ -630,7 +802,7 @@ export function initPdfEditorTool() {
 
   function saveCurrentAnnotations() {
     if (!fabricCanvas) return;
-    const json = JSON.stringify(fabricCanvas.toJSON());
+    const json = JSON.stringify(fabricCanvas.toJSON(["_pdeTextEditId", "_pdeCoverRect"]));
     pageAnnotations.set(currentPage, json);
   }
 
@@ -652,7 +824,7 @@ export function initPdfEditorTool() {
 
   /* ── Undo/Redo ── */
   function pushHistory() {
-    const state = JSON.stringify(fabricCanvas.toJSON());
+    const state = JSON.stringify(fabricCanvas.toJSON(["_pdeTextEditId", "_pdeCoverRect"]));
     undoStack.push(state);
     redoStack = [];
     if (undoStack.length > 50) undoStack.shift();
@@ -751,19 +923,7 @@ export function initPdfEditorTool() {
         if (tool === "select") {
           fabricCanvas.selection = true;
         }
-        // Set cursor for erase tool
-        if (tool === "erase") {
-          fabricCanvas.defaultCursor = "crosshair";
-          fabricCanvas.selection = false;
-        } else {
-          fabricCanvas.defaultCursor = "default";
-        }
-      }
-
-      // Reset erase pick mode when switching tools
-      if (tool !== "erase") {
-        erasePickMode = false;
-        erasePickBtn.classList.remove("active");
+        fabricCanvas.defaultCursor = "default";
       }
 
       if (tool === "image") {
@@ -930,24 +1090,6 @@ export function initPdfEditorTool() {
     fabricCanvas.renderAll();
   });
 
-  // Erase color
-  eraseColorInput.addEventListener("input", () => {
-    eraseColorHex.textContent = eraseColorInput.value;
-    const obj = fabricCanvas?.getActiveObject();
-    if (obj && obj.type === "rect") {
-      obj.set("fill", eraseColorInput.value);
-      fabricCanvas.renderAll();
-    }
-  });
-
-  // Erase eyedropper — pick color from the PDF background canvas
-  erasePickBtn.addEventListener("click", () => {
-    erasePickMode = !erasePickMode;
-    erasePickBtn.classList.toggle("active", erasePickMode);
-    if (fabricCanvas) {
-      fabricCanvas.defaultCursor = erasePickMode ? "copy" : "crosshair";
-    }
-  });
 
   // Opacity
   opacityInput.addEventListener("input", () => {
@@ -982,6 +1124,7 @@ export function initPdfEditorTool() {
   /* ── Capture annotation overlay as PNG for a given page ── */
   // Renders annotations on the live fabric canvas by navigating to that page,
   // captures the canvas, then returns to the original page.
+  // Hides text-edit objects so they don't bake into the image overlay.
   async function capturePageAnnotations(): Promise<Map<number, string>> {
     const captures = new Map<number, string>();
     const origPage = currentPage;
@@ -993,21 +1136,209 @@ export function initPdfEditorTool() {
       const parsed = JSON.parse(annotJson);
       if (!parsed.objects || parsed.objects.length === 0) continue;
 
+      // Check if this page has only text-edit objects (no regular annotations)
+      const hasNonEditObjects = parsed.objects.some((o: any) => !o._pdeTextEditId);
+      if (!hasNonEditObjects) continue;
+
       // Navigate to the page to load its annotations on the live canvas
       currentPage = pageNum;
       await renderPage();
       // Wait a tick for fabric to finish rendering
       await new Promise(r => setTimeout(r, 50));
 
+      // Temporarily hide text-edit objects before capture
+      const hiddenObjs: any[] = [];
+      for (const obj of fabricCanvas.getObjects()) {
+        if (obj._pdeTextEditId) {
+          obj.set("visible", false);
+          hiddenObjs.push(obj);
+        }
+      }
+      fabricCanvas.renderAll();
+
       // Capture the fabric canvas (annotations only, transparent bg)
       const dataUrl = fabricCanvas.toDataURL({ format: "png", multiplier: 1 });
       captures.set(pageNum, dataUrl);
+
+      // Restore visibility
+      for (const obj of hiddenObjs) obj.set("visible", true);
+      fabricCanvas.renderAll();
     }
 
     // Restore original page
     currentPage = origPage;
     await renderPage();
     return captures;
+  }
+
+  /* ── Font mapping for pdf-lib export ── */
+  function mapToStandardFont(family: string, bold: boolean, italic: boolean): string {
+    const lower = family.toLowerCase();
+    let base: string;
+    if (lower.includes("courier") || lower.includes("consolas") || lower.includes("mono")) {
+      base = "Courier";
+    } else if (lower.includes("times") || lower.includes("georgia") || lower.includes("serif") ||
+               lower.includes("palatino") || lower.includes("garamond") || lower.includes("cambria") ||
+               lower.includes("book")) {
+      base = "TimesRoman";
+    } else {
+      base = "Helvetica";
+    }
+
+    if (base === "Courier") {
+      if (bold && italic) return "CourierBoldOblique";
+      if (bold) return "CourierBold";
+      if (italic) return "CourierOblique";
+      return "Courier";
+    }
+    if (base === "TimesRoman") {
+      if (bold && italic) return "TimesRomanBoldItalic";
+      if (bold) return "TimesRomanBold";
+      if (italic) return "TimesRomanItalic";
+      return "TimesRoman";
+    }
+    // Helvetica
+    if (bold && italic) return "HelveticaBoldOblique";
+    if (bold) return "HelveticaBold";
+    if (italic) return "HelveticaOblique";
+    return "Helvetica";
+  }
+
+  /* ── Apply text edits to PDF content streams ── */
+  async function applyTextEdits(outPdf: any, pdfLibModule: any) {
+    const { PDFName, PDFArray, PDFRawStream } = pdfLibModule;
+    const { removeTextFromStream } = await import("./pdf-content-stream");
+    const pako = await import("pako");
+
+    const pages = outPdf.getPages();
+
+    for (const [pageNum, edits] of pageTextEdits) {
+      if (!edits || edits.length === 0) continue;
+      const pageIdx = pageNum - 1;
+      if (pageIdx < 0 || pageIdx >= pages.length) continue;
+
+      const page = pages[pageIdx];
+
+      // Collect deletion edits (remove original text from content stream)
+      const deleteEdits = edits.filter(e => e.deleted || e.newStr !== e.originalStr);
+
+      if (deleteEdits.length > 0) {
+        try {
+          const pageNode = page.node;
+          const contentsRef = pageNode.get(PDFName.of("Contents"));
+
+          if (contentsRef) {
+            // Collect all stream refs
+            const streamRefs: any[] = [];
+            if (contentsRef instanceof PDFArray) {
+              for (let i = 0; i < contentsRef.size(); i++) {
+                streamRefs.push(contentsRef.get(i));
+              }
+            } else {
+              streamRefs.push(contentsRef);
+            }
+
+            for (const ref of streamRefs) {
+              const streamObj = outPdf.context.lookup(ref);
+              if (!streamObj) continue;
+
+              // Get raw bytes from the stream (duck-typed for any pdf-lib stream)
+              let streamBytes: Uint8Array;
+              try {
+                if (typeof streamObj.getContents === "function") {
+                  streamBytes = streamObj.getContents();
+                } else if (streamObj.contents) {
+                  streamBytes = streamObj.contents;
+                } else {
+                  continue;
+                }
+              } catch {
+                continue;
+              }
+
+              // Try to inflate if FlateDecode compressed
+              let streamText: string;
+              let wasCompressed = false;
+              try {
+                const inflated = pako.inflate(streamBytes);
+                streamText = new TextDecoder("latin1").decode(inflated);
+                wasCompressed = true;
+              } catch {
+                streamText = new TextDecoder("latin1").decode(streamBytes);
+              }
+
+              // Apply text removals
+              const editPositions = deleteEdits.map(e => ({
+                pdfX: e.pdfX,
+                pdfY: e.pdfY,
+                tolerance: 2.0,
+                delete: true,
+              }));
+
+              const modified = removeTextFromStream(streamText, editPositions);
+              if (modified === streamText) continue;
+
+              // Re-encode
+              const modifiedBytes = new Uint8Array(Array.from(modified, c => c.charCodeAt(0)));
+              let finalBytes: Uint8Array;
+              if (wasCompressed) {
+                finalBytes = pako.deflate(modifiedBytes);
+              } else {
+                finalBytes = modifiedBytes;
+              }
+
+              // Replace the stream contents in the PDF
+              // Modify the existing dict in-place to preserve all other keys
+              const dict = streamObj.dict;
+              dict.set(PDFName.of("Length"), outPdf.context.obj(finalBytes.length));
+              if (wasCompressed) {
+                dict.set(PDFName.of("Filter"), PDFName.of("FlateDecode"));
+              } else {
+                dict.delete(PDFName.of("Filter"));
+              }
+              const newStream = PDFRawStream.of(dict, finalBytes);
+              outPdf.context.assign(ref, newStream);
+            }
+          }
+        } catch (err) {
+          console.warn(`[PDF Editor] Content stream edit failed for page ${pageNum}, using overlay fallback:`, err);
+          // Fall through — replacement text will still be drawn, original may remain
+        }
+      }
+
+      // Draw replacement text for edits that changed (not just deleted)
+      const { StandardFonts } = pdfLibModule;
+      const { rgb } = pdfLibModule;
+
+      for (const edit of edits) {
+        if (edit.deleted) continue;
+        if (edit.newStr === edit.originalStr) continue;
+        if (!edit.newStr) continue;
+
+        try {
+          const fontKey = mapToStandardFont(edit.detectedFamily, edit.bold, edit.italic);
+          const font = await outPdf.embedFont(StandardFonts[fontKey] || StandardFonts.Helvetica);
+
+          // Parse color
+          let r = 0, g = 0, b = 0;
+          if (edit.color.startsWith("#") && edit.color.length === 7) {
+            r = parseInt(edit.color.slice(1, 3), 16) / 255;
+            g = parseInt(edit.color.slice(3, 5), 16) / 255;
+            b = parseInt(edit.color.slice(5, 7), 16) / 255;
+          }
+
+          page.drawText(edit.newStr, {
+            x: edit.pdfX,
+            y: edit.pdfY,
+            size: edit.fontSizePt,
+            font,
+            color: rgb(r, g, b),
+          });
+        } catch (err) {
+          console.warn(`[PDF Editor] Failed to draw replacement text for "${edit.newStr}":`, err);
+        }
+      }
+    }
   }
 
   /* ── Download annotated PDF ── */
@@ -1020,11 +1351,20 @@ export function initPdfEditorTool() {
     try {
       saveCurrentAnnotations();
 
-      // Capture all annotated pages as PNGs using the live fabric canvas
+      // Check if there are any text edits
+      let hasTextEdits = false;
+      for (const [, edits] of pageTextEdits) {
+        if (edits.some(e => e.deleted || e.newStr !== e.originalStr)) {
+          hasTextEdits = true;
+          break;
+        }
+      }
+
+      // Capture all annotated pages as PNGs (excluding text-edit objects)
       const captures = await capturePageAnnotations();
 
-      if (captures.size === 0) {
-        // No annotations — just download the original
+      if (captures.size === 0 && !hasTextEdits) {
+        // No annotations and no text edits — just download the original
         const blob = new Blob([pdfBytes.buffer as ArrayBuffer], { type: "application/pdf" });
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
@@ -1034,9 +1374,16 @@ export function initPdfEditorTool() {
         return;
       }
 
-      const { PDFDocument } = await import("pdf-lib");
+      const pdfLibModule = await import("pdf-lib");
+      const { PDFDocument } = pdfLibModule;
       const outPdf = await PDFDocument.load(pdfBytes);
 
+      // Apply text edits to content streams
+      if (hasTextEdits) {
+        await applyTextEdits(outPdf, pdfLibModule);
+      }
+
+      // Composite PNG overlays for non-text annotations
       for (const [pageNum, dataUrl] of captures) {
         const pngBytes = Uint8Array.from(atob(dataUrl.split(",")[1]), c => c.charCodeAt(0));
         const pngImage = await outPdf.embedPng(pngBytes);
