@@ -40,6 +40,7 @@ export function initPdfEditorTool() {
   const italicBtn = document.getElementById("pde-italic") as HTMLButtonElement;
   const underlineBtn = document.getElementById("pde-underline") as HTMLButtonElement;
   const strikeBtn = document.getElementById("pde-strikethrough") as HTMLButtonElement;
+  const bulletBtn = document.getElementById("pde-bullet") as HTMLButtonElement;
   const alignBtns = document.querySelectorAll<HTMLButtonElement>("[data-pde-align]");
   const opacityInput = document.getElementById("pde-opacity") as HTMLInputElement;
   const opacityLabel = document.getElementById("pde-opacity-label") as HTMLSpanElement;
@@ -60,6 +61,14 @@ export function initPdfEditorTool() {
   let undoStack: string[] = [];
   let redoStack: string[] = [];
   let skipHistory = false;
+
+  // Bullet point state
+  const bulletedObjects = new WeakSet<any>();
+  let bulletModeActive = false;
+  let bulletGuard = false;
+
+  // Font detection state
+  const pageTextContent: Map<number, any> = new Map();
 
   function getDefaults() {
     const brush = (() => { try { return parseInt(localStorage.getItem("convert-pde-brush") ?? "3"); } catch { return 3; } })();
@@ -94,6 +103,7 @@ export function initPdfEditorTool() {
       currentPage = 1;
       zoom = 1;
       pageAnnotations.clear();
+      pageTextContent.clear();
       undoStack = [];
       redoStack = [];
 
@@ -171,6 +181,7 @@ export function initPdfEditorTool() {
       italicBtn.classList.toggle("active", obj.fontStyle === "italic");
       underlineBtn.classList.toggle("active", !!obj.underline);
       strikeBtn.classList.toggle("active", !!obj.linethrough);
+      bulletBtn.classList.toggle("active", bulletedObjects.has(obj));
       alignBtns.forEach(b => b.classList.toggle("active", b.dataset.pdeAlign === (obj.textAlign || "left")));
       if (obj.fill && typeof obj.fill === "string") {
         colorInput.value = obj.fill;
@@ -226,6 +237,26 @@ export function initPdfEditorTool() {
     fabricCanvas.on("selection:updated", () => { deleteBtn.disabled = false; updatePropsPanel(); });
     fabricCanvas.on("selection:cleared", () => { deleteBtn.disabled = true; updatePropsPanel(); });
 
+    // Auto-bullet on text changes
+    fabricCanvas.on("text:changed", (opt: any) => {
+      const obj = opt.target;
+      if (!obj || !bulletedObjects.has(obj) || bulletGuard) return;
+      bulletGuard = true;
+      const lines = (obj.text as string).split("\n");
+      let changed = false;
+      for (let i = 0; i < lines.length; i++) {
+        if (!lines[i].startsWith("• ") && lines[i] !== "•") {
+          lines[i] = "• " + lines[i];
+          changed = true;
+        }
+      }
+      if (changed) {
+        obj.set("text", lines.join("\n"));
+        fabricCanvas.renderAll();
+      }
+      bulletGuard = false;
+    });
+
     // Click to add text
     fabricCanvas.on("mouse:down", (opt: any) => {
       if (activePdeTool === "text" && !opt.target) {
@@ -233,17 +264,40 @@ export function initPdfEditorTool() {
         const IText = fabricMod.IText || fabricMod.default?.IText;
         const defaults = getDefaults();
         const pointer = fabricCanvas.getViewportPoint(opt.e);
-        const text = new IText("Type here", {
+
+        // Detect font from nearest PDF text
+        let detectedFont: string | null = null;
+        let detectedSize: number | null = null;
+        const detected = detectNearestFont(pointer.x, pointer.y);
+        if (detected) {
+          detectedFont = detected.fontFamily;
+          detectedSize = detected.fontSize;
+        }
+
+        const fontSize = detectedSize || parseInt(fontInput.value) || defaults.font;
+        const fontFamily = detectedFont || fontFamilySelect.value;
+        const initialText = bulletModeActive ? "• " : "Type here";
+
+        const text = new IText(initialText, {
           left: pointer.x,
           top: pointer.y,
-          fontSize: parseInt(fontInput.value) || defaults.font,
+          fontSize,
           fill: colorInput.value,
-          fontFamily: fontFamilySelect.value,
+          fontFamily,
           editable: true,
         });
+
+        if (bulletModeActive) bulletedObjects.add(text);
+
+        // Update UI controls to reflect detected font
+        if (detectedFont) fontFamilySelect.value = detectedFont;
+        if (detectedSize) fontInput.value = String(Math.round(detectedSize));
+
         fabricCanvas.add(text);
         fabricCanvas.setActiveObject(text);
         text.enterEditing();
+        // Select all default text for easy replacement
+        if (!bulletModeActive) text.selectAll();
       } else if (activePdeTool === "highlight" && !opt.target) {
         const fabricMod = fabricModule as any;
         const Rect = fabricMod.Rect || fabricMod.default?.Rect;
@@ -290,6 +344,71 @@ export function initPdfEditorTool() {
     });
   }
 
+  /* ── Font detection helpers ── */
+  function mapFontFamily(pdfFamily: string): string {
+    const lower = pdfFamily.toLowerCase();
+    // Check specific font names first
+    if (lower.includes("helvetica")) return "Helvetica";
+    if (lower.includes("arial")) return "Arial";
+    if (lower.includes("times")) return "Times New Roman";
+    if (lower.includes("courier")) return "Courier New";
+    if (lower.includes("georgia")) return "Georgia";
+    if (lower.includes("verdana")) return "Verdana";
+    // Generic families
+    if (lower === "serif" || (lower.includes("serif") && !lower.includes("sans"))) return "Times New Roman";
+    if (lower === "sans-serif" || lower.includes("sans")) return "Arial";
+    if (lower === "monospace" || lower.includes("mono")) return "Courier New";
+    return "Arial";
+  }
+
+  function detectNearestFont(canvasX: number, canvasY: number): { fontFamily: string; fontSize: number } | null {
+    const textContent = pageTextContent.get(currentPage);
+    if (!textContent) return null;
+
+    let bestDist = Infinity;
+    let bestItem: any = null;
+
+    for (const item of textContent.items) {
+      if (!item.str || !item.transform) continue;
+      // item.transform is [scaleX, skewX, skewY, scaleY, x, y] in PDF space
+      // Convert PDF coords to canvas coords using viewport transform
+      const pdfX = item.transform[4];
+      const pdfY = item.transform[5];
+
+      // Apply the viewport transform used when rendering the page
+      const scale = zoom * 1.5;
+      // PDF space → canvas space: pdfjs viewport does this internally
+      // The viewport transform is an affine matrix; approximate with scale + translate
+      // pdfjs uses: canvasX = pdfX * scale, canvasY = (pageHeight - pdfY) * scale
+      const cx = pdfX * scale;
+      // PDF Y is bottom-up, canvas Y is top-down. We need page height.
+      // Approximate: just use distance in X primarily, and invert Y with estimated height
+      const pageHeightPts = textContent._pageHeight || 842; // A4 default
+      const cy = (pageHeightPts - pdfY) * scale;
+
+      const dist = Math.sqrt((cx - canvasX) ** 2 + (cy - canvasY) ** 2);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestItem = item;
+      }
+    }
+
+    if (!bestItem || bestDist > 100) return null;
+
+    // Get font family from styles
+    let fontFamily = "Arial";
+    if (bestItem.fontName && textContent.styles?.[bestItem.fontName]) {
+      const style = textContent.styles[bestItem.fontName];
+      fontFamily = mapFontFamily(style.fontFamily || "Arial");
+    }
+
+    // Get font size from transform matrix
+    const pdfPts = Math.abs(bestItem.transform[3]) || Math.abs(bestItem.transform[0]);
+    const fontSize = pdfPts * zoom * 1.5;
+
+    return { fontFamily, fontSize: Math.max(8, fontSize) };
+  }
+
   /* ── Render PDF page ── */
   async function renderPage() {
     if (!pdfDoc || !fabricCanvas) return;
@@ -313,6 +432,17 @@ export function initPdfEditorTool() {
     const ctx = bgCanvas.getContext("2d")!;
     ctx.clearRect(0, 0, w, h);
     await page.render({ canvasContext: ctx, viewport: vp }).promise;
+
+    // Extract text content for font detection (cache per page)
+    if (!pageTextContent.has(currentPage)) {
+      try {
+        const tc = await page.getTextContent();
+        // Store page height for coordinate conversion
+        const rawVp = page.getViewport({ scale: 1 });
+        tc._pageHeight = rawVp.height;
+        pageTextContent.set(currentPage, tc);
+      } catch { /* non-critical */ }
+    }
 
     // Restore annotations for this page
     restoreAnnotations();
@@ -532,6 +662,34 @@ export function initPdfEditorTool() {
       obj.set("linethrough", !obj.linethrough);
       strikeBtn.classList.toggle("active", !!obj.linethrough);
       fabricCanvas.renderAll();
+    }
+  });
+
+  // Bullet toggle
+  bulletBtn.addEventListener("click", () => {
+    const obj = fabricCanvas?.getActiveObject();
+    if (obj && (obj.type === "i-text" || obj.type === "textbox" || obj.type === "text")) {
+      // Toggle bullets on existing selected text
+      if (bulletedObjects.has(obj)) {
+        // Remove bullets
+        bulletedObjects.delete(obj);
+        const lines = (obj.text as string).split("\n");
+        const cleaned = lines.map((l: string) => l.startsWith("• ") ? l.slice(2) : l === "•" ? "" : l);
+        obj.set("text", cleaned.join("\n"));
+        bulletBtn.classList.remove("active");
+      } else {
+        // Add bullets
+        bulletedObjects.add(obj);
+        const lines = (obj.text as string).split("\n");
+        const bulleted = lines.map((l: string) => l.startsWith("• ") ? l : "• " + l);
+        obj.set("text", bulleted.join("\n"));
+        bulletBtn.classList.add("active");
+      }
+      fabricCanvas.renderAll();
+    } else {
+      // No text selected — toggle bullet mode for next new text
+      bulletModeActive = !bulletModeActive;
+      bulletBtn.classList.toggle("active", bulletModeActive);
     }
   });
 
