@@ -45,6 +45,7 @@ export function initPdfEditorTool() {
   const underlineBtn = document.getElementById("pde-underline") as HTMLButtonElement;
   const strikeBtn = document.getElementById("pde-strikethrough") as HTMLButtonElement;
   const bulletBtn = document.getElementById("pde-bullet") as HTMLButtonElement;
+  const matchTextBtn = document.getElementById("pde-match-text") as HTMLButtonElement;
   const alignBtns = document.querySelectorAll<HTMLButtonElement>("[data-pde-align]");
   const opacityInput = document.getElementById("pde-opacity") as HTMLInputElement;
   const opacityLabel = document.getElementById("pde-opacity-label") as HTMLSpanElement;
@@ -274,39 +275,22 @@ export function initPdfEditorTool() {
         const IText = fabricMod.IText || fabricMod.default?.IText;
         const defaults = getDefaults();
         const pointer = fabricCanvas.getViewportPoint(opt.e);
-
-        // Detect font from nearest PDF text
-        let detectedFont: string | null = null;
-        let detectedSize: number | null = null;
-        const detected = detectNearestFont(pointer.x, pointer.y);
-        if (detected) {
-          detectedFont = detected.fontFamily;
-          detectedSize = detected.fontSize;
-        }
-
-        const fontSize = detectedSize || parseInt(fontInput.value) || defaults.font;
-        const fontFamily = detectedFont || fontFamilySelect.value;
         const initialText = bulletModeActive ? "• " : "Type here";
 
         const text = new IText(initialText, {
           left: pointer.x,
           top: pointer.y,
-          fontSize,
+          fontSize: parseInt(fontInput.value) || defaults.font,
           fill: colorInput.value,
-          fontFamily,
+          fontFamily: fontFamilySelect.value,
           editable: true,
         });
 
         if (bulletModeActive) bulletedObjects.add(text);
 
-        // Update UI controls to reflect detected font
-        if (detectedFont) fontFamilySelect.value = detectedFont;
-        if (detectedSize) fontInput.value = String(Math.round(detectedSize));
-
         fabricCanvas.add(text);
         fabricCanvas.setActiveObject(text);
         text.enterEditing();
-        // Select all default text for easy replacement
         if (!bulletModeActive) text.selectAll();
       } else if (activePdeTool === "highlight" && !opt.target) {
         const fabricMod = fabricModule as any;
@@ -438,27 +422,24 @@ export function initPdfEditorTool() {
     return "Arial";
   }
 
-  function detectNearestFont(canvasX: number, canvasY: number): { fontFamily: string; fontSize: number } | null {
+  function detectNearestFont(canvasX: number, canvasY: number): { fontFamily: string; fontSize: number; color: string } | null {
     const textContent = pageTextContent.get(currentPage);
     if (!textContent || !textContent._vpTransform) return null;
 
-    // The stored viewport transform is at scale=1. We rendered at zoom*1.5,
-    // so multiply it by the current scale to get PDF→canvas coords.
     const scale = zoom * 1.5;
     const vt = textContent._vpTransform; // [a, b, c, d, e, f] at scale=1
 
     let bestDist = Infinity;
     let bestItem: any = null;
+    let bestCx = 0;
+    let bestCy = 0;
 
     for (const item of textContent.items) {
       if (!item.str || !item.transform) continue;
-      // item.transform is [scaleX, skewX, skewY, scaleY, tx, ty] in PDF user space
       const pdfX = item.transform[4];
       const pdfY = item.transform[5];
 
-      // Apply viewport transform (scale=1) then multiply by render scale
-      // Affine: cx = (vt[0]*pdfX + vt[2]*pdfY + vt[4]) * scale
-      //         cy = (vt[1]*pdfX + vt[3]*pdfY + vt[5]) * scale
+      // Affine transform: PDF space → canvas pixels
       const cx = (vt[0] * pdfX + vt[2] * pdfY + vt[4]) * scale;
       const cy = (vt[1] * pdfX + vt[3] * pdfY + vt[5]) * scale;
 
@@ -466,10 +447,12 @@ export function initPdfEditorTool() {
       if (dist < bestDist) {
         bestDist = dist;
         bestItem = item;
+        bestCx = cx;
+        bestCy = cy;
       }
     }
 
-    if (!bestItem || bestDist > 150) return null;
+    if (!bestItem || bestDist > 300) return null;
 
     // Get font family from styles
     let fontFamily = "Arial";
@@ -478,12 +461,19 @@ export function initPdfEditorTool() {
       fontFamily = mapFontFamily(style.fontFamily || "Arial");
     }
 
-    // Get font size from transform matrix — Math.abs(transform[0]) or [3] is font size in PDF pts
+    // Font size from transform matrix
     const pdfPts = Math.abs(bestItem.transform[0]) || Math.abs(bestItem.transform[3]);
-    // Convert to fabric canvas pixels: PDF pts * render scale
     const fontSize = pdfPts * scale;
 
-    return { fontFamily, fontSize: Math.max(8, fontSize) };
+    // Sample text color from PDF background canvas at the matched text position
+    let color = "#000000";
+    try {
+      const ctx = bgCanvas.getContext("2d")!;
+      const px = ctx.getImageData(Math.round(bestCx), Math.round(bestCy), 1, 1).data;
+      color = "#" + [px[0], px[1], px[2]].map(c => c.toString(16).padStart(2, "0")).join("");
+    } catch { /* use default black */ }
+
+    return { fontFamily, fontSize: Math.max(8, fontSize), color };
   }
 
   /* ── Render PDF page ── */
@@ -797,6 +787,28 @@ export function initPdfEditorTool() {
       }
     });
   }
+
+  // Match surrounding text
+  matchTextBtn.addEventListener("click", () => {
+    const obj = fabricCanvas?.getActiveObject();
+    if (!obj || (obj.type !== "i-text" && obj.type !== "textbox" && obj.type !== "text")) return;
+
+    // Use the object's position to find the nearest PDF text
+    const detected = detectNearestFont(obj.left ?? 0, obj.top ?? 0);
+    if (!detected) return;
+
+    obj.set("fontFamily", detected.fontFamily);
+    obj.set("fontSize", detected.fontSize);
+    obj.set("fill", detected.color);
+
+    // Update UI controls
+    fontFamilySelect.value = detected.fontFamily;
+    fontInput.value = String(Math.round(detected.fontSize));
+    colorInput.value = detected.color;
+    colorHex.textContent = detected.color;
+
+    fabricCanvas.renderAll();
+  });
 
   // Erase color
   eraseColorInput.addEventListener("input", () => {

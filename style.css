@@ -3688,6 +3688,22 @@ body[data-tool="image"] #convert-button { display: none !important; }
   color: var(--accent);
   border-color: var(--accent);
 }
+.pde-match-btn {
+  width: 100%;
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.pde-match-btn:hover {
+  color: var(--text-main);
+  border-color: var(--accent);
+}
 .pde-prop-hint {
   font-size: 0.72rem;
   color: var(--text-muted);
