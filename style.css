@@ -3515,24 +3515,18 @@ body[data-tool="image"] #convert-button { display: none !important; }
   border-radius: var(--radius-sm);
   overflow: auto;
   background: var(--input-bg);
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
   min-height: 400px;
   max-height: 70vh;
 }
-#pde-canvas-wrap canvas {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-}
 #pde-bg-canvas {
-  z-index: 1;
+  display: block;
   pointer-events: none;
 }
-#pde-fabric-canvas {
-  z-index: 2;
+/* Fabric.js creates .canvas-container wrapper — position it over the PDF */
+#pde-canvas-wrap .canvas-container {
+  position: absolute !important;
+  top: 0;
+  left: 0;
 }
 
 .pde-nav-bar {

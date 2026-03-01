@@ -204,18 +204,23 @@ export function initPdfEditorTool() {
     const vp = page.getViewport({ scale: zoom * 1.5 }); // 1.5 base for quality
 
     // Size canvases
-    bgCanvas.width = vp.width;
-    bgCanvas.height = vp.height;
-    fabricCanvas.setDimensions({ width: vp.width, height: vp.height });
+    const w = Math.round(vp.width);
+    const h = Math.round(vp.height);
+    bgCanvas.width = w;
+    bgCanvas.height = h;
+    bgCanvas.style.width = `${w}px`;
+    bgCanvas.style.height = `${h}px`;
+    fabricCanvas.setDimensions({ width: w, height: h });
+
+    // Set wrapper to match page size so scrolling works
+    const wrap = document.getElementById("pde-canvas-wrap")!;
+    wrap.style.height = `${Math.min(h + 2, window.innerHeight * 0.7)}px`;
+    wrap.style.width = "100%";
 
     // Render PDF page to background canvas
     const ctx = bgCanvas.getContext("2d")!;
-    ctx.clearRect(0, 0, vp.width, vp.height);
+    ctx.clearRect(0, 0, w, h);
     await page.render({ canvasContext: ctx, viewport: vp }).promise;
-
-    // Set canvas wrap height
-    const wrap = document.getElementById("pde-canvas-wrap")!;
-    wrap.style.height = `${Math.min(vp.height + 2, window.innerHeight * 0.7)}px`;
 
     // Restore annotations for this page
     restoreAnnotations();
