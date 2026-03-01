@@ -680,9 +680,12 @@ export function initPdfEditorTool() {
     if (fabricCanvas?.freeDrawingBrush && fabricCanvas.isDrawingMode) {
       fabricCanvas.freeDrawingBrush.color = colorInput.value;
     }
-    // Apply to selected text object
     const obj = fabricCanvas?.getActiveObject();
-    if (obj && (obj.type === "i-text" || obj.type === "textbox" || obj.type === "text")) {
+    if (!obj) return;
+    if (obj.type === "i-text" || obj.type === "textbox" || obj.type === "text") {
+      obj.set("fill", colorInput.value);
+      fabricCanvas.renderAll();
+    } else if (obj.type === "rect") {
       obj.set("fill", colorInput.value);
       fabricCanvas.renderAll();
     }
@@ -798,9 +801,8 @@ export function initPdfEditorTool() {
   // Erase color
   eraseColorInput.addEventListener("input", () => {
     eraseColorHex.textContent = eraseColorInput.value;
-    // Apply to selected erase rect
     const obj = fabricCanvas?.getActiveObject();
-    if (obj && obj.type === "rect" && obj.strokeWidth === 0) {
+    if (obj && obj.type === "rect") {
       obj.set("fill", eraseColorInput.value);
       fabricCanvas.renderAll();
     }
