@@ -199,8 +199,11 @@ export function initSpeechTool() {
   const ttsProgressText = ttsProgress.querySelector(".speech-progress-text") as HTMLSpanElement;
   const freezeWarning = ttsProgress.querySelector(".speech-freeze-warning") as HTMLParagraphElement;
 
-  // Player refs
+  // Player refs (now in fullscreen overlay)
   const player = document.getElementById("speech-player") as HTMLDivElement;
+  const ttsOverlay = document.getElementById("speech-tts-overlay") as HTMLDivElement;
+  const ttsBackBtn = document.getElementById("speech-tts-back") as HTMLButtonElement;
+  const ttsSentenceEl = document.getElementById("speech-tts-sentence") as HTMLDivElement;
   const wordDisplay = document.getElementById("speech-word-display") as HTMLDivElement;
   const audio = document.getElementById("speech-audio") as HTMLAudioElement;
   const playBtn = document.getElementById("speech-play-btn") as HTMLButtonElement;
@@ -211,7 +214,7 @@ export function initSpeechTool() {
   const seekThumb = document.getElementById("speech-seek-thumb") as HTMLDivElement;
   const timeCurrent = document.getElementById("speech-time-current") as HTMLSpanElement;
   const timeDuration = document.getElementById("speech-time-duration") as HTMLSpanElement;
-  const speedDisplay = document.getElementById("speech-tts-speed-display") as HTMLSpanElement;
+  const speedDisplay = document.getElementById("speech-tts-speed-display") as HTMLSpanElement | null;
   const downloadBtn = document.getElementById("speech-download-mp3") as HTMLButtonElement;
 
   // STT refs
@@ -249,7 +252,7 @@ export function initSpeechTool() {
       ttsSpeed.value = savedSpeed;
       const label = `${parseFloat(savedSpeed).toFixed(1)}x`;
       ttsSpeedLabel.textContent = label;
-      speedDisplay.textContent = label;
+      if (speedDisplay) speedDisplay.textContent = label;
     }
 
     const savedModel = localStorage.getItem("convert-stt-model");
@@ -322,6 +325,13 @@ export function initSpeechTool() {
   let sttFile: File | null = null;
   let isRecording = false;
 
+  // Sentence teleprompter state
+  interface SentenceTiming { text: string; start: number; end: number; }
+  let sentenceTimings: SentenceTiming[] = [];
+  let activeSentenceIdx = -1;
+  let sentenceWordSpans: HTMLSpanElement[] = [];
+  let sentenceActiveIdx = -1;
+
   // Set initial play icon
   playBtn.innerHTML = PLAY_SVG;
 
@@ -355,7 +365,7 @@ export function initSpeechTool() {
   ttsSpeed.addEventListener("input", () => {
     const val = `${parseFloat(ttsSpeed.value).toFixed(1)}x`;
     ttsSpeedLabel.textContent = val;
-    speedDisplay.textContent = val;
+    if (speedDisplay) speedDisplay.textContent = val;
   });
 
   // ── Build word display with spans ──────────────────────────────────────
@@ -436,6 +446,40 @@ export function initSpeechTool() {
     return -1;
   }
 
+  function findSentenceAtTime(t: number): number {
+    for (let i = 0; i < sentenceTimings.length; i++) {
+      if (t >= sentenceTimings[i].start && t < sentenceTimings[i].end) return i;
+    }
+    if (sentenceTimings.length && t >= sentenceTimings[sentenceTimings.length - 1].start) return sentenceTimings.length - 1;
+    return -1;
+  }
+
+  function buildSentenceSpans(text: string) {
+    ttsSentenceEl.innerHTML = "";
+    sentenceWordSpans = [];
+    sentenceActiveIdx = -1;
+    const tokens = text.split(/(\s+)/);
+    for (const tok of tokens) {
+      if (/^\s+$/.test(tok)) {
+        ttsSentenceEl.appendChild(document.createTextNode(tok));
+      } else {
+        const sp = document.createElement("span");
+        sp.textContent = tok;
+        ttsSentenceEl.appendChild(sp);
+        sentenceWordSpans.push(sp);
+      }
+    }
+  }
+
+  function globalToSentenceWordIdx(globalIdx: number, sIdx: number): number {
+    if (sIdx < 0 || globalIdx < 0) return -1;
+    let count = 0;
+    for (let i = 0; i < sIdx; i++) {
+      count += sentenceTimings[i].text.trim().split(/\s+/).filter(Boolean).length;
+    }
+    return globalIdx - count;
+  }
+
   function updateWordHighlight() {
     const newIdx = findWordAtTime(audio.currentTime);
     if (newIdx !== activeWordIdx) {
@@ -450,6 +494,28 @@ export function initSpeechTool() {
         }
       }
       activeWordIdx = newIdx;
+    }
+    // Update sentence teleprompter
+    const sIdx = findSentenceAtTime(audio.currentTime);
+    if (sIdx !== activeSentenceIdx) {
+      activeSentenceIdx = sIdx;
+      if (sIdx >= 0) {
+        buildSentenceSpans(sentenceTimings[sIdx].text);
+      } else {
+        ttsSentenceEl.textContent = "";
+        sentenceWordSpans = [];
+      }
+    }
+    // Highlight current word in sentence
+    const localIdx = globalToSentenceWordIdx(newIdx, sIdx);
+    if (localIdx !== sentenceActiveIdx) {
+      if (sentenceActiveIdx >= 0 && sentenceActiveIdx < sentenceWordSpans.length) {
+        sentenceWordSpans[sentenceActiveIdx].classList.remove("ocr-sentence-hl");
+      }
+      if (localIdx >= 0 && localIdx < sentenceWordSpans.length) {
+        sentenceWordSpans[localIdx].classList.add("ocr-sentence-hl");
+      }
+      sentenceActiveIdx = localIdx;
     }
   }
 
@@ -476,7 +542,7 @@ export function initSpeechTool() {
     ttsProgressFill.style.width = "0%";
     ttsProgressText.textContent = "Loading Kokoro TTS model...";
     freezeWarning.classList.add("hidden");
-    player.classList.add("hidden");
+    ttsOverlay.classList.add("hidden");
 
     try {
       const tts = await getKokoro((pct, msg) => {
@@ -570,6 +636,17 @@ export function initSpeechTool() {
       // Build word timing map
       wordTimings = buildTimings(chunkMeta, sampleRate, wordSpans);
       activeWordIdx = -1;
+      activeSentenceIdx = -1;
+
+      // Build sentence timings from chunks
+      sentenceTimings = [];
+      let sOff2 = 0;
+      for (const ch of chunkMeta) {
+        const tStart = sOff2 / sampleRate;
+        const tEnd = (sOff2 + ch.samples) / sampleRate;
+        sentenceTimings.push({ text: ch.text, start: tStart, end: tEnd });
+        sOff2 += ch.samples;
+      }
 
       // Encode to WAV
       currentWavBlob = encodeWav(fullAudio, sampleRate);
@@ -583,8 +660,8 @@ export function initSpeechTool() {
       ttsProgressFill.style.width = "100%";
       ttsProgressText.textContent = "Done!";
 
-      player.classList.remove("hidden");
-      setTimeout(() => { ttsProgress.classList.add("hidden"); }, 600);
+      setTimeout(() => { ttsProgress.classList.add("hidden"); }, 400);
+      ttsOverlay.classList.remove("hidden");
 
     } catch (err: any) {
       console.error("TTS generation failed:", err);
@@ -614,6 +691,22 @@ export function initSpeechTool() {
       wordTimings[activeWordIdx].el.classList.remove("active");
     }
     activeWordIdx = -1;
+    activeSentenceIdx = -1;
+  });
+
+  // Try Another — close overlay
+  ttsBackBtn.addEventListener("click", () => {
+    audio.pause();
+    audio.currentTime = 0;
+    cancelAnimationFrame(highlightRaf);
+    setPlayIcon(false);
+    if (activeWordIdx >= 0 && activeWordIdx < wordTimings.length) wordTimings[activeWordIdx].el.classList.remove("active");
+    activeWordIdx = -1;
+    activeSentenceIdx = -1;
+    sentenceActiveIdx = -1;
+    sentenceWordSpans = [];
+    ttsSentenceEl.textContent = "";
+    ttsOverlay.classList.add("hidden");
   });
 
   skipBack.addEventListener("click", () => { audio.currentTime = Math.max(0, audio.currentTime - 10); });

@@ -1099,45 +1099,8 @@
           <p class="speech-freeze-warning hidden">The page may become unresponsive while generating — this is normal.</p>
         </div>
 
-        <!-- Audio Player -->
-        <div id="speech-player" class="speech-player hidden">
-          <!-- Reader bar — word-by-word display -->
-          <div id="speech-word-display" class="speech-word-display"></div>
-
-          <!-- Seek bar with flanking timestamps -->
-          <div class="speech-player-seek-row">
-            <span id="speech-time-current" class="speech-time-label">0:00</span>
-            <div id="speech-seek-bar" class="speech-seek-bar">
-              <div id="speech-seek-fill" class="speech-seek-fill"></div>
-              <div id="speech-seek-thumb" class="speech-seek-thumb"></div>
-            </div>
-            <span id="speech-time-duration" class="speech-time-label">0:00</span>
-          </div>
-
-          <!-- Control toolbar -->
-          <div class="speech-player-toolbar">
-            <div class="speech-player-controls">
-              <button id="speech-skip-back" class="speech-player-btn" title="Back 10s">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
-                <span class="speech-skip-label">10</span>
-              </button>
-              <button id="speech-play-btn" class="speech-play-btn" title="Play/Pause"></button>
-              <button id="speech-skip-forward" class="speech-player-btn" title="Forward 10s">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
-                <span class="speech-skip-label">10</span>
-              </button>
-            </div>
-            <div class="speech-player-actions">
-              <span id="speech-tts-speed-display" class="speech-speed-display">1x</span>
-              <button id="speech-download-mp3" class="speech-download-btn" title="Download MP3">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                MP3
-              </button>
-            </div>
-          </div>
-
-          <audio id="speech-audio" preload="auto"></audio>
-        </div>
+        <!-- Player overlay is outside the card, appended at section level -->
+        <div id="speech-player" class="hidden"></div>
       </div>
 
       <!-- STT Panel -->
@@ -1270,6 +1233,46 @@
     </div>
 
     <input id="speech-file-input" type="file" accept="audio/*,video/*" style="display:none">
+
+    <!-- TTS fullscreen overlay (same design as OCR read aloud) -->
+    <div id="speech-tts-overlay" class="ocr-tts-overlay hidden">
+      <div class="ocr-tts-body">
+        <div id="speech-word-display" class="speech-word-display ocr-tts-word-display"></div>
+      </div>
+      <div class="ocr-tts-bottom">
+        <div id="speech-tts-sentence" class="ocr-tts-sentence"></div>
+        <div class="ocr-tts-controls">
+          <button id="speech-tts-back" class="ocr-tts-close-btn" title="Try Another">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+            Try Another
+          </button>
+          <div class="ocr-tts-transport">
+            <button id="speech-skip-back" class="speech-player-btn" title="Back 10s">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+              <span class="speech-skip-label">10</span>
+            </button>
+            <button id="speech-play-btn" class="speech-play-btn" title="Play/Pause"></button>
+            <button id="speech-skip-forward" class="speech-player-btn" title="Forward 10s">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+              <span class="speech-skip-label">10</span>
+            </button>
+          </div>
+          <button id="speech-download-mp3" class="ocr-download-audio-btn" title="Download Audio">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            Download Audio
+          </button>
+        </div>
+        <div class="speech-player-seek-row ocr-tts-seek">
+          <span id="speech-time-current" class="speech-time-label">0:00</span>
+          <div id="speech-seek-bar" class="speech-seek-bar">
+            <div id="speech-seek-fill" class="speech-seek-fill"></div>
+            <div id="speech-seek-thumb" class="speech-seek-thumb"></div>
+          </div>
+          <span id="speech-time-duration" class="speech-time-label">0:00</span>
+        </div>
+      </div>
+      <audio id="speech-audio" preload="auto"></audio>
+    </div>
   </section>
 
   <section id="summarize-page" class="tool-page hidden">
