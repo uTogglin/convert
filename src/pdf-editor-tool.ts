@@ -424,22 +424,37 @@ export function initPdfEditorTool() {
 
   function detectNearestFont(canvasX: number, canvasY: number): { fontFamily: string; fontSize: number; color: string } | null {
     const textContent = pageTextContent.get(currentPage);
-    if (!textContent || !textContent._vpTransform) return null;
+    if (!textContent || !textContent._vpTransform) {
+      console.log("[PDE Match] No textContent or vpTransform for page", currentPage);
+      return null;
+    }
 
     const scale = zoom * 1.5;
-    const vt = textContent._vpTransform; // [a, b, c, d, e, f] at scale=1
+    const vt = textContent._vpTransform;
+    console.log("[PDE Match] scale:", scale, "vpTransform:", vt);
+    console.log("[PDE Match] Looking near canvas coords:", canvasX, canvasY);
+    console.log("[PDE Match] Total text items:", textContent.items.length);
+    console.log("[PDE Match] Styles:", JSON.stringify(textContent.styles));
+
+    // Log first 3 items for debugging
+    for (let i = 0; i < Math.min(3, textContent.items.length); i++) {
+      const item = textContent.items[i];
+      if (!item.str) continue;
+      const pdfX = item.transform[4];
+      const pdfY = item.transform[5];
+      const cx = (vt[0] * pdfX + vt[2] * pdfY + vt[4]) * scale;
+      const cy = (vt[1] * pdfX + vt[3] * pdfY + vt[5]) * scale;
+      console.log(`[PDE Match] Item[${i}]: "${item.str.slice(0,30)}" pdfXY=(${pdfX},${pdfY}) canvasXY=(${cx.toFixed(1)},${cy.toFixed(1)}) transform=`, item.transform, "fontName:", item.fontName);
+    }
 
     let bestDist = Infinity;
     let bestItem: any = null;
-    let bestCx = 0;
-    let bestCy = 0;
 
     for (const item of textContent.items) {
       if (!item.str || !item.transform) continue;
       const pdfX = item.transform[4];
       const pdfY = item.transform[5];
 
-      // Affine transform: PDF space → canvas pixels
       const cx = (vt[0] * pdfX + vt[2] * pdfY + vt[4]) * scale;
       const cy = (vt[1] * pdfX + vt[3] * pdfY + vt[5]) * scale;
 
@@ -447,31 +462,28 @@ export function initPdfEditorTool() {
       if (dist < bestDist) {
         bestDist = dist;
         bestItem = item;
-        bestCx = cx;
-        bestCy = cy;
       }
     }
 
-    if (!bestItem || bestDist > 300) return null;
+    console.log("[PDE Match] Best match:", bestItem?.str?.slice(0, 40), "dist:", bestDist.toFixed(1), "fontName:", bestItem?.fontName, "transform:", bestItem?.transform);
+
+    if (!bestItem || bestDist > 5000) return null; // Temporarily huge threshold for debugging
 
     // Get font family from styles
     let fontFamily = "Arial";
     if (bestItem.fontName && textContent.styles?.[bestItem.fontName]) {
       const style = textContent.styles[bestItem.fontName];
+      console.log("[PDE Match] Style for", bestItem.fontName, ":", JSON.stringify(style));
       fontFamily = mapFontFamily(style.fontFamily || "Arial");
     }
 
     // Font size from transform matrix
     const pdfPts = Math.abs(bestItem.transform[0]) || Math.abs(bestItem.transform[3]);
     const fontSize = pdfPts * scale;
+    console.log("[PDE Match] pdfPts:", pdfPts, "→ fontSize:", fontSize, "fontFamily:", fontFamily);
 
-    // Sample text color from PDF background canvas at the matched text position
-    let color = "#000000";
-    try {
-      const ctx = bgCanvas.getContext("2d")!;
-      const px = ctx.getImageData(Math.round(bestCx), Math.round(bestCy), 1, 1).data;
-      color = "#" + [px[0], px[1], px[2]].map(c => c.toString(16).padStart(2, "0")).join("");
-    } catch { /* use default black */ }
+    // For color: use black as default — PDF text color is not available from getTextContent()
+    const color = "#000000";
 
     return { fontFamily, fontSize: Math.max(8, fontSize), color };
   }
