@@ -398,6 +398,36 @@ export function initPdfEditorTool() {
     renderPage();
   });
 
+  // ── Capture annotation overlay as PNG for a given page ──────────────────
+  // Renders annotations on the live fabric canvas by navigating to that page,
+  // captures the canvas, then returns to the original page.
+  async function capturePageAnnotations(): Promise<Map<number, string>> {
+    const captures = new Map<number, string>();
+    const origPage = currentPage;
+
+    for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+      const annotJson = pageAnnotations.get(pageNum);
+      if (!annotJson) continue;
+      const parsed = JSON.parse(annotJson);
+      if (!parsed.objects || parsed.objects.length === 0) continue;
+
+      // Navigate to the page to load its annotations on the live canvas
+      currentPage = pageNum;
+      await renderPage();
+      // Wait a tick for fabric to finish rendering
+      await new Promise(r => setTimeout(r, 50));
+
+      // Capture the fabric canvas (annotations only, transparent bg)
+      const dataUrl = fabricCanvas.toDataURL({ format: "png", multiplier: 1 });
+      captures.set(pageNum, dataUrl);
+    }
+
+    // Restore original page
+    currentPage = origPage;
+    await renderPage();
+    return captures;
+  }
+
   // ── Download annotated PDF ─────────────────────────────────────────────
   downloadBtn.addEventListener("click", async () => {
     if (!pdfBytes || !pdfDoc) return;
@@ -407,36 +437,24 @@ export function initPdfEditorTool() {
     try {
       saveCurrentAnnotations();
 
+      // Capture all annotated pages as PNGs using the live fabric canvas
+      const captures = await capturePageAnnotations();
+
+      if (captures.size === 0) {
+        // No annotations — just download the original
+        const blob = new Blob([pdfBytes], { type: "application/pdf" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = pdfFileName.replace(/\.pdf$/i, "") + "-edited.pdf";
+        a.click();
+        URL.revokeObjectURL(a.href);
+        return;
+      }
+
       const { PDFDocument } = await import("pdf-lib");
       const outPdf = await PDFDocument.load(pdfBytes);
 
-      for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-        const annotJson = pageAnnotations.get(pageNum);
-        if (!annotJson) continue;
-
-        const parsed = JSON.parse(annotJson);
-        if (!parsed.objects || parsed.objects.length === 0) continue;
-
-        // Render annotations to a temp canvas
-        const page = await pdfDoc.getPage(pageNum);
-        const vp = page.getViewport({ scale: zoom * 1.5 });
-
-        const tempCanvasEl = document.createElement("canvas");
-        tempCanvasEl.width = vp.width;
-        tempCanvasEl.height = vp.height;
-
-        const fabricModule = await import("fabric");
-        const StaticCanvas = fabricModule.StaticCanvas || (fabricModule as any).default?.StaticCanvas;
-        const tempFabric = new StaticCanvas(tempCanvasEl, {
-          width: vp.width,
-          height: vp.height,
-        });
-
-        await tempFabric.loadFromJSON(annotJson);
-        tempFabric.renderAll();
-
-        // Get annotation image as PNG
-        const dataUrl = tempCanvasEl.toDataURL("image/png");
+      for (const [pageNum, dataUrl] of captures) {
         const pngBytes = Uint8Array.from(atob(dataUrl.split(",")[1]), c => c.charCodeAt(0));
         const pngImage = await outPdf.embedPng(pngBytes);
 
@@ -449,8 +467,6 @@ export function initPdfEditorTool() {
           width,
           height,
         });
-
-        tempFabric.dispose();
       }
 
       const modifiedBytes = await outPdf.save();
