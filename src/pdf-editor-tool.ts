@@ -112,11 +112,17 @@ export function initPdfEditorTool() {
     });
 
     const defaults = getDefaults();
-    fabricCanvas.freeDrawingBrush.width = defaults.brush;
-    fabricCanvas.freeDrawingBrush.color = colorInput.value;
     brushInput.value = String(defaults.brush);
     brushLabel.textContent = `${defaults.brush}px`;
     fontInput.value = String(defaults.font);
+
+    // Enable drawing mode briefly to initialize the brush, then disable
+    fabricCanvas.isDrawingMode = true;
+    if (fabricCanvas.freeDrawingBrush) {
+      fabricCanvas.freeDrawingBrush.width = defaults.brush;
+      fabricCanvas.freeDrawingBrush.color = colorInput.value;
+    }
+    fabricCanvas.isDrawingMode = false;
 
     // Track modifications for undo
     fabricCanvas.on("object:added", () => { if (!skipHistory) pushHistory(); });
@@ -327,7 +333,7 @@ export function initPdfEditorTool() {
 
       if (fabricCanvas) {
         fabricCanvas.isDrawingMode = tool === "draw";
-        if (tool === "draw") {
+        if (tool === "draw" && fabricCanvas.freeDrawingBrush) {
           fabricCanvas.freeDrawingBrush.width = parseInt(brushInput.value) || 3;
           fabricCanvas.freeDrawingBrush.color = colorInput.value;
         }
@@ -344,13 +350,13 @@ export function initPdfEditorTool() {
 
   // Tool options
   colorInput.addEventListener("input", () => {
-    if (fabricCanvas?.freeDrawingBrush) {
+    if (fabricCanvas?.freeDrawingBrush && fabricCanvas.isDrawingMode) {
       fabricCanvas.freeDrawingBrush.color = colorInput.value;
     }
   });
   brushInput.addEventListener("input", () => {
     brushLabel.textContent = `${brushInput.value}px`;
-    if (fabricCanvas?.freeDrawingBrush) {
+    if (fabricCanvas?.freeDrawingBrush && fabricCanvas.isDrawingMode) {
       fabricCanvas.freeDrawingBrush.width = parseInt(brushInput.value) || 3;
     }
   });
