@@ -407,7 +407,9 @@ export function initPdfEditorTool() {
       saveCurrentAnnotations();
 
       const { PDFDocument } = await import("pdf-lib");
-      const outPdf = await PDFDocument.load(pdfBytes);
+      // Copy bytes — the original Uint8Array buffer may have been transferred/detached
+      const pdfCopy = new Uint8Array(pdfBytes);
+      const outPdf = await PDFDocument.load(pdfCopy.buffer);
 
       for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
         const annotJson = pageAnnotations.get(pageNum);
