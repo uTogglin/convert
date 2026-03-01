@@ -135,6 +135,31 @@
         <p>Summarize documents and web pages with AI — everything processed locally.</p>
         <span class="home-card-tag">AI-powered</span>
       </button>
+      <button class="home-card" data-tool="ocr">
+        <div class="home-card-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
+            <circle cx="17.5" cy="17.5" r="3.5"></circle>
+            <line x1="22" y1="22" x2="20" y2="20"></line>
+          </svg>
+        </div>
+        <h3>OCR</h3>
+        <p>Extract text from images and scanned PDFs — powered by Tesseract.js.</p>
+        <span class="home-card-tag">AI-powered</span>
+      </button>
+      <button class="home-card" data-tool="pdf-editor">
+        <div class="home-card-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+          </svg>
+        </div>
+        <h3>PDF Editor</h3>
+        <p>Annotate, sign, and edit PDFs directly in your browser.</p>
+        <span class="home-card-tag">New</span>
+      </button>
     </div>
   </section>
 
@@ -167,6 +192,14 @@
         <button class="sm-nav-btn" data-panel="summarize">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
           Summarize
+        </button>
+        <button class="sm-nav-btn" data-panel="ocr">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><circle cx="17.5" cy="17.5" r="3.5"></circle></svg>
+          OCR
+        </button>
+        <button class="sm-nav-btn" data-panel="pdf-editor">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+          PDF Editor
         </button>
       </nav>
     </aside>
@@ -432,6 +465,57 @@
         <div class="sm-group">
           <span class="sm-label">Processing</span>
           <p class="sm-hint">Everything runs in-browser; no files leave your device.</p>
+        </div>
+      </div>
+
+      <!-- OCR panel -->
+      <div class="sm-panel" data-panel="ocr">
+        <h3 class="sm-panel-title">OCR</h3>
+        <div class="sm-group">
+          <span class="sm-label">Default Language</span>
+          <select id="sm-ocr-lang" class="sm-select">
+            <option value="eng" selected>English</option>
+            <option value="spa">Spanish</option>
+            <option value="fra">French</option>
+            <option value="deu">German</option>
+            <option value="ita">Italian</option>
+            <option value="por">Portuguese</option>
+            <option value="rus">Russian</option>
+            <option value="jpn">Japanese</option>
+            <option value="kor">Korean</option>
+            <option value="chi_sim">Chinese (Simplified)</option>
+            <option value="chi_tra">Chinese (Traditional)</option>
+            <option value="ara">Arabic</option>
+            <option value="hin">Hindi</option>
+            <option value="pol">Polish</option>
+          </select>
+        </div>
+        <div class="sm-group">
+          <span class="sm-label">Processing</span>
+          <p class="sm-hint">Tesseract.js WASM-based OCR. Language data is downloaded on first use (~15 MB per language). Everything runs in-browser; no files leave your device.</p>
+        </div>
+      </div>
+
+      <!-- PDF Editor panel -->
+      <div class="sm-panel" data-panel="pdf-editor">
+        <h3 class="sm-panel-title">PDF Editor</h3>
+        <div class="sm-group">
+          <span class="sm-label">Default Brush Size</span>
+          <div class="sm-size-row">
+            <input type="number" id="sm-pde-brush-size" value="3" min="1" max="20" step="1">
+            <span class="sm-unit">px</span>
+          </div>
+        </div>
+        <div class="sm-group">
+          <span class="sm-label">Default Font Size</span>
+          <div class="sm-size-row">
+            <input type="number" id="sm-pde-font-size" value="16" min="8" max="72" step="1">
+            <span class="sm-unit">px</span>
+          </div>
+        </div>
+        <div class="sm-group">
+          <span class="sm-label">Processing</span>
+          <p class="sm-hint">Uses pdfjs-dist for rendering, Fabric.js for annotations, and pdf-lib for export. Everything runs in-browser; no files leave your device.</p>
         </div>
       </div>
 
@@ -1337,6 +1421,235 @@
     </div>
 
     <input id="sum-file-input" type="file" accept=".pdf,.docx,.txt,.md,.html,.htm,.csv,.json,.xml,.log,.yaml,.yml,.toml,.ini,.cfg,.conf" style="display:none">
+  </section>
+
+  <!-- OCR tool page -->
+  <section id="ocr-page" class="tool-page hidden">
+    <div class="speech-page-header">
+      <div class="speech-page-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="7" height="7"></rect>
+          <rect x="14" y="3" width="7" height="7"></rect>
+          <rect x="3" y="14" width="7" height="7"></rect>
+          <circle cx="17.5" cy="17.5" r="3.5"></circle>
+          <line x1="22" y1="22" x2="20" y2="20"></line>
+        </svg>
+      </div>
+      <h2>OCR — Text Extraction</h2>
+      <p>Extract text from images and scanned PDFs. <button class="tool-page-settings-link" data-open-panel="ocr">Configure settings</button></p>
+    </div>
+
+    <div class="speech-section-card">
+      <!-- File drop zone -->
+      <div id="ocr-drop-area" class="speech-file-drop">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+          <circle cx="8.5" cy="8.5" r="1.5"></circle>
+          <polyline points="21 15 16 10 5 21"></polyline>
+        </svg>
+        <span id="ocr-drop-text">Drop an image or PDF here, or click to browse</span>
+      </div>
+
+      <!-- Language -->
+      <div class="ocr-options-row">
+        <label class="speech-option-label">Language</label>
+        <select id="ocr-lang" class="sm-select ocr-lang-select">
+          <option value="eng" selected>English</option>
+          <option value="spa">Spanish</option>
+          <option value="fra">French</option>
+          <option value="deu">German</option>
+          <option value="ita">Italian</option>
+          <option value="por">Portuguese</option>
+          <option value="rus">Russian</option>
+          <option value="jpn">Japanese</option>
+          <option value="kor">Korean</option>
+          <option value="chi_sim">Chinese (Simplified)</option>
+          <option value="chi_tra">Chinese (Traditional)</option>
+          <option value="ara">Arabic</option>
+          <option value="hin">Hindi</option>
+          <option value="pol">Polish</option>
+        </select>
+      </div>
+
+      <!-- Extract button -->
+      <button id="ocr-extract-btn" class="speech-generate-btn disabled">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><circle cx="17.5" cy="17.5" r="3.5"></circle></svg>
+        Extract Text
+      </button>
+
+      <!-- Progress -->
+      <div id="ocr-progress" class="speech-progress hidden">
+        <div class="speech-progress-bar"><div class="speech-progress-fill"></div></div>
+        <span class="speech-progress-text">Processing...</span>
+      </div>
+
+      <!-- Output -->
+      <div id="ocr-output" class="speech-stt-output hidden">
+        <div class="speech-stt-output-header">
+          <span class="speech-stt-output-label">Extracted Text</span>
+          <div class="sum-output-actions">
+            <button id="ocr-copy-btn" class="speech-copy-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              Copy
+            </button>
+            <button id="ocr-download-btn" class="speech-copy-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              Download
+            </button>
+            <button id="ocr-read-aloud-btn" class="speech-copy-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+              Read Aloud
+            </button>
+          </div>
+        </div>
+        <textarea id="ocr-result" class="speech-textarea speech-stt-result-textarea" placeholder="Extracted text will appear here..." rows="8" readonly></textarea>
+
+        <!-- Read Aloud: TTS progress + player -->
+        <div id="ocr-tts-progress" class="speech-progress hidden">
+          <div class="speech-progress-bar"><div class="speech-progress-fill"></div></div>
+          <span class="speech-progress-text">Loading TTS model...</span>
+          <p class="speech-freeze-warning hidden">The page may become unresponsive while generating — this is normal.</p>
+        </div>
+
+        <div id="ocr-tts-player" class="speech-player hidden">
+          <div id="ocr-word-display" class="speech-word-display"></div>
+          <div class="speech-player-seek-row">
+            <span id="ocr-time-current" class="speech-time-label">0:00</span>
+            <div id="ocr-seek-bar" class="speech-seek-bar">
+              <div id="ocr-seek-fill" class="speech-seek-fill"></div>
+              <div id="ocr-seek-thumb" class="speech-seek-thumb"></div>
+            </div>
+            <span id="ocr-time-duration" class="speech-time-label">0:00</span>
+          </div>
+          <div class="speech-player-toolbar">
+            <div class="speech-player-controls">
+              <button id="ocr-skip-back" class="speech-player-btn" title="Back 10s">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+                <span class="speech-skip-label">10</span>
+              </button>
+              <button id="ocr-play-btn" class="speech-play-btn" title="Play/Pause"></button>
+              <button id="ocr-skip-forward" class="speech-player-btn" title="Forward 10s">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                <span class="speech-skip-label">10</span>
+              </button>
+            </div>
+          </div>
+          <audio id="ocr-tts-audio" preload="auto"></audio>
+        </div>
+      </div>
+    </div>
+
+    <input id="ocr-file-input" type="file" accept="image/*,.pdf" style="display:none">
+  </section>
+
+  <!-- PDF Editor tool page -->
+  <section id="pdf-editor-page" class="tool-page hidden">
+    <div class="speech-page-header">
+      <div class="speech-page-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+        </svg>
+      </div>
+      <h2>PDF Editor</h2>
+      <p>Annotate, sign, and edit PDFs. <button class="tool-page-settings-link" data-open-panel="pdf-editor">Configure settings</button></p>
+    </div>
+
+    <!-- Upload state -->
+    <div id="pde-upload" class="speech-section-card">
+      <div id="pde-drop-area" class="speech-file-drop">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+          <polyline points="14 2 14 8 20 8"></polyline>
+        </svg>
+        <span id="pde-drop-text">Drop a PDF here, or click to browse</span>
+      </div>
+    </div>
+
+    <!-- Editor (hidden until PDF loaded) -->
+    <div id="pde-editor" class="hidden">
+      <!-- Toolbar -->
+      <div class="pde-toolbar">
+        <button class="pde-tool-btn active" data-pde-tool="select" title="Select">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/></svg>
+        </button>
+        <button class="pde-tool-btn" data-pde-tool="text" title="Add Text">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"></polyline><line x1="9" y1="20" x2="15" y2="20"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg>
+        </button>
+        <button class="pde-tool-btn" data-pde-tool="draw" title="Draw / Sign">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg>
+        </button>
+        <button class="pde-tool-btn" data-pde-tool="highlight" title="Highlight">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="8" rx="1"></rect></svg>
+        </button>
+        <button class="pde-tool-btn" data-pde-tool="image" title="Add Image">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+        </button>
+        <div class="pde-toolbar-sep"></div>
+        <button id="pde-undo" class="pde-tool-btn" title="Undo" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+        </button>
+        <button id="pde-redo" class="pde-tool-btn" title="Redo" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+        </button>
+        <div class="pde-toolbar-sep"></div>
+        <button id="pde-delete-obj" class="pde-tool-btn" title="Delete selected" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        </button>
+      </div>
+
+      <!-- Tool options -->
+      <div class="pde-options-bar">
+        <div class="pde-option-group" id="pde-color-group">
+          <label>Color</label>
+          <input type="color" id="pde-color" value="#000000">
+        </div>
+        <div class="pde-option-group" id="pde-brush-group" style="display:none">
+          <label>Brush</label>
+          <input type="range" id="pde-brush-size" min="1" max="20" value="3">
+          <span id="pde-brush-label">3px</span>
+        </div>
+        <div class="pde-option-group" id="pde-font-group" style="display:none">
+          <label>Font</label>
+          <input type="number" id="pde-font-size" min="8" max="72" value="16">
+          <span>px</span>
+        </div>
+      </div>
+
+      <!-- Canvas area -->
+      <div id="pde-canvas-wrap">
+        <canvas id="pde-bg-canvas"></canvas>
+        <canvas id="pde-fabric-canvas"></canvas>
+      </div>
+
+      <!-- Page nav + zoom -->
+      <div class="pde-nav-bar">
+        <button id="pde-prev" class="pde-nav-btn" title="Previous page" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+        </button>
+        <span id="pde-page-info">Page 1 / 1</span>
+        <button id="pde-next" class="pde-nav-btn" title="Next page" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+        </button>
+        <div class="pde-toolbar-sep"></div>
+        <button id="pde-zoom-out" class="pde-nav-btn" title="Zoom out">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        </button>
+        <span id="pde-zoom-label">100%</span>
+        <button id="pde-zoom-in" class="pde-nav-btn" title="Zoom in">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        </button>
+      </div>
+
+      <!-- Download -->
+      <button id="pde-download" class="speech-generate-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        Download PDF
+      </button>
+    </div>
+
+    <input id="pde-file-input" type="file" accept=".pdf" style="display:none">
+    <input id="pde-img-input" type="file" accept="image/*" style="display:none">
   </section>
 
   <div id="format-containers">

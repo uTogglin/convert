@@ -233,32 +233,58 @@ body[data-tool="compress"] #format-containers,
 body[data-tool="image"] #format-containers,
 body[data-tool="video"] #format-containers,
 body[data-tool="speech"] #format-containers,
-body[data-tool="summarize"] #format-containers { display: none !important; }
+body[data-tool="summarize"] #format-containers,
+body[data-tool="ocr"] #format-containers,
+body[data-tool="pdf-editor"] #format-containers { display: none !important; }
 body[data-tool="compress"] #image-page,
 body[data-tool="compress"] #video-page,
 body[data-tool="compress"] #speech-page,
 body[data-tool="compress"] #summarize-page,
+body[data-tool="compress"] #ocr-page,
+body[data-tool="compress"] #pdf-editor-page,
 body[data-tool="image"] #compress-page,
 body[data-tool="image"] #video-page,
 body[data-tool="image"] #speech-page,
 body[data-tool="image"] #summarize-page,
+body[data-tool="image"] #ocr-page,
+body[data-tool="image"] #pdf-editor-page,
 body[data-tool="video"] #compress-page,
 body[data-tool="video"] #image-page,
 body[data-tool="video"] #speech-page,
 body[data-tool="video"] #summarize-page,
+body[data-tool="video"] #ocr-page,
+body[data-tool="video"] #pdf-editor-page,
 body[data-tool="speech"] #compress-page,
 body[data-tool="speech"] #image-page,
 body[data-tool="speech"] #video-page,
 body[data-tool="speech"] #summarize-page,
+body[data-tool="speech"] #ocr-page,
+body[data-tool="speech"] #pdf-editor-page,
 body[data-tool="summarize"] #compress-page,
 body[data-tool="summarize"] #image-page,
 body[data-tool="summarize"] #video-page,
 body[data-tool="summarize"] #speech-page,
+body[data-tool="summarize"] #ocr-page,
+body[data-tool="summarize"] #pdf-editor-page,
+body[data-tool="ocr"] #compress-page,
+body[data-tool="ocr"] #image-page,
+body[data-tool="ocr"] #video-page,
+body[data-tool="ocr"] #speech-page,
+body[data-tool="ocr"] #summarize-page,
+body[data-tool="ocr"] #pdf-editor-page,
+body[data-tool="pdf-editor"] #compress-page,
+body[data-tool="pdf-editor"] #image-page,
+body[data-tool="pdf-editor"] #video-page,
+body[data-tool="pdf-editor"] #speech-page,
+body[data-tool="pdf-editor"] #summarize-page,
+body[data-tool="pdf-editor"] #ocr-page,
 body[data-tool="convert"] #compress-page,
 body[data-tool="convert"] #image-page,
 body[data-tool="convert"] #video-page,
 body[data-tool="convert"] #speech-page,
-body[data-tool="convert"] #summarize-page { display: none !important; }
+body[data-tool="convert"] #summarize-page,
+body[data-tool="convert"] #ocr-page,
+body[data-tool="convert"] #pdf-editor-page { display: none !important; }
 body[data-tool="video"] #file-area { display: none !important; }
 body[data-tool="video"] #archive-panel { display: none !important; }
 body[data-tool="video"] #output-tray { display: none !important; }
@@ -271,6 +297,14 @@ body[data-tool="summarize"] #file-area { display: none !important; }
 body[data-tool="summarize"] #archive-panel { display: none !important; }
 body[data-tool="summarize"] #output-tray { display: none !important; }
 body[data-tool="summarize"] #convert-button { display: none !important; }
+body[data-tool="ocr"] #file-area { display: none !important; }
+body[data-tool="ocr"] #archive-panel { display: none !important; }
+body[data-tool="ocr"] #output-tray { display: none !important; }
+body[data-tool="ocr"] #convert-button { display: none !important; }
+body[data-tool="pdf-editor"] #file-area { display: none !important; }
+body[data-tool="pdf-editor"] #archive-panel { display: none !important; }
+body[data-tool="pdf-editor"] #output-tray { display: none !important; }
+body[data-tool="pdf-editor"] #convert-button { display: none !important; }
 
 /* =========================================
    TOOL PAGES (Compress & Image) — header only
@@ -3361,4 +3395,174 @@ body[data-tool="image"] #convert-button { display: none !important; }
   .speech-player-controls { gap: 6px; }
   .speech-word-display { font-size: 0.95rem; padding: 14px; }
   .speech-card { padding: 16px; }
+
+  /* PDF Editor responsive */
+  .pde-toolbar { flex-wrap: wrap; }
+  .pde-options-bar { flex-wrap: wrap; }
+  #pde-canvas-wrap { overflow-x: auto; }
+}
+
+/* =========================================
+   OCR TOOL
+   ========================================= */
+.ocr-options-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+.ocr-lang-select {
+  flex: 1;
+  max-width: 260px;
+}
+
+/* =========================================
+   PDF EDITOR
+   ========================================= */
+.pde-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  background: var(--surface-color);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+}
+.pde-tool-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.pde-tool-btn:hover {
+  background: var(--input-bg);
+  color: var(--text-main);
+  border-color: var(--input-border);
+}
+.pde-tool-btn.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.pde-tool-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.pde-toolbar-sep {
+  width: 1px;
+  height: 24px;
+  background: var(--input-border);
+  margin: 0 4px;
+}
+
+.pde-options-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 12px;
+  background: var(--surface-color);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 12px;
+  min-height: 44px;
+}
+.pde-option-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.pde-option-group label {
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.pde-option-group input[type="color"] {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  padding: 2px;
+  cursor: pointer;
+  background: none;
+}
+.pde-option-group input[type="range"] {
+  width: 80px;
+}
+.pde-option-group input[type="number"] {
+  width: 60px;
+  padding: 4px 6px;
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  background: var(--input-bg);
+  color: var(--text-main);
+  font-size: 0.85rem;
+}
+
+#pde-canvas-wrap {
+  position: relative;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  overflow: auto;
+  background: var(--input-bg);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  min-height: 400px;
+  max-height: 70vh;
+}
+#pde-canvas-wrap canvas {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+#pde-bg-canvas {
+  z-index: 1;
+  pointer-events: none;
+}
+#pde-fabric-canvas {
+  z-index: 2;
+}
+
+.pde-nav-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 0;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+.pde-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--surface-color);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.pde-nav-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+.pde-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
