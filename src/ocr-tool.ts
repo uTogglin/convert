@@ -68,12 +68,12 @@ export function initOcrTool() {
   const progress = document.getElementById("ocr-progress") as HTMLDivElement;
   const progressFill = progress.querySelector(".speech-progress-fill") as HTMLDivElement;
   const progressText = progress.querySelector(".speech-progress-text") as HTMLSpanElement;
-  const output = document.getElementById("ocr-output") as HTMLDivElement;
   const resultArea = document.getElementById("ocr-result") as HTMLTextAreaElement;
   const copyBtn = document.getElementById("ocr-copy-btn") as HTMLButtonElement;
   const downloadBtn = document.getElementById("ocr-download-btn") as HTMLButtonElement;
   const preview = document.getElementById("ocr-preview") as HTMLDivElement;
   const previewImg = document.getElementById("ocr-preview-img") as HTMLImageElement;
+  const emptyState = document.getElementById("ocr-empty-state") as HTMLDivElement;
 
   let selectedFile: File | null = null;
   let processing = false;
@@ -87,6 +87,7 @@ export function initOcrTool() {
     const ext = file.name.split(".").pop()?.toLowerCase();
     if (ext === "pdf") {
       preview.classList.add("hidden");
+      emptyState.classList.remove("hidden");
       if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
       return;
     }
@@ -94,6 +95,7 @@ export function initOcrTool() {
     previewUrl = URL.createObjectURL(file);
     previewImg.src = previewUrl;
     preview.classList.remove("hidden");
+    emptyState.classList.add("hidden");
   }
 
   function setFile(file: File) {

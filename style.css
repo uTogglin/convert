@@ -3402,100 +3402,209 @@ body[data-tool="image"] #convert-button { display: none !important; }
    OCR TOOL
    ========================================= */
 #ocr-layout {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  max-width: 1100px;
-  margin: 0 auto;
-  align-items: start;
-}
-
-/* ── Input column ── */
-.ocr-input-col {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-}
-.ocr-input-card {
-  background: var(--surface-color);
-  border: 1px solid var(--input-border);
-  border-radius: var(--radius);
-  padding: 20px;
-}
-.ocr-input-card .speech-file-drop {
-  margin-bottom: 0;
-  padding: 40px 20px;
-}
-.ocr-controls {
-  margin-top: 16px;
-}
-.ocr-options-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.ocr-lang-select {
-  flex: 1;
-  max-width: 260px;
-}
-.ocr-input-card .speech-generate-btn {
-  margin-top: 14px;
+  height: calc(100vh - 80px);
+  min-height: 500px;
 }
 
-/* ── Image preview ── */
-.ocr-preview {
+/* ── Toolbar ── */
+.ocr-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
   background: var(--surface-color);
   border: 1px solid var(--input-border);
   border-radius: var(--radius);
-  padding: 12px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+.ocr-file-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--input-bg);
+  border: 1px dashed var(--input-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.ocr-file-btn:hover,
+.ocr-file-btn.dragover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+.ocr-file-btn.has-file {
+  border-style: solid;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.ocr-lang-select {
+  max-width: 160px;
+  flex-shrink: 0;
+}
+.ocr-extract-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 20px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+  font-family: inherit;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.ocr-extract-btn:hover:not(.disabled) {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px var(--accent-dim);
+}
+.ocr-extract-btn.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.ocr-settings-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--input-bg);
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition);
+  margin-left: auto;
+}
+.ocr-settings-btn:hover {
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+/* ── Progress bar (full width) ── */
+.ocr-progress-bar {
+  padding: 10px 14px;
+  background: var(--surface-color);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+.ocr-progress-bar.hidden { display: none; }
+
+/* ── Two-pane area ── */
+.ocr-panes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Source (left) pane ── */
+.ocr-source-pane {
+  background: var(--surface-color);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius);
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
+  position: relative;
+}
+.ocr-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  user-select: none;
+}
+.ocr-empty-state.hidden { display: none; }
+.ocr-preview {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
 }
 .ocr-preview.hidden { display: none; }
 .ocr-preview img {
   max-width: 100%;
-  max-height: 300px;
+  max-height: 100%;
   border-radius: var(--radius-sm);
   object-fit: contain;
 }
 
-/* ── Output column ── */
-.ocr-output-col {
+/* ── Result (right) pane ── */
+.ocr-result-pane {
+  background: var(--surface-color);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius);
+  padding: 14px;
   display: flex;
   flex-direction: column;
   min-height: 0;
 }
-.ocr-output-card {
-  background: var(--surface-color);
-  border: 1px solid var(--input-border);
-  border-radius: var(--radius);
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-}
-.ocr-output-card .speech-stt-output-header {
+.ocr-result-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 10px;
+  flex-shrink: 0;
 }
 .ocr-result-textarea {
-  min-height: 280px;
-  resize: vertical;
+  flex: 1;
+  resize: none;
+  min-height: 0;
 }
-.ocr-output-card .speech-player {
-  margin-top: 16px;
+.ocr-result-pane .speech-player {
+  margin-top: 12px;
+  flex-shrink: 0;
+}
+.ocr-result-pane .speech-progress {
+  flex-shrink: 0;
 }
 
-/* ── Responsive: stack on narrow screens ── */
+/* ── Responsive ── */
 @media (max-width: 768px) {
   #ocr-layout {
+    height: auto;
+    min-height: 0;
+  }
+  .ocr-toolbar {
+    flex-wrap: wrap;
+  }
+  .ocr-file-btn {
+    width: 100%;
+    justify-content: center;
+  }
+  .ocr-panes {
     grid-template-columns: 1fr;
+    min-height: 0;
+  }
+  .ocr-source-pane {
+    min-height: 200px;
   }
   .ocr-result-textarea {
-    min-height: 180px;
+    min-height: 200px;
   }
 }
 
