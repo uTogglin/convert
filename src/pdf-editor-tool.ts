@@ -363,28 +363,27 @@ export function initPdfEditorTool() {
 
   function detectNearestFont(canvasX: number, canvasY: number): { fontFamily: string; fontSize: number } | null {
     const textContent = pageTextContent.get(currentPage);
-    if (!textContent) return null;
+    if (!textContent || !textContent._vpTransform) return null;
+
+    // The stored viewport transform is at scale=1. We rendered at zoom*1.5,
+    // so multiply it by the current scale to get PDF→canvas coords.
+    const scale = zoom * 1.5;
+    const vt = textContent._vpTransform; // [a, b, c, d, e, f] at scale=1
 
     let bestDist = Infinity;
     let bestItem: any = null;
 
     for (const item of textContent.items) {
       if (!item.str || !item.transform) continue;
-      // item.transform is [scaleX, skewX, skewY, scaleY, x, y] in PDF space
-      // Convert PDF coords to canvas coords using viewport transform
+      // item.transform is [scaleX, skewX, skewY, scaleY, tx, ty] in PDF user space
       const pdfX = item.transform[4];
       const pdfY = item.transform[5];
 
-      // Apply the viewport transform used when rendering the page
-      const scale = zoom * 1.5;
-      // PDF space → canvas space: pdfjs viewport does this internally
-      // The viewport transform is an affine matrix; approximate with scale + translate
-      // pdfjs uses: canvasX = pdfX * scale, canvasY = (pageHeight - pdfY) * scale
-      const cx = pdfX * scale;
-      // PDF Y is bottom-up, canvas Y is top-down. We need page height.
-      // Approximate: just use distance in X primarily, and invert Y with estimated height
-      const pageHeightPts = textContent._pageHeight || 842; // A4 default
-      const cy = (pageHeightPts - pdfY) * scale;
+      // Apply viewport transform (scale=1) then multiply by render scale
+      // Affine: cx = (vt[0]*pdfX + vt[2]*pdfY + vt[4]) * scale
+      //         cy = (vt[1]*pdfX + vt[3]*pdfY + vt[5]) * scale
+      const cx = (vt[0] * pdfX + vt[2] * pdfY + vt[4]) * scale;
+      const cy = (vt[1] * pdfX + vt[3] * pdfY + vt[5]) * scale;
 
       const dist = Math.sqrt((cx - canvasX) ** 2 + (cy - canvasY) ** 2);
       if (dist < bestDist) {
@@ -393,7 +392,7 @@ export function initPdfEditorTool() {
       }
     }
 
-    if (!bestItem || bestDist > 100) return null;
+    if (!bestItem || bestDist > 150) return null;
 
     // Get font family from styles
     let fontFamily = "Arial";
@@ -402,9 +401,10 @@ export function initPdfEditorTool() {
       fontFamily = mapFontFamily(style.fontFamily || "Arial");
     }
 
-    // Get font size from transform matrix
-    const pdfPts = Math.abs(bestItem.transform[3]) || Math.abs(bestItem.transform[0]);
-    const fontSize = pdfPts * zoom * 1.5;
+    // Get font size from transform matrix — Math.abs(transform[0]) or [3] is font size in PDF pts
+    const pdfPts = Math.abs(bestItem.transform[0]) || Math.abs(bestItem.transform[3]);
+    // Convert to fabric canvas pixels: PDF pts * render scale
+    const fontSize = pdfPts * scale;
 
     return { fontFamily, fontSize: Math.max(8, fontSize) };
   }
@@ -437,9 +437,9 @@ export function initPdfEditorTool() {
     if (!pageTextContent.has(currentPage)) {
       try {
         const tc = await page.getTextContent();
-        // Store page height for coordinate conversion
+        // Store the viewport transform at scale=1 for coordinate conversion
         const rawVp = page.getViewport({ scale: 1 });
-        tc._pageHeight = rawVp.height;
+        tc._vpTransform = rawVp.transform; // [a, b, c, d, e, f] affine matrix
         pageTextContent.set(currentPage, tc);
       } catch { /* non-critical */ }
     }
