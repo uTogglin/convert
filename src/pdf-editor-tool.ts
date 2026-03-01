@@ -431,7 +431,7 @@ export function initPdfEditorTool() {
       }
 
       const modifiedBytes = await outPdf.save();
-      const blob = new Blob([modifiedBytes], { type: "application/pdf" });
+      const blob = new Blob([modifiedBytes.buffer as ArrayBuffer], { type: "application/pdf" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = pdfFileName.replace(/\.pdf$/i, "") + "-edited.pdf";
