@@ -173,14 +173,20 @@ export function initPdfEditorTool() {
       }
     });
 
-    // Image tool
+    // Image tool — convert to data URL so it survives JSON serialization
     imgInput.addEventListener("change", async () => {
       if (!imgInput.files?.[0] || !fabricCanvas) return;
-      const url = URL.createObjectURL(imgInput.files[0]);
+      const file = imgInput.files[0];
+      // Read as data URL so it's embedded in fabric JSON (blob URLs break on restore)
+      const dataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
       const fabricMod = fabricModule as any;
       const FabricImage = fabricMod.FabricImage || fabricMod.Image || fabricMod.default?.FabricImage || fabricMod.default?.Image;
       if (FabricImage?.fromURL) {
-        const img = await FabricImage.fromURL(url);
+        const img = await FabricImage.fromURL(dataUrl);
         // Scale to fit if too large
         const maxDim = Math.min(fabricCanvas.width! / 2, fabricCanvas.height! / 2);
         if (img.width! > maxDim || img.height! > maxDim) {
@@ -192,7 +198,6 @@ export function initPdfEditorTool() {
         fabricCanvas.setActiveObject(img);
       }
       imgInput.value = "";
-      URL.revokeObjectURL(url);
     });
   }
 
