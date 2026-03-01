@@ -3401,15 +3401,102 @@ body[data-tool="image"] #convert-button { display: none !important; }
 /* =========================================
    OCR TOOL
    ========================================= */
+#ocr-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  max-width: 1100px;
+  margin: 0 auto;
+  align-items: start;
+}
+
+/* ── Input column ── */
+.ocr-input-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ocr-input-card {
+  background: var(--surface-color);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+.ocr-input-card .speech-file-drop {
+  margin-bottom: 0;
+  padding: 40px 20px;
+}
+.ocr-controls {
+  margin-top: 16px;
+}
 .ocr-options-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-top: 16px;
 }
 .ocr-lang-select {
   flex: 1;
   max-width: 260px;
+}
+.ocr-input-card .speech-generate-btn {
+  margin-top: 14px;
+}
+
+/* ── Image preview ── */
+.ocr-preview {
+  background: var(--surface-color);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius);
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.ocr-preview.hidden { display: none; }
+.ocr-preview img {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: var(--radius-sm);
+  object-fit: contain;
+}
+
+/* ── Output column ── */
+.ocr-output-col {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.ocr-output-card {
+  background: var(--surface-color);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+}
+.ocr-output-card .speech-stt-output-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.ocr-result-textarea {
+  min-height: 280px;
+  resize: vertical;
+}
+.ocr-output-card .speech-player {
+  margin-top: 16px;
+}
+
+/* ── Responsive: stack on narrow screens ── */
+@media (max-width: 768px) {
+  #ocr-layout {
+    grid-template-columns: 1fr;
+  }
+  .ocr-result-textarea {
+    min-height: 180px;
+  }
 }
 
 /* =========================================

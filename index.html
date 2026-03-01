@@ -1426,7 +1426,7 @@
   <!-- OCR tool page -->
   <section id="ocr-page" class="tool-page hidden">
     <div class="speech-page-header">
-      <div class="speech-page-icon">
+      <div class="speech-header-icon">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="3" width="7" height="7"></rect>
           <rect x="14" y="3" width="7" height="7"></rect>
@@ -1439,102 +1439,116 @@
       <p>Extract text from images and scanned PDFs. <button class="tool-page-settings-link" data-open-panel="ocr">Configure settings</button></p>
     </div>
 
-    <div class="speech-section-card">
-      <!-- File drop zone -->
-      <div id="ocr-drop-area" class="speech-file-drop">
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-          <circle cx="8.5" cy="8.5" r="1.5"></circle>
-          <polyline points="21 15 16 10 5 21"></polyline>
-        </svg>
-        <span id="ocr-drop-text">Drop an image or PDF here, or click to browse</span>
-      </div>
+    <div id="ocr-layout">
+      <!-- Left column: input -->
+      <div class="ocr-input-col">
+        <div class="ocr-input-card">
+          <div id="ocr-drop-area" class="speech-file-drop">
+            <div class="speech-file-drop-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                <polyline points="21 15 16 10 5 21"></polyline>
+              </svg>
+            </div>
+            <span class="speech-file-drop-text" id="ocr-drop-text">Drop an image or PDF here, or click to browse</span>
+            <span class="speech-file-drop-sub">Supports JPG, PNG, WEBP, PDF</span>
+          </div>
 
-      <!-- Language -->
-      <div class="ocr-options-row">
-        <label class="speech-option-label">Language</label>
-        <select id="ocr-lang" class="sm-select ocr-lang-select">
-          <option value="eng" selected>English</option>
-          <option value="spa">Spanish</option>
-          <option value="fra">French</option>
-          <option value="deu">German</option>
-          <option value="ita">Italian</option>
-          <option value="por">Portuguese</option>
-          <option value="rus">Russian</option>
-          <option value="jpn">Japanese</option>
-          <option value="kor">Korean</option>
-          <option value="chi_sim">Chinese (Simplified)</option>
-          <option value="chi_tra">Chinese (Traditional)</option>
-          <option value="ara">Arabic</option>
-          <option value="hin">Hindi</option>
-          <option value="pol">Polish</option>
-        </select>
-      </div>
+          <div class="ocr-controls">
+            <div class="ocr-options-row">
+              <label class="speech-option-label">Language</label>
+              <select id="ocr-lang" class="sm-select ocr-lang-select">
+                <option value="eng" selected>English</option>
+                <option value="spa">Spanish</option>
+                <option value="fra">French</option>
+                <option value="deu">German</option>
+                <option value="ita">Italian</option>
+                <option value="por">Portuguese</option>
+                <option value="rus">Russian</option>
+                <option value="jpn">Japanese</option>
+                <option value="kor">Korean</option>
+                <option value="chi_sim">Chinese (Simplified)</option>
+                <option value="chi_tra">Chinese (Traditional)</option>
+                <option value="ara">Arabic</option>
+                <option value="hin">Hindi</option>
+                <option value="pol">Polish</option>
+              </select>
+            </div>
 
-      <!-- Extract button -->
-      <button id="ocr-extract-btn" class="speech-generate-btn disabled">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><circle cx="17.5" cy="17.5" r="3.5"></circle></svg>
-        Extract Text
-      </button>
-
-      <!-- Progress -->
-      <div id="ocr-progress" class="speech-progress hidden">
-        <div class="speech-progress-bar"><div class="speech-progress-fill"></div></div>
-        <span class="speech-progress-text">Processing...</span>
-      </div>
-
-      <!-- Output -->
-      <div id="ocr-output" class="speech-stt-output hidden">
-        <div class="speech-stt-output-header">
-          <span class="speech-stt-output-label">Extracted Text</span>
-          <div class="sum-output-actions">
-            <button id="ocr-copy-btn" class="speech-copy-btn">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-              Copy
-            </button>
-            <button id="ocr-download-btn" class="speech-copy-btn">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-              Download
-            </button>
-            <button id="ocr-read-aloud-btn" class="speech-copy-btn">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
-              Read Aloud
+            <button id="ocr-extract-btn" class="speech-generate-btn disabled">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><circle cx="17.5" cy="17.5" r="3.5"></circle></svg>
+              Extract Text
             </button>
           </div>
         </div>
-        <textarea id="ocr-result" class="speech-textarea speech-stt-result-textarea" placeholder="Extracted text will appear here..." rows="8" readonly></textarea>
 
-        <!-- Read Aloud: TTS progress + player -->
-        <div id="ocr-tts-progress" class="speech-progress hidden">
+        <!-- Progress -->
+        <div id="ocr-progress" class="speech-progress hidden">
           <div class="speech-progress-bar"><div class="speech-progress-fill"></div></div>
-          <span class="speech-progress-text">Loading TTS model...</span>
-          <p class="speech-freeze-warning hidden">The page may become unresponsive while generating — this is normal.</p>
+          <span class="speech-progress-text">Processing...</span>
         </div>
 
-        <div id="ocr-tts-player" class="speech-player hidden">
-          <div id="ocr-word-display" class="speech-word-display"></div>
-          <div class="speech-player-seek-row">
-            <span id="ocr-time-current" class="speech-time-label">0:00</span>
-            <div id="ocr-seek-bar" class="speech-seek-bar">
-              <div id="ocr-seek-fill" class="speech-seek-fill"></div>
-              <div id="ocr-seek-thumb" class="speech-seek-thumb"></div>
-            </div>
-            <span id="ocr-time-duration" class="speech-time-label">0:00</span>
-          </div>
-          <div class="speech-player-toolbar">
-            <div class="speech-player-controls">
-              <button id="ocr-skip-back" class="speech-player-btn" title="Back 10s">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
-                <span class="speech-skip-label">10</span>
+        <!-- Image preview -->
+        <div id="ocr-preview" class="ocr-preview hidden">
+          <img id="ocr-preview-img" alt="Uploaded file preview">
+        </div>
+      </div>
+
+      <!-- Right column: output -->
+      <div class="ocr-output-col">
+        <div id="ocr-output" class="ocr-output-card">
+          <div class="speech-stt-output-header">
+            <span class="speech-stt-output-label">Extracted Text</span>
+            <div class="sum-output-actions">
+              <button id="ocr-copy-btn" class="speech-copy-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                Copy
               </button>
-              <button id="ocr-play-btn" class="speech-play-btn" title="Play/Pause"></button>
-              <button id="ocr-skip-forward" class="speech-player-btn" title="Forward 10s">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
-                <span class="speech-skip-label">10</span>
+              <button id="ocr-download-btn" class="speech-copy-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                Download
+              </button>
+              <button id="ocr-read-aloud-btn" class="speech-copy-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+                Read Aloud
               </button>
             </div>
           </div>
-          <audio id="ocr-tts-audio" preload="auto"></audio>
+          <textarea id="ocr-result" class="speech-textarea ocr-result-textarea" placeholder="Extracted text will appear here..." readonly></textarea>
+
+          <!-- Read Aloud: TTS progress + player -->
+          <div id="ocr-tts-progress" class="speech-progress hidden">
+            <div class="speech-progress-bar"><div class="speech-progress-fill"></div></div>
+            <span class="speech-progress-text">Loading TTS model...</span>
+            <p class="speech-freeze-warning hidden">The page may become unresponsive while generating — this is normal.</p>
+          </div>
+
+          <div id="ocr-tts-player" class="speech-player hidden">
+            <div id="ocr-word-display" class="speech-word-display"></div>
+            <div class="speech-player-seek-row">
+              <span id="ocr-time-current" class="speech-time-label">0:00</span>
+              <div id="ocr-seek-bar" class="speech-seek-bar">
+                <div id="ocr-seek-fill" class="speech-seek-fill"></div>
+                <div id="ocr-seek-thumb" class="speech-seek-thumb"></div>
+              </div>
+              <span id="ocr-time-duration" class="speech-time-label">0:00</span>
+            </div>
+            <div class="speech-player-toolbar">
+              <div class="speech-player-controls">
+                <button id="ocr-skip-back" class="speech-player-btn" title="Back 10s">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+                  <span class="speech-skip-label">10</span>
+                </button>
+                <button id="ocr-play-btn" class="speech-play-btn" title="Play/Pause"></button>
+                <button id="ocr-skip-forward" class="speech-player-btn" title="Forward 10s">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                  <span class="speech-skip-label">10</span>
+                </button>
+              </div>
+            </div>
+            <audio id="ocr-tts-audio" preload="auto"></audio>
+          </div>
         </div>
       </div>
     </div>

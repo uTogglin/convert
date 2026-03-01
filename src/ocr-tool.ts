@@ -72,18 +72,35 @@ export function initOcrTool() {
   const resultArea = document.getElementById("ocr-result") as HTMLTextAreaElement;
   const copyBtn = document.getElementById("ocr-copy-btn") as HTMLButtonElement;
   const downloadBtn = document.getElementById("ocr-download-btn") as HTMLButtonElement;
+  const preview = document.getElementById("ocr-preview") as HTMLDivElement;
+  const previewImg = document.getElementById("ocr-preview-img") as HTMLImageElement;
 
   let selectedFile: File | null = null;
   let processing = false;
+  let previewUrl: string | null = null;
 
   function updateExtractBtn() {
     extractBtn.classList.toggle("disabled", !selectedFile || processing);
+  }
+
+  function showPreview(file: File) {
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    if (ext === "pdf") {
+      preview.classList.add("hidden");
+      if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
+      return;
+    }
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    previewUrl = URL.createObjectURL(file);
+    previewImg.src = previewUrl;
+    preview.classList.remove("hidden");
   }
 
   function setFile(file: File) {
     selectedFile = file;
     dropText.textContent = file.name;
     dropArea.classList.add("has-file");
+    showPreview(file);
     updateExtractBtn();
   }
 
@@ -95,12 +112,12 @@ export function initOcrTool() {
   });
 
   // Drag and drop
-  dropArea.addEventListener("dragover", (e) => { e.preventDefault(); dropArea.classList.add("drag-over"); });
-  dropArea.addEventListener("dragleave", () => dropArea.classList.remove("drag-over"));
+  dropArea.addEventListener("dragover", (e) => { e.preventDefault(); dropArea.classList.add("dragover"); });
+  dropArea.addEventListener("dragleave", () => dropArea.classList.remove("dragover"));
   dropArea.addEventListener("drop", (e) => {
     e.preventDefault();
     e.stopPropagation();
-    dropArea.classList.remove("drag-over");
+    dropArea.classList.remove("dragover");
     if (e.dataTransfer?.files?.[0]) setFile(e.dataTransfer.files[0]);
   });
 
@@ -112,8 +129,6 @@ export function initOcrTool() {
     progress.classList.remove("hidden");
     progressFill.style.width = "0%";
     progressText.textContent = "Preparing...";
-    output.classList.add("hidden");
-
     try {
       const lang = langSelect.value;
       const ext = selectedFile.name.split(".").pop()?.toLowerCase();
@@ -154,7 +169,6 @@ export function initOcrTool() {
       progressFill.style.width = "100%";
       progressText.textContent = "Done!";
       resultArea.value = resultText;
-      output.classList.remove("hidden");
       setTimeout(() => progress.classList.add("hidden"), 600);
 
     } catch (err: any) {
